@@ -11,13 +11,19 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // Stores the reusable course catalog before courses are offered in a session.
         Schema::create('courses', function (Blueprint $table) {
             $table->id();
-            $table->string('code')->unique();
-            $table->string('title')->unique();
-            $table->string('slug')->unique();
+            $table->foreignId('school_id')->constrained()->cascadeOnDelete();
+            $table->string('code');
+            $table->string('title');
+            $table->string('slug');
             $table->unsignedTinyInteger('credit_units')->default(3);
             $table->timestamps();
+
+            $table->unique(['school_id', 'code']);
+            $table->unique(['school_id', 'slug']);
+            $table->index(['school_id', 'title']);
         });
     }
 

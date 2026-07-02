@@ -1,24 +1,18 @@
 import { Link, useForm } from '@inertiajs/react';
-import {
-    RiAddLine,
-    RiArrowLeftLine,
-    RiCalendarTodoLine,
-    RiDeleteBinLine,
-    RiSave3Line,
-} from '@remixicon/react';
+import { RiAddLine, RiArrowLeftLine, RiSave3Line } from '@remixicon/react';
 import type { FormEvent } from 'react';
 
 import {
     createCourseOffering,
-    deleteCourseTimetableSlot,
     editCourseOffering,
-    courseTimetable,
+    level as dashboardLevel,
+    section as dashboardSection,
     storeCourseOffering,
-    storeCourseTimetableSlot,
     updateCourseOffering,
-    updateCourseTimetableSlot,
 } from '@/actions/App/Http/Controllers/DashboardController';
-import { level as dashboardLevel } from '@/actions/App/Http/Controllers/DashboardController';
+import { ActionLink } from '@/components/action-link';
+import { CoursePrerequisitePicker } from '@/components/course-prerequisite-picker';
+import { CourseTypeBadge } from '@/components/course-type-badge';
 import { QualifiedSemester } from '@/components/qualified-semester';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -26,10 +20,10 @@ import {
     Card,
     CardContent,
     CardFooter,
+    CardForm,
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
     Field,
     FieldError,
@@ -37,7 +31,7 @@ import {
     FieldLabel,
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Select, SelectOption } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import {
     Table,
     TableBody,
@@ -50,11 +44,8 @@ import type {
     DashboardStaffCourseOffering,
     DashboardStaffCourseOfferingForm,
     DashboardStaffCoursePrerequisite,
-    DashboardStaffCoursePrerequisiteOption,
     DashboardStaffCourseScheduleSemester,
     DashboardStaffCourseSchedules,
-    DashboardStaffCourseTimetable,
-    DashboardStaffCourseTimetableSlot,
 } from '@/types';
 
 type CourseOfferingFormData = {
@@ -65,36 +56,48 @@ type CourseOfferingFormData = {
     prerequisite_course_ids: number[];
 };
 
-type TimetableSlotFormData = {
-    day_of_week: string;
-    starts_at: string;
-    ends_at: string;
-    venue: string;
-};
-
 export function StaffCourseSchedulesDashboard({
     courseSchedules,
 }: {
     courseSchedules: DashboardStaffCourseSchedules;
 }) {
+    const academicSessionLabel = courseSchedules.academicSession
+        ? `${courseSchedules.academicSession.name} Academic Session`
+        : 'No active academic session';
+    const semesters = [...courseSchedules.semesters].sort((first, second) => {
+        const order = { harmattan: 0, rain: 1 };
+
+        return (
+            (order[first.slug as keyof typeof order] ?? 99) -
+            (order[second.slug as keyof typeof order] ?? 99)
+        );
+    });
+
     return (
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-            {courseSchedules.semesters.map((semester) => (
-                <SemesterScheduleCard
-                    key={semester.id}
-                    level={courseSchedules.level.title}
-                    levelSlug={courseSchedules.level.slug}
-                    semester={semester}
-                />
-            ))}
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">
+            <div className="text-sm font-medium text-muted-foreground">
+                {academicSessionLabel}
+            </div>
+            <div className="grid gap-4 xl:grid-cols-2">
+                {semesters.map((semester) => (
+                    <SemesterOfferingCard
+                        key={semester.id}
+                        level={courseSchedules.level.title}
+                        levelSlug={courseSchedules.level.slug}
+                        semester={semester}
+                    />
+                ))}
+            </div>
         </div>
     );
 }
 
 export function StaffCourseOfferingForm({
     form,
+    role = 'staff',
 }: {
     form: DashboardStaffCourseOfferingForm;
+    role?: string;
 }) {
     const courseForm = useForm<CourseOfferingFormData>({
         code: form.offering?.code ?? '',
@@ -103,10 +106,21 @@ export function StaffCourseOfferingForm({
         is_mandatory: form.offering?.isMandatory ?? true,
         prerequisite_course_ids: form.offering?.prerequisiteCourseIds ?? [],
     });
-    const backRoute = dashboardLevel({
-        section: 'courses',
-        level: form.level.slug,
-    });
+    const backRoute =
+        role === 'hod'
+            ? dashboardSection(
+                  { section: 'courses' },
+                  {
+                      query: {
+                          academic_session: form.academicSession.id,
+                          level: form.level.slug,
+                      },
+                  },
+              )
+            : dashboardLevel({
+                  section: 'courses',
+                  level: form.level.slug,
+              });
     const title =
         form.mode === 'create' ? 'Add Course' : `Edit ${form.offering?.code}`;
 
@@ -115,10 +129,17 @@ export function StaffCourseOfferingForm({
 
         if (form.mode === 'create') {
             courseForm.submit(
-                storeCourseOffering({
-                    level: form.level.slug,
-                    semester: form.semester.slug,
-                }),
+                storeCourseOffering(
+                    {
+                        level: form.level.slug,
+                        semester: form.semester.slug,
+                    },
+                    {
+                        query: {
+                            academic_session: form.academicSession.id,
+                        },
+                    },
+                ),
             );
 
             return;
@@ -126,11 +147,18 @@ export function StaffCourseOfferingForm({
 
         if (form.offering) {
             courseForm.submit(
-                updateCourseOffering({
-                    level: form.level.slug,
-                    semester: form.semester.slug,
-                    offering: form.offering.id,
-                }),
+                updateCourseOffering(
+                    {
+                        level: form.level.slug,
+                        semester: form.semester.slug,
+                        offering: form.offering.id,
+                    },
+                    {
+                        query: {
+                            academic_session: form.academicSession.id,
+                        },
+                    },
+                ),
             );
         }
     }
@@ -160,17 +188,16 @@ export function StaffCourseOfferingForm({
                         />
                     </p>
                 </div>
-                <Link
+                <ActionLink
                     href={backRoute}
-                    className="inline-flex items-center gap-1 text-sm font-medium text-link underline-offset-4 hover:underline"
+                    icon={<RiArrowLeftLine className="size-4" />}
                 >
-                    <RiArrowLeftLine className="size-4" />
                     Back
-                </Link>
+                </ActionLink>
             </div>
 
             <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
-                <form onSubmit={submit}>
+                <CardForm onSubmit={submit}>
                     <CardContent className="p-5">
                         <FieldGroup>
                             <div className="grid gap-4 sm:grid-cols-[0.7fr_1.3fr]">
@@ -231,7 +258,7 @@ export function StaffCourseOfferingForm({
                                 </Field>
                             </div>
 
-                            <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_16rem]">
                                 <Field
                                     data-invalid={Boolean(
                                         courseForm.errors.credit_units,
@@ -266,33 +293,33 @@ export function StaffCourseOfferingForm({
                                         courseForm.errors.is_mandatory,
                                     )}
                                 >
-                                    <FieldLabel htmlFor="course-requirement">
-                                        Requirement
-                                    </FieldLabel>
-                                    <Select
-                                        id="course-requirement"
-                                        value={
-                                            courseForm.data.is_mandatory
-                                                ? '1'
-                                                : '0'
-                                        }
-                                        aria-invalid={Boolean(
-                                            courseForm.errors.is_mandatory,
-                                        )}
-                                        onChange={(event) =>
-                                            courseForm.setData(
-                                                'is_mandatory',
-                                                event.target.value === '1',
-                                            )
-                                        }
-                                    >
-                                        <SelectOption value="1">
-                                            Mandatory
-                                        </SelectOption>
-                                        <SelectOption value="0">
-                                            Optional
-                                        </SelectOption>
-                                    </Select>
+                                    <div className="flex h-full items-center justify-between gap-4 border border-border bg-background px-3 py-2">
+                                        <div className="min-w-0">
+                                            <FieldLabel htmlFor="course-type">
+                                                Course Type
+                                            </FieldLabel>
+                                            <div className="mt-1 text-sm font-semibold">
+                                                {courseForm.data.is_mandatory
+                                                    ? 'Departmental Course'
+                                                    : 'Elective Course'}
+                                            </div>
+                                        </div>
+                                        <Switch
+                                            id="course-type"
+                                            checked={
+                                                courseForm.data.is_mandatory
+                                            }
+                                            aria-invalid={Boolean(
+                                                courseForm.errors.is_mandatory,
+                                            )}
+                                            onCheckedChange={(checked) =>
+                                                courseForm.setData(
+                                                    'is_mandatory',
+                                                    checked,
+                                                )
+                                            }
+                                        />
+                                    </div>
                                     <FieldError>
                                         {courseForm.errors.is_mandatory}
                                     </FieldError>
@@ -305,7 +332,7 @@ export function StaffCourseOfferingForm({
                                 )}
                             >
                                 <FieldLabel>Prerequisites</FieldLabel>
-                                <PrerequisitePicker
+                                <CoursePrerequisitePicker
                                     options={form.prerequisiteOptions}
                                     selectedIds={
                                         courseForm.data.prerequisite_course_ids
@@ -327,188 +354,13 @@ export function StaffCourseOfferingForm({
                             {courseForm.processing ? 'Saving...' : 'Save'}
                         </Button>
                     </CardFooter>
-                </form>
+                </CardForm>
             </Card>
         </div>
     );
 }
 
-export function StaffCourseTimetableDashboard({
-    timetable,
-}: {
-    timetable: DashboardStaffCourseTimetable;
-}) {
-    const addForm = useForm<TimetableSlotFormData>({
-        day_of_week: timetable.weekdays[0] ?? 'Monday',
-        starts_at: '08:00',
-        ends_at: '10:00',
-        venue: '',
-    });
-    const backRoute = dashboardLevel({
-        section: 'courses',
-        level: timetable.level.slug,
-    });
-
-    function submit(event: FormEvent<HTMLFormElement>) {
-        event.preventDefault();
-
-        addForm.submit(
-            storeCourseTimetableSlot({
-                level: timetable.level.slug,
-                semester: timetable.semester.slug,
-                offering: timetable.offering.id,
-            }),
-            {
-                onSuccess: () => addForm.reset('venue'),
-            },
-        );
-    }
-
-    return (
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
-            <div className="flex items-center justify-between gap-4">
-                <div className="min-w-0">
-                    <h1 className="truncate text-xl font-semibold tracking-normal">
-                        {timetable.offering.code} Timetable
-                    </h1>
-                    <p className="mt-1 truncate text-sm text-muted-foreground">
-                        {timetable.offering.title} ·{' '}
-                        <QualifiedSemester
-                            level={timetable.level.title}
-                            semester={timetable.semester.name}
-                        />
-                    </p>
-                </div>
-                <Link
-                    href={backRoute}
-                    className="inline-flex items-center gap-1 text-sm font-medium text-link underline-offset-4 hover:underline"
-                >
-                    <RiArrowLeftLine className="size-4" />
-                    Back
-                </Link>
-            </div>
-
-            <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
-                <CardHeader>
-                    <CardTitle>Add Class Time</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <form onSubmit={submit}>
-                        <div className="grid gap-4 lg:grid-cols-[1fr_1fr_1fr_1.4fr_auto]">
-                            <Field
-                                data-invalid={Boolean(
-                                    addForm.errors.day_of_week,
-                                )}
-                            >
-                                <FieldLabel htmlFor="new-day">Day</FieldLabel>
-                                <WeekdaySelect
-                                    id="new-day"
-                                    weekdays={timetable.weekdays}
-                                    value={addForm.data.day_of_week}
-                                    onChange={(value) =>
-                                        addForm.setData('day_of_week', value)
-                                    }
-                                />
-                                <FieldError>
-                                    {addForm.errors.day_of_week}
-                                </FieldError>
-                            </Field>
-                            <Field
-                                data-invalid={Boolean(addForm.errors.starts_at)}
-                            >
-                                <FieldLabel htmlFor="new-start">
-                                    Starts
-                                </FieldLabel>
-                                <Input
-                                    id="new-start"
-                                    type="time"
-                                    value={addForm.data.starts_at}
-                                    aria-invalid={Boolean(
-                                        addForm.errors.starts_at,
-                                    )}
-                                    onChange={(event) =>
-                                        addForm.setData(
-                                            'starts_at',
-                                            event.target.value,
-                                        )
-                                    }
-                                />
-                                <FieldError>
-                                    {addForm.errors.starts_at}
-                                </FieldError>
-                            </Field>
-                            <Field
-                                data-invalid={Boolean(addForm.errors.ends_at)}
-                            >
-                                <FieldLabel htmlFor="new-end">Ends</FieldLabel>
-                                <Input
-                                    id="new-end"
-                                    type="time"
-                                    value={addForm.data.ends_at}
-                                    aria-invalid={Boolean(
-                                        addForm.errors.ends_at,
-                                    )}
-                                    onChange={(event) =>
-                                        addForm.setData(
-                                            'ends_at',
-                                            event.target.value,
-                                        )
-                                    }
-                                />
-                                <FieldError>
-                                    {addForm.errors.ends_at}
-                                </FieldError>
-                            </Field>
-                            <Field data-invalid={Boolean(addForm.errors.venue)}>
-                                <FieldLabel htmlFor="new-venue">
-                                    Venue
-                                </FieldLabel>
-                                <Input
-                                    id="new-venue"
-                                    value={addForm.data.venue}
-                                    placeholder="ETF 204"
-                                    autoComplete="off"
-                                    aria-invalid={Boolean(addForm.errors.venue)}
-                                    onChange={(event) =>
-                                        addForm.setData(
-                                            'venue',
-                                            event.target.value,
-                                        )
-                                    }
-                                />
-                                <FieldError>{addForm.errors.venue}</FieldError>
-                            </Field>
-                            <div className="flex items-end">
-                                <Button
-                                    type="submit"
-                                    className="w-full"
-                                    disabled={addForm.processing}
-                                >
-                                    <RiAddLine />
-                                    Add
-                                </Button>
-                            </div>
-                        </div>
-                    </form>
-                </CardContent>
-            </Card>
-
-            <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
-                <CardHeader>
-                    <CardTitle>Class Times</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                    <TimetableSlotsTable
-                        timetable={timetable}
-                        slots={timetable.slots}
-                    />
-                </CardContent>
-            </Card>
-        </div>
-    );
-}
-
-function SemesterScheduleCard({
+function SemesterOfferingCard({
     level,
     levelSlug,
     semester,
@@ -529,20 +381,23 @@ function SemesterScheduleCard({
                     </CardTitle>
                     <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                         <span>{semester.totalUnits} units</span>
-                        <span>{semester.mandatoryCount} mandatory</span>
-                        <span>{semester.optionalCount} optional</span>
+                        <span>{semester.facultyCourseCount} faculty</span>
+                        <span>
+                            {semester.departmentalCourseCount} departmental
+                        </span>
+                        <span>{semester.electiveCourseCount} elective</span>
                     </div>
                 </div>
-                <Link
+                <ActionLink
                     href={createCourseOffering({
                         level: levelSlug,
                         semester: semester.slug,
                     })}
-                    className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-link underline-offset-4 hover:underline"
+                    icon={<RiAddLine className="size-4" />}
+                    className="shrink-0"
                 >
-                    <RiAddLine className="size-4" />
                     Add course
-                </Link>
+                </ActionLink>
             </CardHeader>
             <CardContent className="p-0">
                 <CourseOfferingsTable
@@ -565,12 +420,14 @@ function CourseOfferingsTable({
         <Table className="text-sm">
             <TableHeader>
                 <TableRow>
-                    <TableHead className="w-[28%] px-4">Course</TableHead>
+                    <TableHead className="w-[34%] px-4">Course</TableHead>
                     <TableHead className="w-[10%] text-center">Units</TableHead>
-                    <TableHead className="w-[14%] text-center">Type</TableHead>
+                    <TableHead className="w-[14%] text-center">
+                        Category
+                    </TableHead>
                     <TableHead>Prerequisites</TableHead>
-                    <TableHead className="w-[18%] pr-4 text-right">
-                        Timetable
+                    <TableHead className="w-[12%] pr-4 text-right">
+                        Action
                     </TableHead>
                 </TableRow>
             </TableHeader>
@@ -613,30 +470,13 @@ function CourseOfferingRow({
         semester: semesterSlug,
         offering: offering.id,
     });
-    const timetableRoute = courseTimetable({
-        level: levelSlug,
-        semester: semesterSlug,
-        offering: offering.id,
-    });
 
     return (
-        <TableRow>
+        <TableRow className="odd:bg-background even:bg-muted/25">
             <TableCell className="px-4">
                 <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                        {offering.canEdit ? (
-                            <Link
-                                href={editRoute}
-                                className="font-semibold text-link underline-offset-4 hover:underline"
-                            >
-                                {offering.code}
-                            </Link>
-                        ) : (
-                            <span className="font-semibold">
-                                {offering.code}
-                            </span>
-                        )}
-                        <OwnerBadge owner={offering.owner} />
+                    <div className="font-semibold">
+                        {offering.code}
                     </div>
                     <div className="mt-0.5 truncate text-xs text-muted-foreground">
                         {offering.title}
@@ -647,278 +487,23 @@ function CourseOfferingRow({
                 {offering.units}
             </TableCell>
             <TableCell className="text-center">
-                <RequirementBadge requirement={offering.requirement} />
+                <CourseTypeBadge type={offering.courseType} />
             </TableCell>
             <TableCell>
                 <PrerequisiteBadges prerequisites={offering.prerequisites} />
             </TableCell>
             <TableCell className="pr-4 text-right">
-                <Link
-                    href={timetableRoute}
-                    className="inline-flex items-center gap-1 text-xs font-medium text-link underline-offset-4 hover:underline"
-                >
-                    <RiCalendarTodoLine className="size-4" />
-                    {offering.timetableSlotsCount} slots
-                </Link>
-            </TableCell>
-        </TableRow>
-    );
-}
-
-function PrerequisitePicker({
-    options,
-    selectedIds,
-    onChange,
-}: {
-    options: DashboardStaffCoursePrerequisiteOption[];
-    selectedIds: number[];
-    onChange: (courseId: number, checked: boolean) => void;
-}) {
-    if (options.length === 0) {
-        return (
-            <div className="border border-border bg-muted/20 px-3 py-3 text-sm text-muted-foreground">
-                No earlier courses are available.
-            </div>
-        );
-    }
-
-    return (
-        <div className="grid gap-2 rounded-none border border-border bg-background p-2 sm:grid-cols-2">
-            {options.map((option) => {
-                const id = `prerequisite-${option.id}`;
-
-                return (
-                    <label
-                        key={option.id}
-                        htmlFor={id}
-                        className="flex items-start gap-3 border border-border bg-background p-3"
-                    >
-                        <Checkbox
-                            id={id}
-                            checked={selectedIds.includes(option.id)}
-                            onCheckedChange={(checked) =>
-                                onChange(option.id, checked === true)
-                            }
-                        />
-                        <span className="min-w-0">
-                            <span className="block text-sm font-semibold">
-                                {option.code}
-                            </span>
-                            <span className="block truncate text-xs text-muted-foreground">
-                                {option.title}
-                            </span>
-                            <span className="mt-1 block text-xs text-muted-foreground">
-                                <QualifiedSemester
-                                    level={option.level}
-                                    semester={option.semester}
-                                />{' '}
-                                · {option.units} units
-                            </span>
-                        </span>
-                    </label>
-                );
-            })}
-        </div>
-    );
-}
-
-function TimetableSlotsTable({
-    timetable,
-    slots,
-}: {
-    timetable: DashboardStaffCourseTimetable;
-    slots: DashboardStaffCourseTimetableSlot[];
-}) {
-    return (
-        <Table className="text-sm">
-            <TableHeader>
-                <TableRow>
-                    <TableHead className="w-[22%] px-4">Day</TableHead>
-                    <TableHead className="w-[18%]">Starts</TableHead>
-                    <TableHead className="w-[18%]">Ends</TableHead>
-                    <TableHead>Venue</TableHead>
-                    <TableHead className="w-[16%] pr-4 text-right">
-                        Action
-                    </TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                {slots.length > 0 ? (
-                    slots.map((slot) => (
-                        <TimetableSlotRow
-                            key={slot.id}
-                            timetable={timetable}
-                            slot={slot}
-                        />
-                    ))
+                {offering.canEdit ? (
+                    <ActionLink href={editRoute} className="text-xs">
+                        Edit
+                    </ActionLink>
                 ) : (
-                    <TableRow>
-                        <TableCell
-                            colSpan={5}
-                            className="px-4 py-6 text-muted-foreground"
-                        >
-                            No class times have been added.
-                        </TableCell>
-                    </TableRow>
+                    <span className="text-xs text-muted-foreground">
+                        Faculty course
+                    </span>
                 )}
-            </TableBody>
-        </Table>
-    );
-}
-
-function TimetableSlotRow({
-    timetable,
-    slot,
-}: {
-    timetable: DashboardStaffCourseTimetable;
-    slot: DashboardStaffCourseTimetableSlot;
-}) {
-    const slotForm = useForm<TimetableSlotFormData>({
-        day_of_week: slot.dayOfWeek,
-        starts_at: slot.startsAt,
-        ends_at: slot.endsAt,
-        venue: slot.venue,
-    });
-
-    function update(event: FormEvent<HTMLFormElement>) {
-        event.preventDefault();
-
-        slotForm.submit(
-            updateCourseTimetableSlot({
-                level: timetable.level.slug,
-                semester: timetable.semester.slug,
-                offering: timetable.offering.id,
-                slot: slot.id,
-            }),
-        );
-    }
-
-    function destroy() {
-        slotForm.submit(
-            deleteCourseTimetableSlot({
-                level: timetable.level.slug,
-                semester: timetable.semester.slug,
-                offering: timetable.offering.id,
-                slot: slot.id,
-            }),
-        );
-    }
-
-    return (
-        <TableRow>
-            <TableCell colSpan={5} className="p-0">
-                <form onSubmit={update}>
-                    <div className="grid grid-cols-[1fr_0.8fr_0.8fr_1.2fr_auto] items-start gap-2 px-4 py-2">
-                        <Field
-                            data-invalid={Boolean(slotForm.errors.day_of_week)}
-                        >
-                            <WeekdaySelect
-                                weekdays={timetable.weekdays}
-                                value={slotForm.data.day_of_week}
-                                onChange={(value) =>
-                                    slotForm.setData('day_of_week', value)
-                                }
-                            />
-                            <FieldError>
-                                {slotForm.errors.day_of_week}
-                            </FieldError>
-                        </Field>
-                        <Field
-                            data-invalid={Boolean(slotForm.errors.starts_at)}
-                        >
-                            <Input
-                                type="time"
-                                value={slotForm.data.starts_at}
-                                aria-invalid={Boolean(
-                                    slotForm.errors.starts_at,
-                                )}
-                                onChange={(event) =>
-                                    slotForm.setData(
-                                        'starts_at',
-                                        event.target.value,
-                                    )
-                                }
-                            />
-                            <FieldError>{slotForm.errors.starts_at}</FieldError>
-                        </Field>
-                        <Field data-invalid={Boolean(slotForm.errors.ends_at)}>
-                            <Input
-                                type="time"
-                                value={slotForm.data.ends_at}
-                                aria-invalid={Boolean(slotForm.errors.ends_at)}
-                                onChange={(event) =>
-                                    slotForm.setData(
-                                        'ends_at',
-                                        event.target.value,
-                                    )
-                                }
-                            />
-                            <FieldError>{slotForm.errors.ends_at}</FieldError>
-                        </Field>
-                        <Field data-invalid={Boolean(slotForm.errors.venue)}>
-                            <Input
-                                value={slotForm.data.venue}
-                                aria-invalid={Boolean(slotForm.errors.venue)}
-                                onChange={(event) =>
-                                    slotForm.setData(
-                                        'venue',
-                                        event.target.value,
-                                    )
-                                }
-                            />
-                            <FieldError>{slotForm.errors.venue}</FieldError>
-                        </Field>
-                        <div className="flex justify-end gap-1">
-                            <Button
-                                type="submit"
-                                size="icon-sm"
-                                variant="outline"
-                                disabled={slotForm.processing}
-                                aria-label="Save timetable slot"
-                            >
-                                <RiSave3Line />
-                            </Button>
-                            <Button
-                                type="button"
-                                size="icon-sm"
-                                variant="ghost"
-                                disabled={slotForm.processing}
-                                aria-label="Delete timetable slot"
-                                onClick={destroy}
-                            >
-                                <RiDeleteBinLine />
-                            </Button>
-                        </div>
-                    </div>
-                </form>
             </TableCell>
         </TableRow>
-    );
-}
-
-function WeekdaySelect({
-    id,
-    weekdays,
-    value,
-    onChange,
-}: {
-    id?: string;
-    weekdays: string[];
-    value: string;
-    onChange: (value: string) => void;
-}) {
-    return (
-        <Select
-            id={id}
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-        >
-            {weekdays.map((weekday) => (
-                <SelectOption key={weekday} value={weekday}>
-                    {weekday}
-                </SelectOption>
-            ))}
-        </Select>
     );
 }
 
@@ -957,31 +542,5 @@ function PrerequisiteBadges({
                 </Badge>
             ) : null}
         </div>
-    );
-}
-
-function RequirementBadge({ requirement }: { requirement: string }) {
-    return (
-        <Badge
-            variant="outline"
-            className={
-                requirement === 'Mandatory'
-                    ? 'border-foreground/20 bg-foreground/5 text-foreground'
-                    : 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-300'
-            }
-        >
-            {requirement}
-        </Badge>
-    );
-}
-
-function OwnerBadge({ owner }: { owner: string }) {
-    return (
-        <Badge
-            variant="outline"
-            className="border-border bg-background text-xs"
-        >
-            {owner}
-        </Badge>
     );
 }

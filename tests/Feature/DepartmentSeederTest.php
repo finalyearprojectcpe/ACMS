@@ -31,18 +31,14 @@ test('faculty seeder creates grouped departments with unique abbreviations', fun
         ->toBeTrue();
 });
 
-test('signup page receives departments grouped by faculty', function () {
+test('student signup page loads the provisioned account activation form', function () {
     $this->seed(FacultySeeder::class);
 
-    $response = $this->get(route('signup'));
+    $response = $this->get(route('signup.student'));
 
     $response->assertOk();
     $response->assertInertia(fn (Assert $page) => $page
         ->component('signup')
-        ->has('accountTypes', 2)
-        ->has('departments', 12)
-        ->where('departments.0.abbreviation', 'SAAT')
-        ->where('departments.0.departments.0.name', 'Agribusiness')
-        ->where('departments.0.departments.0.abbreviation', 'AGR')
+        ->where('accountType', 'student')
         ->etc());
 });

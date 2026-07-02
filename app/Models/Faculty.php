@@ -12,11 +12,19 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
-#[Fillable(['name', 'abbreviation', 'slug', 'head_staff_profile_id', 'pending_head_staff_profile_id', 'head_transfer_requested_at'])]
+#[Fillable(['school_id', 'name', 'abbreviation', 'slug', 'head_staff_profile_id', 'pending_head_staff_profile_id', 'head_transfer_requested_at'])]
 class Faculty extends Model
 {
     /** @use HasFactory<FacultyFactory> */
     use HasFactory;
+
+    /**
+     * @return BelongsTo<School, $this>
+     */
+    public function school(): BelongsTo
+    {
+        return $this->belongsTo(School::class);
+    }
 
     /**
      * @return BelongsTo<StaffProfile, $this>
@@ -40,14 +48,6 @@ class Faculty extends Model
     public function departments(): HasMany
     {
         return $this->hasMany(Department::class);
-    }
-
-    /**
-     * @return HasMany<AcademicSession, $this>
-     */
-    public function academicSessions(): HasMany
-    {
-        return $this->hasMany(AcademicSession::class);
     }
 
     /**
@@ -104,21 +104,6 @@ class Faculty extends Model
         }
 
         return $this->assignHead($staffProfile);
-    }
-
-    public function activateAcademicSession(AcademicSession $academicSession): AcademicSession
-    {
-        if ((int) $academicSession->faculty_id !== (int) $this->getKey()) {
-            throw new InvalidArgumentException('The academic session must belong to this faculty.');
-        }
-
-        return DB::transaction(function () use ($academicSession): AcademicSession {
-            $this->academicSessions()->update(['is_current' => false]);
-
-            $academicSession->forceFill(['is_current' => true])->save();
-
-            return $academicSession->refresh();
-        });
     }
 
     private function ensureStaffBelongsToFaculty(StaffProfile $staffProfile): void

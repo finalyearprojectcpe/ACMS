@@ -1,8 +1,13 @@
 import { Link, useForm } from '@inertiajs/react';
+import { useState } from 'react';
 import type { ComponentProps, FormEvent } from 'react';
 
-import { store as registerUser } from '@/actions/App/Http/Controllers/Auth/RegisteredUserController';
-import { AcademicSelect } from '@/components/academic-select';
+import {
+    storeStaff,
+    storeStudent,
+    verifyStaff,
+    verifyStudent,
+} from '@/actions/App/Http/Controllers/Auth/RegisteredUserController';
 import {
     AuthCard,
     AuthFormActions,
@@ -18,263 +23,294 @@ import {
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
-import { RadioCard } from '@/components/ui/radio-card';
+import { schoolEmailPlaceholder, useCurrentSchool } from '@/lib/school';
 import { home } from '@/routes';
-import type { AccountType, AccountTypeOption, DepartmentGroup } from '@/types';
+import type { AccountType, SignupActivation } from '@/types';
 
 type SignupFormData = {
-    account_type: AccountType;
-    surname: string;
-    other_names: string;
     email: string;
-    password: string;
-    faculty_id: string;
-    department_id: string;
     registration_number: string;
+    access_code: string;
+    password: string;
+    password_confirmation: string;
 };
 
 export function SignupForm({
     className,
-    accountTypes,
-    departments,
+    accountType,
+    activation,
     ...props
 }: ComponentProps<'div'> & {
-    accountTypes: AccountTypeOption[];
-    departments: DepartmentGroup[];
+    accountType: AccountType;
+    activation: SignupActivation;
 }) {
+    const school = useCurrentSchool();
+    const emailPlaceholder = schoolEmailPlaceholder(school);
+    const isStudent = accountType === 'student';
+    const [stepOverride, setStepOverride] = useState<
+        SignupActivation['step'] | null
+    >(null);
+    const step = stepOverride ?? activation.step;
     const form = useForm<SignupFormData>({
-        account_type: 'student',
-        surname: '',
-        other_names: '',
         email: '',
-        password: '',
-        faculty_id: '',
-        department_id: '',
         registration_number: '',
+        access_code: '',
+        password: '',
+        password_confirmation: '',
     });
-    const selectedFaculty = departments.find(
-        (faculty) => faculty.id.toString() === form.data.faculty_id,
-    );
-    const filteredDepartments = selectedFaculty?.departments ?? [];
-
-    function updateAccountType(accountType: AccountType) {
-        form.setData((data) => ({
-            ...data,
-            account_type: accountType,
-            registration_number:
-                accountType === 'staff' ? '' : data.registration_number,
-        }));
-    }
+    const isVerifyStep = step === 'verify';
+    const title = isStudent ? 'Student account' : 'Staff account';
+    const description = isVerifyStep
+        ? 'Enter the details issued to you to confirm this account.'
+        : isStudent
+          ? 'Set your login email and password.'
+          : 'Set your login password.';
+    const identifierLabel = isStudent ? 'Registration number' : 'Email';
+    const identifierValue =
+        activation.identifier ??
+        (isStudent ? form.data.registration_number : form.data.email);
 
     function submit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
 
-        form.submit(registerUser(), {
-            onSuccess: () => form.reset('password', 'registration_number'),
-        });
+        form.submit(
+            isVerifyStep
+                ? isStudent
+                    ? verifyStudent()
+                    : verifyStaff()
+                : isStudent
+                  ? storeStudent()
+                  : storeStaff(),
+            {
+                onSuccess: () => {
+                    if (isVerifyStep) {
+                        setStepOverride(null);
+                        form.reset(
+                            'access_code',
+                            'password',
+                            'password_confirmation',
+                        );
+
+                        return;
+                    }
+
+                    form.reset('password', 'password_confirmation');
+                },
+            },
+        );
+    }
+
+    function verifyAnotherAccount() {
+        setStepOverride('verify');
+        form.reset('access_code', 'password', 'password_confirmation');
     }
 
     return (
         <AuthCard className={className} {...props}>
             <form onSubmit={submit}>
-                <FieldGroup className="gap-6">
-                    <AuthFormHeader
-                        title="Create your account"
-                        description="Set up your GradeManager profile."
-                    />
+                <FieldGroup className="gap-7">
+                    <AuthFormHeader title={title} description={description} />
+                    <SignupStepper step={step} />
 
-                    <Field data-invalid={Boolean(form.errors.account_type)}>
-                        <FieldLabel>Account type</FieldLabel>
-                        <div className="grid grid-cols-2 gap-2">
-                            {accountTypes.map((type) => (
-                                <RadioCard
-                                    key={type.value}
-                                    id={`account-type-${type.value}`}
-                                    name="account_type"
-                                    value={type.value}
-                                    label={type.label}
-                                    checked={
-                                        form.data.account_type === type.value
-                                    }
-                                    onChange={() =>
-                                        updateAccountType(type.value)
-                                    }
-                                    required
-                                />
-                            ))}
-                        </div>
-                        <FieldError>{form.errors.account_type}</FieldError>
-                    </Field>
+                    {isVerifyStep ? (
+                        <>
+                            {isStudent ? (
+                                <Field
+                                    data-invalid={Boolean(
+                                        form.errors.registration_number,
+                                    )}
+                                >
+                                    <FieldLabel htmlFor="registration-number">
+                                        Registration number
+                                    </FieldLabel>
+                                    <Input
+                                        id="registration-number"
+                                        name="registration_number"
+                                        type="text"
+                                        value={form.data.registration_number}
+                                        placeholder="2021001234"
+                                        autoComplete="off"
+                                        aria-invalid={Boolean(
+                                            form.errors.registration_number,
+                                        )}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'registration_number',
+                                                event.target.value,
+                                            )
+                                        }
+                                        required
+                                    />
+                                    <FieldDescription>
+                                        Enter the registration number issued by
+                                        the registrar.
+                                    </FieldDescription>
+                                    <FieldError>
+                                        {form.errors.registration_number}
+                                    </FieldError>
+                                </Field>
+                            ) : (
+                                <Field
+                                    data-invalid={Boolean(form.errors.email)}
+                                >
+                                    <FieldLabel htmlFor="email">
+                                        Email
+                                    </FieldLabel>
+                                    <Input
+                                        id="email"
+                                        name="email"
+                                        type="email"
+                                        value={form.data.email}
+                                        placeholder={emailPlaceholder}
+                                        autoComplete="email"
+                                        aria-invalid={Boolean(
+                                            form.errors.email,
+                                        )}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'email',
+                                                event.target.value,
+                                            )
+                                        }
+                                        required
+                                    />
+                                    <FieldDescription>
+                                        Enter the staff email address registered
+                                        for your account.
+                                    </FieldDescription>
+                                    <FieldError>{form.errors.email}</FieldError>
+                                </Field>
+                            )}
 
-                    <Field
-                        data-invalid={Boolean(
-                            form.errors.surname || form.errors.other_names,
-                        )}
-                    >
-                        <FieldLabel>Full Name</FieldLabel>
-                        <div className="grid gap-2 sm:grid-cols-2">
-                            <div className="flex flex-col gap-2">
+                            <Field
+                                data-invalid={Boolean(form.errors.access_code)}
+                            >
+                                <FieldLabel htmlFor="access-code">
+                                    Access code
+                                </FieldLabel>
                                 <Input
-                                    id="surname"
-                                    name="surname"
+                                    id="access-code"
+                                    name="access_code"
                                     type="text"
-                                    value={form.data.surname}
-                                    placeholder="Surname"
-                                    autoComplete="family-name"
-                                    aria-label="Surname"
-                                    aria-invalid={Boolean(form.errors.surname)}
+                                    value={form.data.access_code}
+                                    placeholder="Enter access code"
+                                    autoComplete="one-time-code"
+                                    aria-invalid={Boolean(
+                                        form.errors.access_code,
+                                    )}
                                     onChange={(event) =>
                                         form.setData(
-                                            'surname',
+                                            'access_code',
                                             event.target.value,
                                         )
                                     }
                                     required
                                 />
-                                <FieldError>{form.errors.surname}</FieldError>
+                                <FieldDescription>
+                                    Enter the access code issued to you.
+                                </FieldDescription>
+                                <FieldError>
+                                    {form.errors.access_code}
+                                </FieldError>
+                            </Field>
+                        </>
+                    ) : (
+                        <>
+                            <div className="grid gap-1 border border-border bg-muted/40 p-3 text-sm">
+                                <span className="text-xs font-medium tracking-normal text-muted-foreground">
+                                    Verified access
+                                </span>
+                                <span className="font-medium text-foreground">
+                                    {identifierLabel}:{' '}
+                                    <span className="font-semibold">
+                                        {identifierValue}
+                                    </span>
+                                </span>
                             </div>
 
-                            <div className="flex flex-col gap-2">
-                                <Input
-                                    id="other_names"
-                                    name="other_names"
-                                    type="text"
-                                    value={form.data.other_names}
-                                    placeholder="Other names"
-                                    autoComplete="given-name"
-                                    aria-label="Other names"
+                            {isStudent && (
+                                <Field
+                                    data-invalid={Boolean(form.errors.email)}
+                                >
+                                    <FieldLabel htmlFor="login-email">
+                                        Email
+                                    </FieldLabel>
+                                    <Input
+                                        id="login-email"
+                                        name="email"
+                                        type="email"
+                                        value={form.data.email}
+                                        placeholder={emailPlaceholder}
+                                        autoComplete="email"
+                                        aria-invalid={Boolean(
+                                            form.errors.email,
+                                        )}
+                                        onChange={(event) =>
+                                            form.setData(
+                                                'email',
+                                                event.target.value,
+                                            )
+                                        }
+                                        required
+                                    />
+                                    <FieldDescription>
+                                        Enter the email address you want to use
+                                        for login.
+                                    </FieldDescription>
+                                    <FieldError>{form.errors.email}</FieldError>
+                                </Field>
+                            )}
+
+                            <Field data-invalid={Boolean(form.errors.password)}>
+                                <FieldLabel htmlFor="password">
+                                    Password
+                                </FieldLabel>
+                                <PasswordInput
+                                    id="password"
+                                    name="password"
+                                    value={form.data.password}
+                                    autoComplete="new-password"
+                                    aria-invalid={Boolean(form.errors.password)}
+                                    onChange={(event) =>
+                                        form.setData(
+                                            'password',
+                                            event.target.value,
+                                        )
+                                    }
+                                    required
+                                />
+                                <FieldError>{form.errors.password}</FieldError>
+                            </Field>
+
+                            <Field
+                                data-invalid={Boolean(
+                                    form.errors.password_confirmation,
+                                )}
+                            >
+                                <FieldLabel htmlFor="password-confirmation">
+                                    Confirm password
+                                </FieldLabel>
+                                <PasswordInput
+                                    id="password-confirmation"
+                                    name="password_confirmation"
+                                    value={form.data.password_confirmation}
+                                    autoComplete="new-password"
                                     aria-invalid={Boolean(
-                                        form.errors.other_names,
+                                        form.errors.password_confirmation,
                                     )}
                                     onChange={(event) =>
                                         form.setData(
-                                            'other_names',
+                                            'password_confirmation',
                                             event.target.value,
                                         )
                                     }
                                     required
                                 />
                                 <FieldError>
-                                    {form.errors.other_names}
+                                    {form.errors.password_confirmation}
                                 </FieldError>
-                            </div>
-                        </div>
-                    </Field>
-
-                    <Field data-invalid={Boolean(form.errors.email)}>
-                        <FieldLabel htmlFor="email">Email</FieldLabel>
-                        <Input
-                            id="email"
-                            name="email"
-                            type="email"
-                            value={form.data.email}
-                            placeholder="name@school.edu"
-                            autoComplete="email"
-                            aria-invalid={Boolean(form.errors.email)}
-                            onChange={(event) =>
-                                form.setData('email', event.target.value)
-                            }
-                            required
-                        />
-                        <FieldError>{form.errors.email}</FieldError>
-                    </Field>
-
-                    <Field data-invalid={Boolean(form.errors.password)}>
-                        <FieldLabel htmlFor="password">Password</FieldLabel>
-                        <PasswordInput
-                            id="password"
-                            name="password"
-                            value={form.data.password}
-                            autoComplete="new-password"
-                            aria-invalid={Boolean(form.errors.password)}
-                            onChange={(event) =>
-                                form.setData('password', event.target.value)
-                            }
-                            required
-                        />
-                        <FieldError>{form.errors.password}</FieldError>
-                    </Field>
-
-                    <div className="grid gap-3 sm:grid-cols-2">
-                        <Field data-invalid={Boolean(form.errors.faculty_id)}>
-                            <FieldLabel htmlFor="faculty_id">
-                                Faculty
-                            </FieldLabel>
-                            <AcademicSelect
-                                id="faculty_id"
-                                name="faculty_id"
-                                value={form.data.faculty_id}
-                                options={departments}
-                                placeholder="Select faculty"
-                                invalid={Boolean(form.errors.faculty_id)}
-                                onValueChange={(value) =>
-                                    form.setData((data) => ({
-                                        ...data,
-                                        faculty_id: value,
-                                        department_id: '',
-                                    }))
-                                }
-                            />
-                            <FieldError>{form.errors.faculty_id}</FieldError>
-                        </Field>
-
-                        <Field
-                            data-invalid={Boolean(form.errors.department_id)}
-                        >
-                            <FieldLabel htmlFor="department_id">
-                                Department
-                            </FieldLabel>
-                            <AcademicSelect
-                                id="department_id"
-                                name="department_id"
-                                value={form.data.department_id}
-                                options={filteredDepartments}
-                                placeholder={
-                                    form.data.faculty_id
-                                        ? 'Select department'
-                                        : 'Select faculty first'
-                                }
-                                invalid={Boolean(form.errors.department_id)}
-                                disabled={!form.data.faculty_id}
-                                onValueChange={(value) =>
-                                    form.setData('department_id', value)
-                                }
-                            />
-                            <FieldError>{form.errors.department_id}</FieldError>
-                        </Field>
-                    </div>
-
-                    {form.data.account_type === 'student' && (
-                        <Field
-                            data-invalid={Boolean(
-                                form.errors.registration_number,
-                            )}
-                        >
-                            <FieldLabel htmlFor="registration-number">
-                                Registration number
-                            </FieldLabel>
-                            <Input
-                                id="registration-number"
-                                name="registration_number"
-                                type="text"
-                                value={form.data.registration_number}
-                                placeholder="2021001234"
-                                autoComplete="off"
-                                aria-invalid={Boolean(
-                                    form.errors.registration_number,
-                                )}
-                                onChange={(event) =>
-                                    form.setData(
-                                        'registration_number',
-                                        event.target.value,
-                                    )
-                                }
-                                required
-                            />
-                            <FieldError>
-                                {form.errors.registration_number}
-                            </FieldError>
-                        </Field>
+                            </Field>
+                        </>
                     )}
 
                     <Field>
@@ -285,17 +321,31 @@ export function SignupForm({
                                 disabled={form.processing}
                             >
                                 {form.processing
-                                    ? 'Creating...'
-                                    : 'Create account'}
+                                    ? isVerifyStep
+                                        ? 'Verifying...'
+                                        : 'Activating...'
+                                    : isVerifyStep
+                                      ? 'Continue'
+                                      : 'Activate account'}
                             </Button>
+                            {!isVerifyStep && (
+                                <Button
+                                    type="button"
+                                    variant="link"
+                                    className="h-auto self-center p-0 text-xs text-link"
+                                    onClick={verifyAnotherAccount}
+                                >
+                                    Verify a different account
+                                </Button>
+                            )}
                             <FieldDescription className="text-center">
                                 Already have an account?{' '}
                                 <Button
                                     asChild
                                     variant="link"
-                                    className="h-auto p-0 text-xs"
+                                    className="h-auto p-0 text-xs text-link"
                                 >
-                                    <Link href={home()}>Login</Link>
+                                    <Link href={home()}>Log in</Link>
                                 </Button>
                             </FieldDescription>
                         </AuthFormActions>
@@ -303,5 +353,49 @@ export function SignupForm({
                 </FieldGroup>
             </form>
         </AuthCard>
+    );
+}
+
+function SignupStepper({ step }: { step: SignupActivation['step'] }) {
+    const currentIndex = step === 'verify' ? 0 : 1;
+    const steps = [
+        { label: 'Verify access', value: 'verify' },
+        { label: 'Set password', value: 'complete' },
+    ] as const;
+
+    return (
+        <ol
+            className="flex items-center gap-2 text-sm"
+            aria-label="Account activation progress"
+        >
+            {steps.map((item, index) => {
+                const isCurrent = index === currentIndex;
+
+                return (
+                    <li
+                        key={item.value}
+                        className="flex min-w-0 items-center gap-2"
+                    >
+                        <span
+                            className={
+                                isCurrent
+                                    ? 'font-semibold text-foreground'
+                                    : 'font-medium text-muted-foreground'
+                            }
+                        >
+                            {item.label}
+                        </span>
+                        {index < steps.length - 1 && (
+                            <span
+                                className="text-muted-foreground/50"
+                                aria-hidden="true"
+                            >
+                                &gt;
+                            </span>
+                        )}
+                    </li>
+                );
+            })}
+        </ol>
     );
 }

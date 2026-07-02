@@ -1,5 +1,4 @@
 import { Link } from '@inertiajs/react';
-import { useMemo, useState, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 
 import { section as dashboardSection } from '@/actions/App/Http/Controllers/DashboardController';
@@ -16,11 +15,10 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type {
     DashboardStudentHome,
+    DashboardStudentHomeCourse,
     DashboardStudentHomeDue,
-    DashboardStudentHomeTimetableItem,
     DashboardStudentHomeResit,
 } from '@/types';
 
@@ -28,39 +26,10 @@ type StudentHomeDashboardProps = {
     home: DashboardStudentHome;
 };
 
-const weekdays = [
-    'Monday',
-    'Tuesday',
-    'Wednesday',
-    'Thursday',
-    'Friday',
-] as const;
-
-type Weekday = (typeof weekdays)[number];
-
-function subscribeToClientSnapshot() {
-    return () => {};
-}
-
 export function StudentHomeDashboard({ home }: StudentHomeDashboardProps) {
-    const currentDay = useSyncExternalStore(
-        subscribeToClientSnapshot,
-        defaultWeekday,
-        () => 'Monday',
-    );
-    const [selectedDay, setSelectedDay] = useState<Weekday | null>(null);
     const semesterLabel = qualifiedSemesterLabel(
         home.currentSemester.level,
         home.currentSemester.name,
-    );
-    const timetableDownloadHref = useMemo(
-        () =>
-            timetableTextHref(
-                semesterLabel,
-                home.currentSemester.session,
-                home.timetable,
-            ),
-        [home.currentSemester.session, home.timetable, semesterLabel],
     );
 
     return (
@@ -85,63 +54,11 @@ export function StudentHomeDashboard({ home }: StudentHomeDashboardProps) {
                             level={home.currentSemester.level}
                             semester={home.currentSemester.name}
                         />{' '}
-                        Course Timetable
+                        Course Load
                     </CardTitle>
-                    <a
-                        href={timetableDownloadHref}
-                        download={timetableFileName(semesterLabel)}
-                        className="text-xs font-medium text-link"
-                    >
-                        Download timetable
-                    </a>
                 </CardHeader>
                 <CardContent className="p-0">
-                    <Tabs
-                        value={selectedDay ?? currentDay}
-                        onValueChange={(value) =>
-                            setSelectedDay(value as Weekday)
-                        }
-                        orientation="vertical"
-                        className="grid gap-0 md:grid-cols-[9rem_minmax(0,1fr)]"
-                    >
-                        <div className="border-b border-border p-3 md:border-r md:border-b-0">
-                            <TabsList
-                                variant="line"
-                                className="grid! h-auto w-full grid-cols-5 gap-1 bg-transparent p-0 md:flex! md:flex-col md:items-stretch"
-                            >
-                                {weekdays.map((day) => (
-                                    <TabsTrigger
-                                        key={day}
-                                        value={day}
-                                        className="h-8 justify-center! px-2 md:justify-start! data-active:bg-primary! data-active:text-primary-foreground! data-active:after:opacity-0! data-active:hover:text-primary-foreground!"
-                                    >
-                                        <span className="md:hidden">
-                                            {day.slice(0, 3)}
-                                        </span>
-                                        <span className="hidden md:inline">
-                                            {day}
-                                        </span>
-                                    </TabsTrigger>
-                                ))}
-                            </TabsList>
-                        </div>
-
-                        <div className="min-w-0">
-                            {weekdays.map((day) => (
-                                <TabsContent
-                                    key={day}
-                                    value={day}
-                                    className="m-0"
-                                >
-                                    <TimetableTable
-                                        courses={home.timetable.filter(
-                                            (course) => course.day === day,
-                                        )}
-                                    />
-                                </TabsContent>
-                            ))}
-                        </div>
-                    </Tabs>
+                    <CourseLoadTable courses={home.courses} />
                 </CardContent>
             </SolidCard>
 
@@ -213,10 +130,10 @@ function MetricBlock({
     );
 }
 
-function TimetableTable({
+function CourseLoadTable({
     courses,
 }: {
-    courses: DashboardStudentHomeTimetableItem[];
+    courses: DashboardStudentHomeCourse[];
 }) {
     return (
         <Table className="text-sm">
@@ -224,8 +141,7 @@ function TimetableTable({
                 <TableRow>
                     <TableHead className="w-[44%] px-4">Course</TableHead>
                     <TableHead className="w-[12%] text-center">Units</TableHead>
-                    <TableHead>Time</TableHead>
-                    <TableHead className="pr-4">Venue</TableHead>
+                    <TableHead className="pr-4">Type</TableHead>
                 </TableRow>
             </TableHeader>
             <TableBody>
@@ -245,21 +161,18 @@ function TimetableTable({
                             <TableCell className="text-center font-medium tabular-nums">
                                 {course.units}
                             </TableCell>
-                            <TableCell className="tabular-nums">
-                                {course.time}
-                            </TableCell>
                             <TableCell className="pr-4">
-                                {course.venue}
+                                {course.type}
                             </TableCell>
                         </TableRow>
                     ))
                 ) : (
                     <TableRow>
                         <TableCell
-                            colSpan={4}
+                            colSpan={3}
                             className="px-4 py-6 text-muted-foreground"
                         >
-                            No classes scheduled.
+                            No courses have been added for this semester.
                         </TableCell>
                     </TableRow>
                 )}
@@ -335,41 +248,4 @@ function EmptyLine({ children }: { children: string }) {
             {children}
         </div>
     );
-}
-
-function defaultWeekday(): Weekday {
-    const day = new Date().getDay();
-
-    if (day >= 1 && day <= 5) {
-        return weekdays[day - 1];
-    }
-
-    return 'Monday';
-}
-
-function timetableTextHref(
-    semesterLabel: string,
-    session: string,
-    courses: DashboardStudentHomeTimetableItem[],
-): string {
-    const lines = [
-        `${semesterLabel} Course Timetable`,
-        `${session} Academic Session`,
-        '',
-        ...courses.map(
-            (course) =>
-                `${course.day} | ${course.time} | ${course.code} | ${course.title} | ${course.units} units | ${course.venue}`,
-        ),
-    ];
-
-    return `data:text/plain;charset=utf-8,${encodeURIComponent(lines.join('\n'))}`;
-}
-
-function timetableFileName(semesterLabel: string): string {
-    const slug = semesterLabel
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '');
-
-    return `${slug}-timetable.txt`;
 }

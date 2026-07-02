@@ -3,14 +3,21 @@
 namespace Database\Seeders;
 
 use App\AccountType;
+use App\Models\AcademicSession;
+use App\Models\AcademicYear;
+use App\Models\AcademicYearSemester;
+use App\Models\ApprovalRequest;
 use App\Models\Course;
 use App\Models\Department;
+use App\Models\EmailDelivery;
 use App\Models\Faculty;
-use App\Models\Level;
+use App\Models\ImportBatch;
+use App\Models\School;
 use App\Models\Semester;
 use App\Models\StaffProfile;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 class DemoUserSeeder extends Seeder
@@ -19,10 +26,11 @@ class DemoUserSeeder extends Seeder
 
     public function run(): void
     {
+        $school = School::query()->where('abbreviation', 'FUTO')->firstOrFail();
         $faculty = Faculty::query()->where('abbreviation', 'SESET')->firstOrFail();
         $department = Department::query()->where('abbreviation', 'CPE')->firstOrFail();
 
-        $department->setMinimumYears(5);
+        $department->setMinimumYearsToDegree(5);
 
         $facultyHead = $this->seedStaffProfile($department, [
             'name' => 'Nwankwo Chika',
@@ -38,10 +46,20 @@ class DemoUserSeeder extends Seeder
 
         $department->assignHeadOfDepartment($staffProfiles->get('staff1@futo.edu'));
 
-        foreach (range(2, 6) as $staffNumber) {
-            $department->assignStaffToLevel(
-                Level::query()->findOrFail($staffNumber - 1),
-                $staffProfiles->get("staff{$staffNumber}@futo.edu"),
+        $currentAcademicSession = $this->academicSessionByName($school, '2025/2026');
+
+        foreach ([
+            'staff2@futo.edu' => '2025/2026',
+            'staff3@futo.edu' => '2024/2025',
+            'staff4@futo.edu' => '2023/2024',
+            'staff5@futo.edu' => '2022/2023',
+            'staff6@futo.edu' => '2021/2022',
+        ] as $staffEmail => $entrySessionName) {
+            $department->assignAdvisorToStudentSet(
+                $this->academicSessionByName($school, $entrySessionName),
+                $staffProfiles->get($staffEmail),
+                $currentAcademicSession,
+                $staffProfiles->get('staff1@futo.edu'),
             );
         }
 
@@ -49,29 +67,35 @@ class DemoUserSeeder extends Seeder
             $this->seedStudent($department, $student);
         }
 
-        $faculty->academicSessions()->updateOrCreate(
-            ['name' => '2025/2026'],
-            [
-                'starts_on' => '2025-09-01',
-                'ends_on' => '2026-08-31',
-                'is_current' => true,
-            ],
-        );
+        $academicSessions = $school->academicSessions()
+            ->oldest('starts_on')
+            ->get();
 
-        $this->seedCourses($faculty, $department);
+        $academicSessions->each(
+            fn (AcademicSession $academicSession) => $this->seedCourses($faculty, $department, $academicSession),
+        );
+        $this->seedFacultyHeadDemoData($faculty, $facultyHead);
     }
 
     /**
-     * @param  array{name: string, email: string}  $staff
+     * @param  array{name: string, email: string, activated?: bool, access_code?: string}  $staff
      */
     private function seedStaffProfile(Department $department, array $staff): StaffProfile
     {
+        $isActivated = $staff['activated'] ?? true;
+
         $user = User::query()->updateOrCreate(
-            ['email' => $staff['email']],
+            [
+                'school_id' => $department->faculty->school_id,
+                'email' => $staff['email'],
+            ],
             [
                 'account_type' => AccountType::Staff,
                 'name' => $staff['name'],
-                'password' => self::PASSWORD,
+                'password' => $isActivated ? self::PASSWORD : Str::random(40),
+                'access_code' => $isActivated ? null : ($staff['access_code'] ?? Str::upper(Str::random(8))),
+                'access_code_used_at' => null,
+                'activated_at' => $isActivated ? now() : null,
             ],
         );
 
@@ -81,36 +105,424 @@ class DemoUserSeeder extends Seeder
         );
     }
 
+    private function seedFacultyHeadDemoData(Faculty $faculty, StaffProfile $facultyHead): void
+    {
+        $departments = Department::query()
+            ->where('faculty_id', $faculty->id)
+            ->whereIn('abbreviation', ['EEE', 'ECE', 'MCE', 'TCE', 'EPE'])
+            ->get()
+            ->keyBy('abbreviation');
+        $departmentStaff = collect();
+
+        foreach ($this->facultyDepartmentDemoData() as $departmentCode => $departmentData) {
+            $department = $departments->get($departmentCode);
+
+            if (! $department instanceof Department) {
+                continue;
+            }
+
+            $department->setMinimumYearsToDegree($departmentData['minimum_years_to_degree']);
+
+            if (isset($departmentData['hod'])) {
+                $hodProfile = $this->seedStaffProfile($department, $departmentData['hod']);
+
+                $department->assignHeadOfDepartment($hodProfile);
+                $departmentStaff->push($hodProfile);
+            }
+
+            foreach ($departmentData['staff'] as $staff) {
+                $departmentStaff->push($this->seedStaffProfile($department, $staff));
+            }
+
+            foreach ($departmentData['students'] as $student) {
+                $this->seedStudent($department, $student);
+            }
+        }
+
+        $this->seedFacultyHeadEmailDeliveries($faculty);
+        $this->seedFacultyHeadImports($faculty, $facultyHead);
+        $this->seedFacultyHeadApprovals($faculty, $facultyHead, $departmentStaff);
+    }
+
+    private function seedFacultyHeadEmailDeliveries(Faculty $faculty): void
+    {
+        foreach ($this->facultyHeadEmailDeliveries() as $delivery) {
+            $user = User::query()
+                ->where('school_id', $faculty->school_id)
+                ->where('email', $delivery['recipient_email'])
+                ->first();
+
+            EmailDelivery::query()->updateOrCreate(
+                [
+                    'school_id' => $faculty->school_id,
+                    'recipient_email' => $delivery['recipient_email'],
+                    'subject' => $delivery['subject'],
+                ],
+                [
+                    'user_id' => $user?->id,
+                    'mailer' => 'cloudflare',
+                    'status' => $delivery['status'],
+                    'provider_message_id' => $delivery['provider_message_id'] ?? null,
+                    'error' => $delivery['error'] ?? null,
+                    'metadata' => $delivery['metadata'] ?? [],
+                    'sent_at' => $delivery['status'] === 'sent' ? now()->subDays($delivery['days_ago']) : null,
+                    'failed_at' => $delivery['status'] === 'failed' ? now()->subDays($delivery['days_ago']) : null,
+                ],
+            );
+        }
+    }
+
+    private function seedFacultyHeadImports(Faculty $faculty, StaffProfile $facultyHead): void
+    {
+        foreach ($this->facultyHeadImportBatches() as $importData) {
+            $batch = ImportBatch::query()->updateOrCreate(
+                [
+                    'school_id' => $faculty->school_id,
+                    'type' => $importData['type'],
+                    'file_name' => $importData['file_name'],
+                ],
+                [
+                    'uploaded_by_user_id' => $facultyHead->user_id,
+                    'scope_type' => Faculty::class,
+                    'scope_id' => $faculty->id,
+                    'status' => $importData['status'],
+                    'mappings' => $importData['mappings'],
+                    'summary' => $importData['summary'],
+                    'submitted_at' => now()->subDays($importData['submitted_days_ago']),
+                    'approved_at' => $importData['status'] === 'approved'
+                        ? now()->subDays($importData['approved_days_ago'])
+                        : null,
+                ],
+            );
+
+            foreach ($importData['rows'] as $row) {
+                $batch->rows()->updateOrCreate(
+                    ['row_number' => $row['row_number']],
+                    [
+                        'raw_data' => $row['raw_data'],
+                        'normalized_data' => $row['normalized_data'],
+                        'errors' => $row['errors'] ?? [],
+                        'status' => $row['status'],
+                    ],
+                );
+            }
+        }
+    }
+
+    /**
+     * @param  Collection<int, StaffProfile>  $departmentStaff
+     */
+    private function seedFacultyHeadApprovals(Faculty $faculty, StaffProfile $facultyHead, Collection $departmentStaff): void
+    {
+        $requesterIds = $departmentStaff
+            ->pluck('user_id')
+            ->filter()
+            ->values();
+
+        foreach ($this->facultyHeadApprovalRequests() as $index => $approval) {
+            ApprovalRequest::query()->updateOrCreate(
+                [
+                    'school_id' => $faculty->school_id,
+                    'type' => $approval['type'],
+                    'notes' => $approval['notes'],
+                ],
+                [
+                    'requester_user_id' => $requesterIds->get($index),
+                    'reviewer_user_id' => $facultyHead->user_id,
+                    'status' => $approval['status'],
+                    'submitted_at' => now()->subDays($approval['submitted_days_ago']),
+                    'reviewed_at' => isset($approval['reviewed_days_ago'])
+                        ? now()->subDays($approval['reviewed_days_ago'])
+                        : null,
+                ],
+            );
+        }
+    }
+
+    /**
+     * @return array<string, array{
+     *     minimum_years_to_degree: int,
+     *     hod?: array{name: string, email: string, activated?: bool, access_code?: string},
+     *     staff: array<int, array{name: string, email: string, activated?: bool, access_code?: string}>,
+     *     students: array<int, array{name: string, email: string, registration_number: string, level: string}>
+     * }>
+     */
+    private function facultyDepartmentDemoData(): array
+    {
+        return [
+            'EEE' => [
+                'minimum_years_to_degree' => 5,
+                'hod' => ['name' => 'Nwachukwu Amarachi', 'email' => 'hod.eee@futo.edu'],
+                'staff' => [
+                    ['name' => 'Ezeani Chisom', 'email' => 'eee.staff1@futo.edu'],
+                    ['name' => 'Okoro Tochukwu', 'email' => 'eee.staff2@futo.edu'],
+                    ['name' => 'Ifeanyi Nneka', 'email' => 'eee.staff3@futo.edu'],
+                ],
+                'students' => [
+                    ['name' => 'Onyeka Chiamaka', 'email' => 'eee.student1@futo.edu', 'registration_number' => '2025000101', 'level' => '100-level'],
+                    ['name' => 'Agu Chinedu', 'email' => 'eee.student2@futo.edu', 'registration_number' => '2024000102', 'level' => '200-level'],
+                    ['name' => 'Nworie Ifeoma', 'email' => 'eee.student3@futo.edu', 'registration_number' => '2023000103', 'level' => '300-level'],
+                    ['name' => 'Ekwueme Somto', 'email' => 'eee.student4@futo.edu', 'registration_number' => '2022000104', 'level' => '400-level'],
+                    ['name' => 'Ugochukwu Ada', 'email' => 'eee.student5@futo.edu', 'registration_number' => '2021000105', 'level' => '500-level'],
+                    ['name' => 'Okafor Kenechukwu', 'email' => 'eee.student6@futo.edu', 'registration_number' => '2023000106', 'level' => '300-level'],
+                ],
+            ],
+            'ECE' => [
+                'minimum_years_to_degree' => 5,
+                'hod' => ['name' => 'Iroegbu Somtochukwu', 'email' => 'hod.ece@futo.edu'],
+                'staff' => [
+                    ['name' => 'Opara Chioma', 'email' => 'ece.staff1@futo.edu'],
+                    ['name' => 'Udeh Kamsi', 'email' => 'ece.staff2@futo.edu', 'activated' => false, 'access_code' => 'SESET-ECE-STAFF2'],
+                ],
+                'students' => [
+                    ['name' => 'Nwankwo Oluebube', 'email' => 'ece.student1@futo.edu', 'registration_number' => '2025000201', 'level' => '100-level'],
+                    ['name' => 'Chukwuemeka Ezinne', 'email' => 'ece.student2@futo.edu', 'registration_number' => '2024000202', 'level' => '200-level'],
+                    ['name' => 'Okonkwo Chidera', 'email' => 'ece.student3@futo.edu', 'registration_number' => '2023000203', 'level' => '300-level'],
+                    ['name' => 'Nnamdi Ifunanya', 'email' => 'ece.student4@futo.edu', 'registration_number' => '2022000204', 'level' => '400-level'],
+                    ['name' => 'Eze Ebuka', 'email' => 'ece.student5@futo.edu', 'registration_number' => '2021000205', 'level' => '500-level'],
+                ],
+            ],
+            'MCE' => [
+                'minimum_years_to_degree' => 5,
+                'hod' => ['name' => 'Okechukwu Nkiru', 'email' => 'hod.mce@futo.edu', 'activated' => false, 'access_code' => 'SESET-MCE-HOD'],
+                'staff' => [
+                    ['name' => 'Umeh Chidiebere', 'email' => 'mce.staff1@futo.edu'],
+                    ['name' => 'Nwosu Obinna', 'email' => 'mce.staff2@futo.edu'],
+                ],
+                'students' => [
+                    ['name' => 'Okorie Kosisochukwu', 'email' => 'mce.student1@futo.edu', 'registration_number' => '2025000301', 'level' => '100-level'],
+                    ['name' => 'Ezeani Munachi', 'email' => 'mce.student2@futo.edu', 'registration_number' => '2024000302', 'level' => '200-level'],
+                    ['name' => 'Uzoho Chizoba', 'email' => 'mce.student3@futo.edu', 'registration_number' => '2023000303', 'level' => '300-level'],
+                    ['name' => 'Nwokedi Chukwu', 'email' => 'mce.student4@futo.edu', 'registration_number' => '2022000304', 'level' => '400-level'],
+                ],
+            ],
+            'TCE' => [
+                'minimum_years_to_degree' => 5,
+                'staff' => [
+                    ['name' => 'Ezeala Chukwudi', 'email' => 'tce.staff1@futo.edu'],
+                    ['name' => 'Ibekwe Amarachi', 'email' => 'tce.staff2@futo.edu'],
+                ],
+                'students' => [
+                    ['name' => 'Udechukwu Nmesoma', 'email' => 'tce.student1@futo.edu', 'registration_number' => '2025000401', 'level' => '100-level'],
+                    ['name' => 'Nwafor Ifeanyi', 'email' => 'tce.student2@futo.edu', 'registration_number' => '2024000402', 'level' => '200-level'],
+                    ['name' => 'Akabueze Adaora', 'email' => 'tce.student3@futo.edu', 'registration_number' => '2023000403', 'level' => '300-level'],
+                ],
+            ],
+            'EPE' => [
+                'minimum_years_to_degree' => 5,
+                'staff' => [
+                    ['name' => 'Okeke Chinonso', 'email' => 'epe.staff1@futo.edu'],
+                    ['name' => 'Anyanwu Uchenna', 'email' => 'epe.staff2@futo.edu', 'activated' => false, 'access_code' => 'SESET-EPE-STAFF2'],
+                ],
+                'students' => [
+                    ['name' => 'Onuorah Kelechi', 'email' => 'epe.student1@futo.edu', 'registration_number' => '2025000501', 'level' => '100-level'],
+                    ['name' => 'Nweke Favour', 'email' => 'epe.student2@futo.edu', 'registration_number' => '2024000502', 'level' => '200-level'],
+                    ['name' => 'Maduka Chisom', 'email' => 'epe.student3@futo.edu', 'registration_number' => '2023000503', 'level' => '300-level'],
+                    ['name' => 'Ezugwu Ebube', 'email' => 'epe.student4@futo.edu', 'registration_number' => '2022000504', 'level' => '400-level'],
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * @return array<int, array{recipient_email: string, subject: string, status: string, days_ago: int, provider_message_id?: string, error?: string, metadata?: array<string, string>}>
+     */
+    private function facultyHeadEmailDeliveries(): array
+    {
+        return [
+            [
+                'recipient_email' => 'hod.eee@futo.edu',
+                'subject' => 'GradeManager HOD access code',
+                'status' => 'sent',
+                'days_ago' => 9,
+                'provider_message_id' => 'cf-demo-hod-eee',
+                'metadata' => ['department' => 'EEE', 'provisioned_role' => 'hod'],
+            ],
+            [
+                'recipient_email' => 'hod.mce@futo.edu',
+                'subject' => 'GradeManager HOD access code',
+                'status' => 'sent',
+                'days_ago' => 4,
+                'provider_message_id' => 'cf-demo-hod-mce',
+                'metadata' => ['department' => 'MCE', 'access_code' => 'SESET-MCE-HOD'],
+            ],
+            [
+                'recipient_email' => 'epe.staff2@futo.edu',
+                'subject' => 'GradeManager staff access code',
+                'status' => 'failed',
+                'days_ago' => 2,
+                'error' => 'Mailbox unavailable.',
+                'metadata' => ['department' => 'EPE', 'access_code' => 'SESET-EPE-STAFF2'],
+            ],
+            [
+                'recipient_email' => 'ece.staff2@futo.edu',
+                'subject' => 'GradeManager staff access code',
+                'status' => 'skipped',
+                'days_ago' => 1,
+                'error' => 'Access code shared directly by faculty office.',
+                'metadata' => ['department' => 'ECE', 'access_code' => 'SESET-ECE-STAFF2'],
+            ],
+        ];
+    }
+
+    /**
+     * @return array<int, array{
+     *     type: string,
+     *     file_name: string,
+     *     status: string,
+     *     submitted_days_ago: int,
+     *     approved_days_ago?: int,
+     *     mappings: array<string, string>,
+     *     summary: array<string, int>,
+     *     rows: array<int, array{row_number: int, raw_data: array<string, string>, normalized_data: array<string, string>, status: string, errors?: array<int, string>}>
+     * }>
+     */
+    private function facultyHeadImportBatches(): array
+    {
+        return [
+            [
+                'type' => 'hod_provisioning',
+                'file_name' => 'seset-hod-access.xlsx',
+                'status' => 'approved',
+                'submitted_days_ago' => 10,
+                'approved_days_ago' => 9,
+                'mappings' => ['department' => 'Department', 'name' => 'Full Name', 'email' => 'Email', 'access_code' => 'Access Code'],
+                'summary' => ['rows' => 3, 'valid_rows' => 3, 'invalid_rows' => 0],
+                'rows' => [
+                    ['row_number' => 2, 'raw_data' => ['Department' => 'EEE', 'Full Name' => 'Nwachukwu Amarachi', 'Email' => 'hod.eee@futo.edu'], 'normalized_data' => ['department' => 'EEE', 'email' => 'hod.eee@futo.edu'], 'status' => 'approved'],
+                    ['row_number' => 3, 'raw_data' => ['Department' => 'ECE', 'Full Name' => 'Iroegbu Somtochukwu', 'Email' => 'hod.ece@futo.edu'], 'normalized_data' => ['department' => 'ECE', 'email' => 'hod.ece@futo.edu'], 'status' => 'approved'],
+                    ['row_number' => 4, 'raw_data' => ['Department' => 'MCE', 'Full Name' => 'Okechukwu Nkiru', 'Email' => 'hod.mce@futo.edu'], 'normalized_data' => ['department' => 'MCE', 'email' => 'hod.mce@futo.edu'], 'status' => 'approved'],
+                ],
+            ],
+            [
+                'type' => 'staff_access_codes',
+                'file_name' => 'seset-new-staff.xlsx',
+                'status' => 'in_review',
+                'submitted_days_ago' => 3,
+                'mappings' => ['department' => 'Department', 'name' => 'Full Name', 'email' => 'Email'],
+                'summary' => ['rows' => 3, 'valid_rows' => 2, 'invalid_rows' => 1],
+                'rows' => [
+                    ['row_number' => 2, 'raw_data' => ['Department' => 'EPE', 'Full Name' => 'Anyanwu Uchenna', 'Email' => 'epe.staff2@futo.edu'], 'normalized_data' => ['department' => 'EPE', 'email' => 'epe.staff2@futo.edu'], 'status' => 'valid'],
+                    ['row_number' => 3, 'raw_data' => ['Department' => 'ECE', 'Full Name' => 'Udeh Kamsi', 'Email' => 'ece.staff2@futo.edu'], 'normalized_data' => ['department' => 'ECE', 'email' => 'ece.staff2@futo.edu'], 'status' => 'valid'],
+                    ['row_number' => 4, 'raw_data' => ['Department' => 'TCE', 'Full Name' => '', 'Email' => ''], 'normalized_data' => ['department' => 'TCE'], 'status' => 'invalid', 'errors' => ['Missing name and email.']],
+                ],
+            ],
+            [
+                'type' => 'student_registration_numbers',
+                'file_name' => 'seset-300l-students.xlsx',
+                'status' => 'draft',
+                'submitted_days_ago' => 1,
+                'mappings' => ['department' => 'Department', 'registration_number' => 'Reg No'],
+                'summary' => ['rows' => 4, 'valid_rows' => 4, 'invalid_rows' => 0],
+                'rows' => [
+                    ['row_number' => 2, 'raw_data' => ['Department' => 'CPE', 'Reg No' => '2023000003'], 'normalized_data' => ['department' => 'CPE', 'registration_number' => '2023000003'], 'status' => 'valid'],
+                    ['row_number' => 3, 'raw_data' => ['Department' => 'EEE', 'Reg No' => '2023000103'], 'normalized_data' => ['department' => 'EEE', 'registration_number' => '2023000103'], 'status' => 'valid'],
+                    ['row_number' => 4, 'raw_data' => ['Department' => 'ECE', 'Reg No' => '2023000203'], 'normalized_data' => ['department' => 'ECE', 'registration_number' => '2023000203'], 'status' => 'valid'],
+                    ['row_number' => 5, 'raw_data' => ['Department' => 'MCE', 'Reg No' => '2023000303'], 'normalized_data' => ['department' => 'MCE', 'registration_number' => '2023000303'], 'status' => 'valid'],
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * @return array<int, array{type: string, status: string, notes: string, submitted_days_ago: int, reviewed_days_ago?: int}>
+     */
+    private function facultyHeadApprovalRequests(): array
+    {
+        return [
+            [
+                'type' => 'hod_import_review',
+                'status' => 'approved',
+                'notes' => 'Reviewed SESET HOD provisioning sheet.',
+                'submitted_days_ago' => 10,
+                'reviewed_days_ago' => 9,
+            ],
+            [
+                'type' => 'staff_access_code_import',
+                'status' => 'pending',
+                'notes' => 'New staff access codes for EPE and ECE.',
+                'submitted_days_ago' => 3,
+            ],
+            [
+                'type' => 'course_catalog_update',
+                'status' => 'pending',
+                'notes' => 'EEE requested course catalog changes for 300L.',
+                'submitted_days_ago' => 2,
+            ],
+            [
+                'type' => 'student_profile_corrections',
+                'status' => 'rejected',
+                'notes' => 'TCE spreadsheet missing required email values.',
+                'submitted_days_ago' => 1,
+                'reviewed_days_ago' => 1,
+            ],
+        ];
+    }
+
     /**
      * @param  array{name: string, email: string, registration_number: string, level: string}  $student
      */
     private function seedStudent(Department $department, array $student): void
     {
+        $entryAcademicSession = $this->entryAcademicSessionForStudent($department, $student['registration_number']);
+
         $user = User::query()->updateOrCreate(
-            ['email' => $student['email']],
+            [
+                'school_id' => $department->faculty->school_id,
+                'email' => $student['email'],
+            ],
             [
                 'account_type' => AccountType::Student,
                 'name' => $student['name'],
                 'password' => self::PASSWORD,
+                'access_code' => null,
+                'access_code_used_at' => null,
+                'activated_at' => now(),
             ],
         );
 
         $user->studentProfile()->updateOrCreate(
             ['user_id' => $user->id],
             [
+                'school_id' => $department->faculty->school_id,
                 'department_id' => $department->id,
-                'current_level_id' => Level::query()->where('slug', $student['level'])->value('id'),
+                'current_academic_year_id' => AcademicYear::query()->where('slug', $student['level'])->value('id'),
+                'entry_academic_session_id' => $entryAcademicSession?->id,
                 'registration_number' => $student['registration_number'],
             ],
         );
     }
 
-    private function seedCourses(Faculty $faculty, Department $department): void
+    private function entryAcademicSessionForStudent(Department $department, string $registrationNumber): ?AcademicSession
+    {
+        $entryYear = substr($registrationNumber, 0, 4);
+
+        if (! ctype_digit($entryYear)) {
+            return null;
+        }
+
+        return AcademicSession::query()
+            ->where('school_id', $department->faculty->school_id)
+            ->where('name', 'like', $entryYear.'/%')
+            ->first();
+    }
+
+    private function academicSessionByName(School $school, string $name): AcademicSession
+    {
+        return $school->academicSessions()
+            ->where('name', $name)
+            ->firstOrFail();
+    }
+
+    private function seedCourses(Faculty $faculty, Department $department, AcademicSession $academicSession): void
     {
         $courses = collect($this->courses())
             ->mapWithKeys(fn (array $course): array => [
                 $course['code'] => Course::query()->updateOrCreate(
-                    ['code' => $course['code']],
+                    [
+                        'school_id' => $faculty->school_id,
+                        'code' => $course['code'],
+                    ],
                     [
                         'title' => $course['title'],
                         'slug' => Str::slug($course['code'].' '.$course['title']),
@@ -119,42 +531,31 @@ class DemoUserSeeder extends Seeder
                 ),
             ]);
 
-        $slots = $this->courseTimetableSlots();
-        $slotIndex = 0;
-
         foreach ($this->courseOfferings() as $offering) {
             $owner = $offering['owner'] === 'faculty' ? $faculty : $department;
+            $academicYearSemester = $this->academicYearSemester($offering['level'], $offering['semester']);
 
-            $courseOffering = $owner->courseOfferings()->updateOrCreate(
+            $owner->courseOfferings()->updateOrCreate(
                 [
                     'course_id' => $courses->get($offering['code'])->id,
-                    'level_id' => Level::query()->where('slug', $offering['level'])->value('id'),
-                    'semester_id' => Semester::query()->where('slug', $offering['semester'])->value('id'),
+                    'academic_session_id' => $academicSession->id,
+                    'academic_year_semester_id' => $academicYearSemester->id,
                 ],
                 ['is_mandatory' => $offering['is_mandatory'] ?? true],
             );
-
-            if ($offering['level'] === '300-level' && $offering['semester'] === 'harmattan') {
-                $slot = $slots[$slotIndex % count($slots)];
-
-                $courseOffering->timetableSlots()->updateOrCreate(
-                    [
-                        'day_of_week' => $slot['day_of_week'],
-                        'starts_at' => $slot['starts_at'],
-                    ],
-                    [
-                        'ends_at' => $slot['ends_at'],
-                        'venue' => $slot['venue'],
-                    ],
-                );
-
-                $slotIndex++;
-            }
         }
 
         foreach ($this->coursePrerequisites() as $courseCode => $prerequisiteCode) {
             $courses->get($courseCode)->addPrerequisite($courses->get($prerequisiteCode));
         }
+    }
+
+    private function academicYearSemester(string $academicYearSlug, string $semesterSlug): AcademicYearSemester
+    {
+        return AcademicYearSemester::query()
+            ->where('academic_year_id', AcademicYear::query()->where('slug', $academicYearSlug)->value('id'))
+            ->where('semester_id', Semester::query()->where('slug', $semesterSlug)->value('id'))
+            ->firstOrFail();
     }
 
     /**
@@ -262,20 +663,6 @@ class DemoUserSeeder extends Seeder
             ['owner' => 'department', 'code' => 'CPE 306', 'level' => '300-level', 'semester' => 'rain'],
             ['owner' => 'faculty', 'code' => 'EEE 302', 'level' => '300-level', 'semester' => 'rain'],
             ['owner' => 'department', 'code' => 'CPE 308', 'level' => '300-level', 'semester' => 'rain', 'is_mandatory' => false],
-        ];
-    }
-
-    /**
-     * @return array<int, array{day_of_week: string, starts_at: string, ends_at: string, venue: string}>
-     */
-    private function courseTimetableSlots(): array
-    {
-        return [
-            ['day_of_week' => 'Monday', 'starts_at' => '08:00', 'ends_at' => '10:00', 'venue' => 'ETF 204'],
-            ['day_of_week' => 'Tuesday', 'starts_at' => '10:00', 'ends_at' => '12:00', 'venue' => 'CPE Lab 1'],
-            ['day_of_week' => 'Wednesday', 'starts_at' => '12:00', 'ends_at' => '14:00', 'venue' => 'SESET 102'],
-            ['day_of_week' => 'Thursday', 'starts_at' => '09:00', 'ends_at' => '11:00', 'venue' => 'ETF 301'],
-            ['day_of_week' => 'Friday', 'starts_at' => '11:00', 'ends_at' => '13:00', 'venue' => 'CPE Studio'],
         ];
     }
 

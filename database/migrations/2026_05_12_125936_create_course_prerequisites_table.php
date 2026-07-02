@@ -11,6 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // Stores prerequisite course catalog relationships used to validate course selections.
         Schema::create('course_prerequisites', function (Blueprint $table) {
             $table->id();
             $table->foreignId('course_id')->constrained()->cascadeOnDelete();

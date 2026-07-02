@@ -1,13 +1,18 @@
+import { studentSetText } from '@/components/student-set-label';
 import type {
     DashboardContext,
     DashboardDepartment,
     DashboardFaculty,
-    DashboardLevel,
+    DashboardStudentSetContext,
 } from '@/types';
 
 export function dashboardOrganization(
     dashboard: DashboardContext,
 ): DashboardDepartment | DashboardFaculty | null {
+    if (dashboard.role === 'school_admin') {
+        return dashboard.schoolAdmin?.school ?? null;
+    }
+
     return dashboard.role === 'faculty_head'
         ? dashboard.faculty
         : dashboard.department;
@@ -17,12 +22,19 @@ export function dashboardSidebarRoleLabel(dashboard: DashboardContext): string {
     const organization = dashboardOrganization(dashboard);
 
     if (dashboard.role === 'staff') {
-        const levelLabel = staffLevelLabel(dashboard.levels);
+        const setLabel = staffSetLabel(
+            dashboard.advisedSets,
+            dashboard.department?.minimumYearsToDegree,
+        );
         const advisorLabel = organization
-            ? `${organization.abbreviation} Course Advisor`
-            : 'Course Advisor';
+            ? `${organization.abbreviation} Course Adviser`
+            : 'Course Adviser';
 
-        return levelLabel ? `${levelLabel} ${advisorLabel}` : advisorLabel;
+        return setLabel ? `${setLabel} ${advisorLabel}` : advisorLabel;
+    }
+
+    if (dashboard.role === 'school_admin' && organization !== null) {
+        return `${organization.abbreviation} School Admin`;
     }
 
     if (organization === null) {
@@ -41,23 +53,22 @@ export function dashboardHeaderOrganizationLabel(
         return null;
     }
 
-    if (dashboard.role === 'faculty_head') {
+    if (['faculty_head', 'school_admin'].includes(dashboard.role)) {
         return organization.abbreviation;
     }
 
     return organization.name;
 }
 
-function staffLevelLabel(levels: DashboardLevel[]): string | null {
-    if (levels.length === 0) {
+function staffSetLabel(
+    sets: DashboardStudentSetContext[],
+    minimumYearsToDegree?: number,
+): string | null {
+    if (sets.length === 0) {
         return null;
     }
 
-    return levels.map((level) => shortLevel(level.title)).join(', ');
-}
-
-function shortLevel(level: string): string {
-    const match = level.match(/^(\d{3})\s+Level$/i);
-
-    return match ? `${match[1]}L` : level;
+    return sets
+        .map((set) => studentSetText({ ...set, minimumYearsToDegree }))
+        .join(', ');
 }

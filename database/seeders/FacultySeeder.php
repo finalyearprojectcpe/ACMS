@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Department;
 use App\Models\Faculty;
+use App\Models\School;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
 
@@ -14,9 +15,20 @@ class FacultySeeder extends Seeder
      */
     public function run(): void
     {
+        $school = School::query()->updateOrCreate(
+            ['abbreviation' => 'FUTO'],
+            [
+                'name' => 'Federal University of Technology Owerri',
+                'slug' => Str::slug('Federal University of Technology Owerri'),
+            ],
+        );
+
         foreach ($this->faculties() as $facultyData) {
             $faculty = Faculty::query()->updateOrCreate(
-                ['slug' => Str::slug($facultyData['name'])],
+                [
+                    'school_id' => $school->id,
+                    'slug' => Str::slug($facultyData['name']),
+                ],
                 [
                     'name' => $facultyData['name'],
                     'abbreviation' => $facultyData['abbreviation'],
@@ -25,9 +37,11 @@ class FacultySeeder extends Seeder
 
             foreach ($facultyData['departments'] as $departmentData) {
                 Department::query()->updateOrCreate(
-                    ['slug' => Str::slug($departmentData['name'])],
                     [
                         'faculty_id' => $faculty->id,
+                        'slug' => Str::slug($departmentData['name']),
+                    ],
+                    [
                         'name' => $departmentData['name'],
                         'abbreviation' => $departmentData['abbreviation'],
                     ],

@@ -1,7 +1,9 @@
 import { Link } from '@inertiajs/react';
 import {
     RiBookOpenLine,
+    RiBuilding2Line,
     RiBuildingLine,
+    RiCalendarEventLine,
     RiCalendarTodoLine,
     RiCashLine,
     RiCheckboxCircleLine,
@@ -10,6 +12,7 @@ import {
     RiHome5Line,
     RiLogoutBoxRLine,
     RiSettings3Line,
+    RiShieldUserLine,
     RiTeamLine,
     RiUser3Line,
     RiUserSettingsLine,
@@ -166,7 +169,7 @@ export function AppSidebar({
                         >
                             <Avatar className="size-8">
                                 <AvatarImage
-                                    src={user.avatar}
+                                    src={user.avatar ?? undefined}
                                     alt={`${user.name} avatar`}
                                 />
                                 <AvatarFallback className="text-xs font-medium">
@@ -199,6 +202,10 @@ export function AppSidebar({
 }
 
 function navigationFor(dashboard: DashboardContext): NavItem[] {
+    if (dashboard.role === 'school_admin') {
+        return schoolAdminNavigation();
+    }
+
     if (dashboard.role === 'faculty_head') {
         return facultyHeadNavigation();
     }
@@ -208,10 +215,40 @@ function navigationFor(dashboard: DashboardContext): NavItem[] {
     }
 
     if (dashboard.role === 'hod') {
-        return hodNavigation(dashboard.levels, dashboard.courseScheduleLevels);
+        return hodNavigation();
     }
 
     return staffNavigation(dashboard.levels, dashboard.courseScheduleLevels);
+}
+
+function schoolAdminNavigation(): NavItem[] {
+    return [
+        nav('Home', 'home', dashboardHome(), RiHome5Line),
+        nav(
+            'Academic Sessions',
+            'academic-sessions',
+            dashboardSection({ section: 'academic-sessions' }),
+            RiCalendarEventLine,
+        ),
+        nav(
+            'School Structure',
+            'structure',
+            dashboardSection({ section: 'structure' }),
+            RiBuilding2Line,
+        ),
+        nav(
+            'Faculty Heads',
+            'faculty-heads',
+            dashboardSection({ section: 'faculty-heads' }),
+            RiShieldUserLine,
+        ),
+        nav(
+            'Settings',
+            'settings',
+            dashboardSection({ section: 'settings' }),
+            RiSettings3Line,
+        ),
+    ];
 }
 
 function facultyHeadNavigation(): NavItem[] {
@@ -230,15 +267,9 @@ function facultyHeadNavigation(): NavItem[] {
             RiTeamLine,
         ),
         nav(
-            'Courses',
-            'courses',
-            dashboardSection({ section: 'courses' }),
-            RiBookOpenLine,
-        ),
-        nav(
-            'Academic sessions',
-            'academic-sessions',
-            dashboardSection({ section: 'academic-sessions' }),
+            'Sessions & Courses',
+            'sessions-courses',
+            dashboardSection({ section: 'sessions-courses' }),
             RiCalendarTodoLine,
         ),
         nav(
@@ -263,7 +294,7 @@ function staffNavigation(
             RiTeamLine,
         ),
         nav(
-            'Course Schedules',
+            'Course Offerings',
             'courses',
             undefined,
             RiBookOpenLine,
@@ -324,43 +355,32 @@ function studentNavigation(levels: DashboardLevel[]): NavItem[] {
     ];
 }
 
-function hodNavigation(
-    levels: DashboardLevel[],
-    courseScheduleLevels: DashboardLevel[],
-): NavItem[] {
+function hodNavigation(): NavItem[] {
     return [
         nav('Home', 'home', dashboardHome(), RiHome5Line),
         nav(
-            'Staff assignments',
-            'staff-assignments',
-            dashboardSection({ section: 'staff-assignments' }),
+            'Staff',
+            'staff',
+            dashboardSection({ section: 'staff' }),
             RiUserSettingsLine,
         ),
         nav(
-            'Student sets',
-            'student-sets',
-            dashboardSection({ section: 'student-sets' }),
+            'Students',
+            'students',
+            dashboardSection({ section: 'students' }),
             RiTeamLine,
         ),
         nav(
-            'Course Schedules',
+            'Course Offerings',
             'courses',
-            undefined,
+            dashboardSection({ section: 'courses' }),
             RiBookOpenLine,
-            levelLinks('courses', courseScheduleLevels),
         ),
         nav(
-            'Grades',
-            'grades',
-            undefined,
+            'Student Results',
+            'student-results',
+            dashboardSection({ section: 'student-results' }),
             RiGraduationCapLine,
-            levelLinks('grades', levels),
-        ),
-        nav(
-            'Reports',
-            'reports',
-            dashboardSection({ section: 'reports' }),
-            RiFileChartLine,
         ),
         nav(
             'Settings',

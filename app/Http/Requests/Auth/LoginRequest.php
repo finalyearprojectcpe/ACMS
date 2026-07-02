@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Models\School;
+use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
@@ -36,10 +38,52 @@ class LoginRequest extends FormRequest
      */
     public function authenticate(): void
     {
-        if (Auth::attempt($this->only('email', 'password'))) {
+        $credentials = $this->only('email', 'password');
+        $school = $this->attributes->get('school');
+
+        if ($school instanceof School) {
+            $credentials['school_id'] = $school->id;
+        }
+
+        if (Auth::attempt($credentials)) {
+            $this->ensureUserCanLogin();
+
             return;
         }
 
+        $this->throwFailedAuthenticationException();
+    }
+
+    private function ensureUserCanLogin(): void
+    {
+        $school = $this->attributes->get('school');
+        $user = $this->user();
+
+        if (! $user instanceof User) {
+            return;
+        }
+
+        if ($user->activated_at === null) {
+            Auth::guard('web')->logout();
+
+            $this->throwFailedAuthenticationException();
+        }
+
+        if (! $school instanceof School) {
+            return;
+        }
+
+        if ((int) $user->school_id === (int) $school->id) {
+            return;
+        }
+
+        Auth::guard('web')->logout();
+
+        $this->throwFailedAuthenticationException();
+    }
+
+    private function throwFailedAuthenticationException(): never
+    {
         throw ValidationException::withMessages([
             'email' => trans('auth.failed'),
         ]);

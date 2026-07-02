@@ -92,8 +92,19 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+function CardForm({ className, ...props }: React.ComponentProps<"form">) {
+  return (
+    <form
+      data-slot="card-form"
+      className={cn("flex flex-col gap-4", className)}
+      {...props}
+    />
+  )
+}
+
 export {
   Card,
+  CardForm,
   CardHeader,
   CardFooter,
   CardTitle,

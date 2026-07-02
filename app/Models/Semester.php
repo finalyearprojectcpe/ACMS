@@ -15,10 +15,10 @@ class Semester extends Model
     use HasFactory;
 
     /**
-     * @return HasMany<CourseOffering, $this>
+     * @return HasMany<AcademicYearSemester, $this>
      */
-    public function courseOfferings(): HasMany
+    public function academicYearSemesters(): HasMany
     {
-        return $this->hasMany(CourseOffering::class);
+        return $this->hasMany(AcademicYearSemester::class);
     }
 }

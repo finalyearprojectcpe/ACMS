@@ -7,10 +7,9 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
-#[Fillable(['owner_type', 'owner_id', 'course_id', 'level_id', 'semester_id', 'is_mandatory'])]
+#[Fillable(['owner_type', 'owner_id', 'course_id', 'academic_session_id', 'academic_year_semester_id', 'is_mandatory'])]
 class CourseOffering extends Model
 {
     /** @use HasFactory<CourseOfferingFactory> */
@@ -37,27 +36,19 @@ class CourseOffering extends Model
     }
 
     /**
-     * @return BelongsTo<Level, $this>
+     * @return BelongsTo<AcademicSession, $this>
      */
-    public function level(): BelongsTo
+    public function academicSession(): BelongsTo
     {
-        return $this->belongsTo(Level::class);
+        return $this->belongsTo(AcademicSession::class);
     }
 
     /**
-     * @return BelongsTo<Semester, $this>
+     * @return BelongsTo<AcademicYearSemester, $this>
      */
-    public function semester(): BelongsTo
+    public function academicYearSemester(): BelongsTo
     {
-        return $this->belongsTo(Semester::class);
-    }
-
-    /**
-     * @return HasMany<CourseTimetableSlot, $this>
-     */
-    public function timetableSlots(): HasMany
-    {
-        return $this->hasMany(CourseTimetableSlot::class);
+        return $this->belongsTo(AcademicYearSemester::class);
     }
 
     /**

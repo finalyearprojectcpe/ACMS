@@ -128,7 +128,7 @@ export function StudentCourseSchedulesDashboard({
                     detail={`${selectedUnits} units selected`}
                 />
                 <SummaryBlock
-                    label="Course Advisor"
+                    label="Course Adviser"
                     value={courseSchedules.advisorName}
                     detail="Reviews submitted lists"
                 />
@@ -355,9 +355,7 @@ function EditableCoursesTable({
                 <TableRow>
                     <TableHead className="w-[24%] px-4">Course</TableHead>
                     <TableHead>Title</TableHead>
-                    <TableHead className="w-[12%] text-center">
-                        Units
-                    </TableHead>
+                    <TableHead className="w-[12%] text-center">Units</TableHead>
                     <TableHead className="hidden w-[14%] text-center md:table-cell">
                         Type
                     </TableHead>
@@ -531,9 +529,7 @@ function LockedCoursesTable({
                 <TableRow>
                     <TableHead className="w-[24%] px-4">Course</TableHead>
                     <TableHead>Title</TableHead>
-                    <TableHead className="w-[14%] text-center">
-                        Units
-                    </TableHead>
+                    <TableHead className="w-[14%] text-center">Units</TableHead>
                     <TableHead className="w-[18%] pr-4 text-right">
                         Status
                     </TableHead>

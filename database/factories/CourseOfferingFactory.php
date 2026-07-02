@@ -2,11 +2,12 @@
 
 namespace Database\Factories;
 
+use App\Models\AcademicSession;
+use App\Models\AcademicYearSemester;
 use App\Models\Course;
 use App\Models\CourseOffering;
 use App\Models\Faculty;
-use App\Models\Level;
-use App\Models\Semester;
+use App\Models\School;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -21,14 +22,15 @@ class CourseOfferingFactory extends Factory
      */
     public function definition(): array
     {
-        $owner = Faculty::factory()->create();
+        $school = School::factory()->create();
+        $owner = Faculty::factory()->create(['school_id' => $school->id]);
 
         return [
             'owner_type' => $owner::class,
             'owner_id' => $owner->id,
-            'course_id' => Course::factory(),
-            'level_id' => Level::factory(),
-            'semester_id' => Semester::factory(),
+            'course_id' => Course::factory()->create(['school_id' => $school->id])->id,
+            'academic_session_id' => AcademicSession::factory()->create(['school_id' => $school->id])->id,
+            'academic_year_semester_id' => AcademicYearSemester::factory(),
             'is_mandatory' => true,
         ];
     }

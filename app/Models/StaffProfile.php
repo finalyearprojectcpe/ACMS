@@ -58,20 +58,29 @@ class StaffProfile extends Model
     }
 
     /**
-     * @return HasMany<DepartmentLevelStaffAssignment, $this>
+     * @return HasMany<StudentSetAdvisorAssignment, $this>
      */
-    public function levelAssignments(): HasMany
+    public function studentSetAdvisorAssignments(): HasMany
     {
-        return $this->hasMany(DepartmentLevelStaffAssignment::class);
+        return $this->hasMany(StudentSetAdvisorAssignment::class);
     }
 
     /**
-     * @return BelongsToMany<Level, $this>
+     * @return HasMany<StudentSetAdvisorAssignment, $this>
      */
-    public function assignedLevels(): BelongsToMany
+    public function activeStudentSetAdvisorAssignments(): HasMany
     {
-        return $this->belongsToMany(Level::class, 'department_level_staff_assignments')
-            ->withPivot('department_id')
+        return $this->studentSetAdvisorAssignments()->where('active_marker', 1);
+    }
+
+    /**
+     * @return BelongsToMany<AcademicSession, $this>
+     */
+    public function advisedEntryAcademicSessions(): BelongsToMany
+    {
+        return $this->belongsToMany(AcademicSession::class, 'student_set_advisor_assignments', 'staff_profile_id', 'entry_academic_session_id')
+            ->withPivot(['department_id', 'starts_academic_session_id', 'ends_academic_session_id', 'active_marker'])
+            ->wherePivot('active_marker', 1)
             ->withTimestamps();
     }
 

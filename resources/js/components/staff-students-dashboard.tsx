@@ -1,6 +1,10 @@
 import { RiLayoutGridLine, RiTableLine } from '@remixicon/react';
 import { useMemo, useState } from 'react';
 
+import { ActionLink } from '@/components/action-link';
+import { CopyableValue } from '@/components/copyable-value';
+import { PersonCell } from '@/components/person-cell';
+import { studentSetText } from '@/components/student-set-label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -20,10 +24,7 @@ import {
 } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { initialsFor } from '@/lib/person';
-import type {
-    DashboardStaffStudent,
-    DashboardStaffStudents,
-} from '@/types';
+import type { DashboardStaffStudent, DashboardStaffStudents } from '@/types';
 
 type StaffStudentsDashboardProps = {
     students: DashboardStaffStudents;
@@ -45,7 +46,7 @@ export function StaffStudentsDashboard({
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-sm text-muted-foreground">
                     <span className="font-medium text-foreground">
-                        {assignedLevelLabel(students.assignedLevels)}
+                        {assignedSetLabel(students.assignedSets)}
                     </span>{' '}
                     <span className="tabular-nums">
                         {students.totalStudents}{' '}
@@ -105,9 +106,7 @@ function StudentsTable({
                             <TableHead className="min-w-48">
                                 Full Name
                             </TableHead>
-                            <TableHead className="min-w-32">
-                                Reg. No.
-                            </TableHead>
+                            <TableHead className="min-w-32">Reg. No.</TableHead>
                             <TableHead className="min-w-44">
                                 Pending Carryovers
                             </TableHead>
@@ -122,26 +121,36 @@ function StudentsTable({
                             <TableHead className="w-24 pr-4 text-center">
                                 CGPA
                             </TableHead>
+                            <TableHead className="w-24 pr-4 text-right">
+                                Action
+                            </TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {students.length > 0 ? (
                             students.map((student, index) => (
-                                <TableRow key={student.id}>
+                                <TableRow
+                                    key={student.id}
+                                    className="odd:bg-background even:bg-muted/25"
+                                >
                                     <TableCell className="px-4 text-center text-muted-foreground tabular-nums">
                                         {index + 1}
                                     </TableCell>
-                                    <TableCell className="font-medium">
-                                        {student.fullName}
+                                    <TableCell>
+                                        <PersonCell
+                                            name={student.fullName}
+                                            secondary={student.email}
+                                            avatar={student.avatar}
+                                        />
                                     </TableCell>
                                     <TableCell>
-                                        <StudentProfileLink student={student} />
+                                        <CopyableValue
+                                            value={student.registrationNumber}
+                                        />
                                     </TableCell>
                                     <TableCell className="whitespace-normal">
                                         <CarryoverBadges
-                                            courses={
-                                                student.pendingCarryovers
-                                            }
+                                            courses={student.pendingCarryovers}
                                             limit={2}
                                         />
                                     </TableCell>
@@ -156,12 +165,17 @@ function StudentsTable({
                                     <TableCell className="pr-4 text-center font-semibold tabular-nums">
                                         {student.cgpa}
                                     </TableCell>
+                                    <TableCell className="pr-4 text-right">
+                                        <ActionLink href={student.profileUrl}>
+                                            View
+                                        </ActionLink>
+                                    </TableCell>
                                 </TableRow>
                             ))
                         ) : (
                             <TableRow>
                                 <TableCell
-                                    colSpan={5 + gpaColumns.length}
+                                    colSpan={6 + gpaColumns.length}
                                     className="px-4 py-6 text-muted-foreground"
                                 >
                                     No students assigned to this set.
@@ -195,6 +209,7 @@ function StudentsTable({
                                         students.map((student) => student.cgpa),
                                     )}
                                 </TableCell>
+                                <TableCell />
                             </TableRow>
                         </TableFooter>
                     ) : null}
@@ -241,11 +256,18 @@ function StudentsCards({ students }: { students: DashboardStaffStudent[] }) {
                                 <div className="truncate text-xs text-muted-foreground">
                                     {student.email}
                                 </div>
-                                <StudentProfileLink
-                                    student={student}
-                                    className="text-xs"
-                                />
                             </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2">
+                            <CopyableValue
+                                value={student.registrationNumber}
+                                className="h-7"
+                                valueClassName="text-xs"
+                            />
+                            <ActionLink href={student.profileUrl}>
+                                View
+                            </ActionLink>
                         </div>
 
                         <div className="grid grid-cols-[5.25rem_minmax(0,1fr)] gap-2 text-sm">
@@ -294,23 +316,6 @@ function StudentStat({ label, value }: { label: string; value: string }) {
     );
 }
 
-function StudentProfileLink({
-    student,
-    className,
-}: {
-    student: DashboardStaffStudent;
-    className?: string;
-}) {
-    return (
-        <a
-            href={student.profileUrl}
-            className={`font-medium text-link underline-offset-4 hover:underline ${className ?? 'text-sm'}`}
-        >
-            {student.registrationNumber}
-        </a>
-    );
-}
-
 function CarryoverBadges({
     courses,
     limit,
@@ -341,7 +346,7 @@ function CarryoverBadges({
                     <HoverCardTrigger asChild>
                         <button
                             type="button"
-                            className="text-xs font-medium text-link underline-offset-4 hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                            className="text-xs font-medium text-link underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-hidden"
                         >
                             +{hiddenCourses.length} more
                         </button>
@@ -368,14 +373,14 @@ function CarryoverBadges({
     );
 }
 
-function assignedLevelLabel(
-    levels: DashboardStaffStudents['assignedLevels'],
+function assignedSetLabel(
+    sets: DashboardStaffStudents['assignedSets'],
 ): string {
-    if (levels.length === 0) {
+    if (sets.length === 0) {
         return 'No assigned set';
     }
 
-    return `${levels.map((level) => level.title).join(', ')} student set`;
+    return `${sets.map((set) => studentSetText(set)).join(', ')} student set`;
 }
 
 function gpaColumnsFor(students: DashboardStaffStudent[]): string[] {

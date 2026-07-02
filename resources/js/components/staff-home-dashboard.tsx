@@ -2,6 +2,9 @@ import { Link } from '@inertiajs/react';
 import type { ReactNode } from 'react';
 
 import { section as dashboardSection } from '@/actions/App/Http/Controllers/DashboardController';
+import { CopyableValue } from '@/components/copyable-value';
+import { PersonCell } from '@/components/person-cell';
+import { studentSetText } from '@/components/student-set-label';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -30,7 +33,7 @@ type StaffHomeDashboardProps = {
 };
 
 export function StaffHomeDashboard({ home }: StaffHomeDashboardProps) {
-    const assignedSet = assignedLevelLabel(home.assignedLevels);
+    const assignedSet = assignedSetLabel(home.assignedSets);
 
     return (
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
@@ -167,15 +170,21 @@ function PendingDuesByStudentTable({
             <TableBody>
                 {summaries.length > 0 ? (
                     summaries.map((summary) => (
-                        <TableRow key={summary.registrationNumber}>
+                        <TableRow
+                            key={summary.registrationNumber}
+                            className="odd:bg-background even:bg-muted/25"
+                        >
                             <TableCell className="px-4">
-                                <div className="min-w-0">
-                                    <div className="truncate font-medium">
-                                        {summary.studentName}
-                                    </div>
-                                    <div className="truncate text-xs text-muted-foreground">
-                                        Reg. No. {summary.registrationNumber}
-                                    </div>
+                                <div className="flex min-w-0 flex-col gap-1.5">
+                                    <PersonCell
+                                        name={summary.studentName}
+                                        avatar={summary.studentAvatar}
+                                    />
+                                    <CopyableValue
+                                        value={summary.registrationNumber}
+                                        className="h-7"
+                                        valueClassName="text-xs"
+                                    />
                                 </div>
                             </TableCell>
                             <TableCell className="whitespace-normal">
@@ -217,7 +226,7 @@ function DueBadgeList({ dues }: { dues: string[] }) {
                     <HoverCardTrigger asChild>
                         <button
                             type="button"
-                            className="text-xs font-medium text-link underline-offset-4 hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                            className="text-xs font-medium text-link underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-hidden"
                         >
                             +{hiddenDues.length} more
                         </button>
@@ -264,15 +273,19 @@ function PendingApprovalsTable({
                     approvals.map((approval) => (
                         <TableRow
                             key={`${approval.registrationNumber}-${approval.requestType}`}
+                            className="odd:bg-background even:bg-muted/25"
                         >
                             <TableCell className="px-4">
-                                <div className="min-w-0">
-                                    <div className="truncate font-medium">
-                                        {approval.studentName}
-                                    </div>
-                                    <div className="truncate text-xs text-muted-foreground">
-                                        Reg. No. {approval.registrationNumber}
-                                    </div>
+                                <div className="flex min-w-0 flex-col gap-1.5">
+                                    <PersonCell
+                                        name={approval.studentName}
+                                        avatar={approval.studentAvatar}
+                                    />
+                                    <CopyableValue
+                                        value={approval.registrationNumber}
+                                        className="h-7"
+                                        valueClassName="text-xs"
+                                    />
                                 </div>
                             </TableCell>
                             <TableCell className="text-muted-foreground">
@@ -317,9 +330,13 @@ function RecentPaymentsTable({
                     payments.map((payment) => (
                         <TableRow
                             key={`${payment.studentName}-${payment.dueName}`}
+                            className="odd:bg-background even:bg-muted/25"
                         >
-                            <TableCell className="px-4 font-medium">
-                                {payment.studentName}
+                            <TableCell className="px-4">
+                                <PersonCell
+                                    name={payment.studentName}
+                                    avatar={payment.studentAvatar}
+                                />
                             </TableCell>
                             <TableCell className="text-muted-foreground">
                                 {payment.dueName}
@@ -361,7 +378,10 @@ function CarryoverSummaryTable({
             <TableBody>
                 {summaries.length > 0 ? (
                     summaries.map((summary) => (
-                        <TableRow key={summary.code}>
+                        <TableRow
+                            key={summary.code}
+                            className="odd:bg-background even:bg-muted/25"
+                        >
                             <TableCell className="px-4">
                                 <div className="min-w-0">
                                     <div className="truncate font-semibold">
@@ -411,12 +431,12 @@ function EmptyTableRow({
     );
 }
 
-function assignedLevelLabel(
-    levels: DashboardStaffHome['assignedLevels'],
+function assignedSetLabel(
+    sets: DashboardStaffHome['assignedSets'],
 ): string {
-    if (levels.length === 0) {
+    if (sets.length === 0) {
         return 'No assigned set';
     }
 
-    return levels.map((level) => level.title).join(', ');
+    return sets.map((set) => studentSetText(set)).join(', ');
 }

@@ -1,10 +1,13 @@
 <?php
 
+use App\AccountType;
+use App\Models\AcademicYear;
+use App\Models\AcademicYearSemester;
 use App\Models\Course;
 use App\Models\CourseOffering;
 use App\Models\Department;
 use App\Models\Faculty;
-use App\Models\Level;
+use App\Models\School;
 use App\Models\Semester;
 use App\Models\StaffProfile;
 use App\Models\StudentProfile;
@@ -16,18 +19,25 @@ test('database seeder creates predictable cpe academic records', function () {
 
     $faculty = Faculty::query()->where('abbreviation', 'SESET')->firstOrFail();
     $department = Department::query()->where('abbreviation', 'CPE')->firstOrFail();
+    $school = School::query()->where('abbreviation', 'FUTO')->firstOrFail();
+    $schoolAdmin = User::query()->where('email', 'schooladmin@futo.edu')->firstOrFail();
     $hod = User::query()->where('email', 'staff1@futo.edu')->firstOrFail();
     $facultyHead = User::query()->where('email', 'facultyhead.seset@futo.edu')->firstOrFail();
 
-    expect(Level::query()->count())->toBe(7)
+    expect(AcademicYear::query()->count())->toBe(7)
+        ->and($faculty->school_id)->toBe($school->id)
+        ->and($schoolAdmin->account_type)->toBe(AccountType::SchoolAdmin)
+        ->and(AcademicYearSemester::query()->count())->toBe(14)
         ->and(Semester::query()->pluck('slug')->all())->toBe(['harmattan', 'rain'])
-        ->and($department->minimum_years)->toBe(5)
+        ->and($department->minimum_years_to_degree)->toBe(5)
         ->and($faculty->head_staff_profile_id)->toBe($facultyHead->staffProfile->id)
         ->and($department->hod_staff_profile_id)->toBe($hod->staffProfile->id)
-        ->and($department->levelStaffAssignments()->count())->toBe(5)
+        ->and($department->studentSetAdvisorAssignments()->where('active_marker', 1)->count())->toBe(5)
         ->and(User::query()->where('email', 'like', 'student%@futo.edu')->count())->toBe(6)
         ->and(Course::query()->count())->toBe(30)
-        ->and(CourseOffering::query()->count())->toBe(30)
+        ->and(CourseOffering::query()->count())->toBe(270)
+        ->and($school->academicSessions()->count())->toBe(9)
+        ->and($school->academicSessions()->where('name', '2025/2026')->whereDate('starts_on', '<=', today())->whereDate('ends_on', '>=', today())->exists())->toBeTrue()
         ->and(Course::query()->where('code', 'CPE 301')->firstOrFail()->prerequisites()->where('code', 'CPE 202')->exists())->toBeTrue();
 
     $studentLevels = StudentProfile::query()
@@ -79,12 +89,12 @@ test('faculty head transfer is requested and accepted by staff in the faculty', 
         ->and($faculty->pending_head_staff_profile_id)->toBeNull();
 });
 
-test('department visible levels include minimum years and levels with records', function () {
+test('department visible academic years include minimum years and years with records', function () {
     $this->seed(DatabaseSeeder::class);
 
     $department = Department::query()->where('abbreviation', 'CPE')->firstOrFail();
 
-    expect($department->visibleLevels()->pluck('slug')->all())->toBe([
+    expect($department->visibleAcademicYears()->pluck('slug')->all())->toBe([
         '100-level',
         '200-level',
         '300-level',
@@ -92,9 +102,9 @@ test('department visible levels include minimum years and levels with records', 
         '500-level',
     ]);
 
-    $department->setMinimumYears(3);
+    $department->setMinimumYearsToDegree(3);
 
-    expect($department->visibleLevels()->pluck('slug')->all())->toBe([
+    expect($department->visibleAcademicYears()->pluck('slug')->all())->toBe([
         '100-level',
         '200-level',
         '300-level',

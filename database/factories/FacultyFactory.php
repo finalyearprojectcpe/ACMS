@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\Faculty;
+use App\Models\School;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
@@ -22,6 +23,7 @@ class FacultyFactory extends Factory
         $abbreviation = strtoupper(fake()->unique()->lexify('???'));
 
         return [
+            'school_id' => School::factory(),
             'name' => Str::title($name),
             'abbreviation' => $abbreviation,
             'slug' => Str::slug($name),

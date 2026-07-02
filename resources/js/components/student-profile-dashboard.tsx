@@ -5,6 +5,7 @@ import {
 } from '@remixicon/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { CopyableValue } from '@/components/copyable-value';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -151,9 +152,11 @@ function ProfileIdentityCard({
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                         <span className="font-medium">Reg. No.</span>
-                        <span className="font-medium tabular-nums">
-                            {registrationNumber}
-                        </span>
+                        <CopyableValue
+                            value={registrationNumber}
+                            className="h-7"
+                            valueClassName="text-xs"
+                        />
                     </div>
                 </div>
 
@@ -250,7 +253,7 @@ function AcademicSummaryCard({
                         value={profile.currentLevel?.title ?? 'Unassigned'}
                     />
                     <SummaryItem
-                        label="Course Advisor"
+                        label="Course Adviser"
                         value={profile.courseAdvisor}
                     />
                 </div>

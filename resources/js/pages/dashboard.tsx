@@ -1,11 +1,24 @@
-import { Head, usePage } from '@inertiajs/react';
-import { RiNotification3Line } from '@remixicon/react';
+import { Head, Link, usePage } from '@inertiajs/react';
+import { RiArrowLeftLine, RiNotification3Line } from '@remixicon/react';
+import { useEffect } from 'react';
+import { toast } from 'sonner';
 
+import {
+    home as dashboardHome,
+    level as dashboardLevel,
+    section as dashboardSection,
+} from '@/actions/App/Http/Controllers/DashboardController';
 import { AppSidebar } from '@/components/app-sidebar';
+import { FacultyHeadDashboard } from '@/components/faculty-head-dashboard';
+import {
+    HodDashboard,
+    HodStaffImport,
+    StudentRecordDashboard,
+} from '@/components/hod-dashboard';
+import { SchoolAdminDashboard } from '@/components/school-admin-dashboard';
 import {
     StaffCourseOfferingForm,
     StaffCourseSchedulesDashboard,
-    StaffCourseTimetableDashboard,
 } from '@/components/staff-course-schedules-dashboard';
 import { StaffHomeDashboard } from '@/components/staff-home-dashboard';
 import { StaffStudentsDashboard } from '@/components/staff-students-dashboard';
@@ -36,9 +49,18 @@ type DashboardPageProps = {
     dashboard: DashboardContext;
 };
 
+type DashboardFlash = {
+    success?: string | null;
+    error?: string | null;
+};
+
 export default function DashboardPage({ dashboard }: DashboardPageProps) {
-    const { auth } = usePage<{ auth: Auth }>().props;
+    const { auth, flash } = usePage<{
+        auth: Auth;
+        flash?: DashboardFlash;
+    }>().props;
     const headerOrganizationLabel = dashboardHeaderOrganizationLabel(dashboard);
+    const backTarget = dashboardBackTarget(dashboard);
     const studentHeaderMeta =
         dashboard.role === 'student' && dashboard.student !== null
             ? [
@@ -54,6 +76,29 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
         dashboard.staffHome !== null
             ? dashboard.staffHome
             : null;
+    const facultyHead =
+        dashboard.role === 'faculty_head' && dashboard.facultyHead !== null
+            ? dashboard.facultyHead
+            : null;
+    const schoolAdmin =
+        dashboard.role === 'school_admin' && dashboard.schoolAdmin !== null
+            ? dashboard.schoolAdmin
+            : null;
+    const hod =
+        dashboard.role === 'hod' && dashboard.hod !== null
+            ? dashboard.hod
+            : null;
+
+    useEffect(() => {
+        if (flash?.success) {
+            toast.success(flash.success);
+        }
+
+        if (flash?.error) {
+            toast.error(flash.error);
+        }
+    }, [flash?.success, flash?.error]);
+
     const staffStudents =
         dashboard.role === 'staff' &&
         dashboard.section === 'students' &&
@@ -61,22 +106,20 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
             ? dashboard.staffStudents
             : null;
     const staffCourseSchedules =
-        ['staff', 'hod'].includes(dashboard.role) &&
+        dashboard.role === 'staff' &&
         dashboard.section === 'courses' &&
         dashboard.staffCourseSchedules !== null
             ? dashboard.staffCourseSchedules
             : null;
     const staffCourseOfferingForm =
-        ['staff', 'hod'].includes(dashboard.role) &&
+        dashboard.role === 'staff' &&
         dashboard.section === 'courses' &&
         dashboard.staffCourseOfferingForm !== null
             ? dashboard.staffCourseOfferingForm
             : null;
-    const staffCourseTimetable =
-        ['staff', 'hod'].includes(dashboard.role) &&
-        dashboard.section === 'courses' &&
-        dashboard.staffCourseTimetable !== null
-            ? dashboard.staffCourseTimetable
+    const hodStaffForm =
+        dashboard.role === 'hod' && dashboard.hodStaffForm !== null
+            ? dashboard.hodStaffForm
             : null;
     const studentHome =
         dashboard.role === 'student' &&
@@ -108,6 +151,11 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
         dashboard.studentProfile !== null
             ? dashboard.studentProfile
             : null;
+    const studentRecord =
+        ['staff', 'hod'].includes(dashboard.role) &&
+        dashboard.studentRecord !== null
+            ? dashboard.studentRecord
+            : null;
 
     return (
         <>
@@ -115,9 +163,19 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
             <SidebarProvider>
                 <AppSidebar dashboard={dashboard} user={auth.user} />
                 <SidebarInset>
-                    <header className="relative flex h-14 shrink-0 items-center gap-2 border-b bg-background px-4">
+                    <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-2 border-b bg-background px-4">
                         <div className="flex min-w-0 items-center gap-2">
                             <SidebarTrigger />
+                            {backTarget ? (
+                                <Button variant="ghost" size="icon-sm" asChild>
+                                    <Link
+                                        href={backTarget.href}
+                                        aria-label={backTarget.label}
+                                    >
+                                        <RiArrowLeftLine />
+                                    </Link>
+                                </Button>
+                            ) : null}
                             <Separator
                                 orientation="vertical"
                                 className="mr-2 h-4"
@@ -164,17 +222,51 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                     </header>
 
                     <main className="background-graph flex flex-1 flex-col p-4 sm:p-6">
-                        {staffCourseOfferingForm ? (
+                        {schoolAdmin ? (
+                            <SchoolAdminDashboard
+                                schoolAdmin={schoolAdmin}
+                                academicSessionForm={
+                                    dashboard.schoolAdminAcademicSessionForm
+                                }
+                                facultyForm={dashboard.schoolAdminFacultyForm}
+                                departmentForm={
+                                    dashboard.schoolAdminDepartmentForm
+                                }
+                                facultyHeadForm={
+                                    dashboard.schoolAdminFacultyHeadForm
+                                }
+                                section={dashboard.section}
+                                sectionTitle={dashboard.sectionTitle}
+                            />
+                        ) : staffCourseOfferingForm ? (
                             <StaffCourseOfferingForm
                                 form={staffCourseOfferingForm}
+                                role={dashboard.role}
                             />
-                        ) : staffCourseTimetable ? (
-                            <StaffCourseTimetableDashboard
-                                timetable={staffCourseTimetable}
+                        ) : facultyHead ? (
+                            <FacultyHeadDashboard
+                                facultyHead={facultyHead}
+                                hodForm={dashboard.facultyHeadHodForm}
+                                staffForm={dashboard.facultyHeadStaffForm}
+                                courses={dashboard.facultyHeadCourses}
+                                courseForm={
+                                    dashboard.facultyHeadCourseOfferingForm
+                                }
+                                section={dashboard.section}
+                                sectionTitle={dashboard.sectionTitle}
                             />
                         ) : staffCourseSchedules ? (
                             <StaffCourseSchedulesDashboard
                                 courseSchedules={staffCourseSchedules}
+                            />
+                        ) : hodStaffForm ? (
+                            <HodStaffImport form={hodStaffForm} />
+                        ) : studentRecord ? (
+                            <StudentRecordDashboard record={studentRecord} />
+                        ) : hod ? (
+                            <HodDashboard
+                                hod={hod}
+                                section={dashboard.section}
                             />
                         ) : staffHome ? (
                             <StaffHomeDashboard home={staffHome} />
@@ -202,4 +294,107 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
             </SidebarProvider>
         </>
     );
+}
+
+function dashboardBackTarget(dashboard: DashboardContext) {
+    if (dashboard.section === 'home') {
+        return null;
+    }
+
+    if (dashboard.facultyHeadHodForm !== null) {
+        return {
+            href: dashboardSection({ section: 'departments' }),
+            label: 'Back to Departments',
+        };
+    }
+
+    if (dashboard.schoolAdminAcademicSessionForm !== null) {
+        return {
+            href: dashboardSection({ section: 'academic-sessions' }),
+            label: 'Back to Academic Sessions',
+        };
+    }
+
+    if (
+        dashboard.schoolAdminFacultyForm !== null ||
+        dashboard.schoolAdminDepartmentForm !== null
+    ) {
+        return {
+            href: dashboardSection({ section: 'structure' }),
+            label: 'Back to School Structure',
+        };
+    }
+
+    if (dashboard.schoolAdminFacultyHeadForm !== null) {
+        return {
+            href: dashboardSection({ section: 'faculty-heads' }),
+            label: 'Back to Faculty Heads',
+        };
+    }
+
+    if (dashboard.facultyHeadStaffForm !== null) {
+        return {
+            href: dashboardSection({ section: 'staff' }),
+            label: 'Back to Staff',
+        };
+    }
+
+    if (dashboard.hodStaffForm !== null) {
+        return {
+            href: dashboardSection({ section: 'staff' }),
+            label: 'Back to Staff',
+        };
+    }
+
+    if (dashboard.facultyHeadCourseOfferingForm !== null) {
+        return {
+            href: dashboardSection(
+                { section: 'sessions-courses' },
+                {
+                    query: {
+                        academic_session:
+                            dashboard.facultyHeadCourseOfferingForm
+                                .academicSession.id,
+                    },
+                },
+            ),
+            label: 'Back to Sessions & Courses',
+        };
+    }
+
+    if (dashboard.staffCourseOfferingForm !== null) {
+        return {
+            href: dashboardLevel({
+                section: 'courses',
+                level: dashboard.staffCourseOfferingForm.level.slug,
+            }),
+            label: 'Back to Course Offerings',
+        };
+    }
+
+    if (dashboard.staffCourseSchedules !== null) {
+        return {
+            href: dashboardSection({ section: 'courses' }),
+            label: 'Back to Course Offerings',
+        };
+    }
+
+    if (dashboard.studentRecord !== null) {
+        return {
+            href: dashboardSection({ section: 'students' }),
+            label: 'Back to Students',
+        };
+    }
+
+    if (dashboard.studentResults !== null) {
+        return {
+            href: dashboardSection({ section: 'results' }),
+            label: 'Back to Results',
+        };
+    }
+
+    return {
+        href: dashboardHome(),
+        label: 'Back to Dashboard',
+    };
 }

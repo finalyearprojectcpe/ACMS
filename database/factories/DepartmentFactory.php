@@ -27,6 +27,7 @@ class DepartmentFactory extends Factory
             'name' => Str::title($name),
             'abbreviation' => $abbreviation,
             'slug' => Str::slug($name),
+            'minimum_years_to_degree' => 5,
         ];
     }
 }

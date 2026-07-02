@@ -3,7 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\AcademicSession;
-use App\Models\Faculty;
+use App\Models\School;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -21,11 +21,10 @@ class AcademicSessionFactory extends Factory
         $startYear = fake()->unique()->numberBetween(2020, 2030);
 
         return [
-            'faculty_id' => Faculty::factory(),
+            'school_id' => School::factory(),
             'name' => "{$startYear}/".($startYear + 1),
             'starts_on' => "{$startYear}-09-01",
             'ends_on' => ($startYear + 1).'-08-31',
-            'is_current' => false,
         ];
     }
 }

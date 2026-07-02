@@ -2,7 +2,9 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\School;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -35,12 +37,35 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $school = $request->attributes->get('school');
+        $user = $request->user();
+
         return [
             ...parent::share($request),
             'name' => config('app.name'),
             'auth' => [
-                'user' => $request->user(),
+                'user' => $user === null ? null : [
+                    'id' => $user->id,
+                    'account_type' => $user->account_type,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'avatar' => $user->profilePhotoUrl(),
+                    'email_verified_at' => $user->email_verified_at,
+                    'created_at' => $user->created_at,
+                    'updated_at' => $user->updated_at,
+                ],
             ],
+            'flash' => [
+                'success' => $request->session()->get('success'),
+                'error' => $request->session()->get('error'),
+            ],
+            'school' => $school instanceof School ? [
+                'id' => $school->id,
+                'name' => $school->name,
+                'abbreviation' => $school->abbreviation,
+                'slug' => $school->slug,
+                'domainKey' => Str::lower($school->abbreviation),
+            ] : null,
         ];
     }
 }

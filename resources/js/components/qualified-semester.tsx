@@ -18,7 +18,10 @@ export function QualifiedSemester({
     );
 }
 
-export function qualifiedSemesterLabel(level: string, semester: string): string {
+export function qualifiedSemesterLabel(
+    level: string,
+    semester: string,
+): string {
     return `${shortLevel(level)} ${semesterName(semester)}`;
 }
 

@@ -11,6 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // Stores canonical semester templates used to create year-specific semester instances.
         Schema::create('semesters', function (Blueprint $table) {
             $table->id();
             $table->string('name')->unique();

@@ -17,9 +17,15 @@ import {
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
-import { signup } from '@/routes';
+import { schoolEmailPlaceholder, useCurrentSchool } from '@/lib/school';
+import {
+    staff as staffSignup,
+    student as studentSignup,
+} from '@/routes/signup';
 
 export function LoginForm({ className, ...props }: ComponentProps<'div'>) {
+    const school = useCurrentSchool();
+    const emailPlaceholder = schoolEmailPlaceholder(school);
     const form = useForm({
         email: '',
         password: '',
@@ -36,10 +42,10 @@ export function LoginForm({ className, ...props }: ComponentProps<'div'>) {
     return (
         <AuthCard className={className} {...props}>
             <form onSubmit={submit}>
-                <FieldGroup className="gap-6">
+                <FieldGroup className="gap-7">
                     <AuthFormHeader
                         title="Welcome back"
-                        description="Login with your email and password."
+                        description="Log in with your email and password."
                     />
 
                     <Field data-invalid={Boolean(form.errors.email)}>
@@ -49,7 +55,7 @@ export function LoginForm({ className, ...props }: ComponentProps<'div'>) {
                             name="email"
                             type="email"
                             value={form.data.email}
-                            placeholder="name@school.edu"
+                            placeholder={emailPlaceholder}
                             autoComplete="email"
                             aria-invalid={Boolean(form.errors.email)}
                             onChange={(event) =>
@@ -83,17 +89,27 @@ export function LoginForm({ className, ...props }: ComponentProps<'div'>) {
                                 size="lg"
                                 disabled={form.processing}
                             >
-                                {form.processing ? 'Logging in...' : 'Login'}
+                                {form.processing ? 'Logging in...' : 'Log in'}
                             </Button>
-                            <FieldDescription className="text-center">
-                                New to GradeManager?{' '}
+                            <FieldDescription className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center">
+                                <span>New to GradeManager?</span>
                                 <Button
                                     asChild
                                     variant="link"
                                     className="h-auto p-0 text-xs"
                                 >
-                                    <Link href={signup()}>
-                                        Create an account
+                                    <Link href={studentSignup()}>
+                                        Create student account
+                                    </Link>
+                                </Button>
+                                <span className="text-muted-foreground">/</span>
+                                <Button
+                                    asChild
+                                    variant="link"
+                                    className="h-auto p-0 text-xs"
+                                >
+                                    <Link href={staffSignup()}>
+                                        Create staff account
                                     </Link>
                                 </Button>
                             </FieldDescription>

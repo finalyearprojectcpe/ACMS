@@ -1,16 +1,16 @@
-export type AccountType = 'student' | 'staff';
+export type AccountType = 'school_admin' | 'student' | 'staff';
 
-export type AccountTypeOption = {
-    label: string;
-    value: AccountType;
+export type SignupActivation = {
+    step: 'verify' | 'complete';
+    identifier: string | null;
 };
 
 export type User = {
     id: number;
     account_type: AccountType;
     name: string;
-    email: string;
-    avatar?: string;
+    email: string | null;
+    avatar: string | null;
     email_verified_at: string | null;
     created_at: string;
     updated_at: string;

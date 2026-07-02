@@ -2,7 +2,8 @@
 
 namespace Database\Seeders;
 
-use App\Models\Level;
+use App\Models\AcademicYear;
+use App\Models\AcademicYearSemester;
 use App\Models\Semester;
 use Illuminate\Database\Seeder;
 
@@ -14,7 +15,7 @@ class AcademicStructureSeeder extends Seeder
     public function run(): void
     {
         foreach (range(1, 7) as $level) {
-            Level::query()->updateOrCreate(
+            AcademicYear::query()->updateOrCreate(
                 ['id' => $level],
                 [
                     'name' => "{$level}00 Level",
@@ -29,6 +30,19 @@ class AcademicStructureSeeder extends Seeder
                 $semester,
             );
         }
+
+        AcademicYear::query()
+            ->orderBy('id')
+            ->each(function (AcademicYear $academicYear): void {
+                Semester::query()
+                    ->orderBy('sort_order')
+                    ->each(function (Semester $semester) use ($academicYear): void {
+                        AcademicYearSemester::query()->updateOrCreate([
+                            'academic_year_id' => $academicYear->id,
+                            'semester_id' => $semester->id,
+                        ]);
+                    });
+            });
     }
 
     /**

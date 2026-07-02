@@ -1,5 +1,5 @@
 import { RiEyeLine, RiEyeOffLine } from '@remixicon/react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -12,14 +12,22 @@ function PasswordInput({
     ...props
 }: Omit<ComponentProps<typeof Input>, 'type'>) {
     const [visible, setVisible] = useState(false);
+    const inputRef = useRef<HTMLInputElement | null>(null);
+    const inputType = visible ? 'text' : 'password';
+
+    function toggleVisibility() {
+        inputRef.current?.focus({ preventScroll: true });
+        setVisible((current) => !current);
+    }
 
     return (
         <div className="relative">
             <Input
-                type={visible ? 'text' : 'password'}
+                {...props}
+                ref={inputRef}
+                type={inputType}
                 className={cn('pr-9', className)}
                 disabled={disabled}
-                {...props}
             />
             <Button
                 type="button"
@@ -27,8 +35,9 @@ function PasswordInput({
                 size="icon-xs"
                 className="absolute top-1/2 right-1 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 aria-label={visible ? 'Hide password' : 'Show password'}
+                aria-pressed={visible}
                 disabled={disabled}
-                onClick={() => setVisible((current) => !current)}
+                onClick={toggleVisibility}
             >
                 {visible ? <RiEyeOffLine /> : <RiEyeLine />}
             </Button>

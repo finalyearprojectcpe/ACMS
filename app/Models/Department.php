@@ -13,14 +13,14 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
-#[Fillable(['faculty_id', 'name', 'abbreviation', 'slug', 'minimum_years', 'hod_staff_profile_id'])]
+#[Fillable(['faculty_id', 'name', 'abbreviation', 'slug', 'minimum_years_to_degree', 'hod_staff_profile_id'])]
 class Department extends Model
 {
     /** @use HasFactory<DepartmentFactory> */
     use HasFactory;
 
     protected $attributes = [
-        'minimum_years' => 5,
+        'minimum_years_to_degree' => 5,
     ];
 
     /**
@@ -56,11 +56,11 @@ class Department extends Model
     }
 
     /**
-     * @return HasMany<DepartmentLevelStaffAssignment, $this>
+     * @return HasMany<StudentSetAdvisorAssignment, $this>
      */
-    public function levelStaffAssignments(): HasMany
+    public function studentSetAdvisorAssignments(): HasMany
     {
-        return $this->hasMany(DepartmentLevelStaffAssignment::class);
+        return $this->hasMany(StudentSetAdvisorAssignment::class);
     }
 
     /**
@@ -72,28 +72,34 @@ class Department extends Model
     }
 
     /**
-     * @return Collection<int, Level>
+     * @return Collection<int, AcademicYear>
      */
-    public function visibleLevels(): Collection
+    public function visibleAcademicYears(): Collection
     {
-        $minimumLevelIds = range(1, (int) $this->minimum_years);
-        $recordLevelIds = $this->levelStaffAssignments()
-            ->pluck('level_id')
-            ->merge($this->courseOfferings()->pluck('level_id'));
+        $minimumAcademicYearIds = range(1, (int) $this->minimum_years_to_degree);
+        $recordAcademicYearIds = $this->studentProfiles()
+            ->pluck('current_academic_year_id')
+            ->merge(
+                $this->courseOfferings()
+                    ->with('academicYearSemester')
+                    ->get()
+                    ->pluck('academicYearSemester.academic_year_id')
+                    ->filter()
+            );
 
-        return Level::query()
-            ->whereIn('id', collect($minimumLevelIds)->merge($recordLevelIds)->unique()->values())
+        return AcademicYear::query()
+            ->whereIn('id', collect($minimumAcademicYearIds)->merge($recordAcademicYearIds)->unique()->values())
             ->orderBy('id')
             ->get();
     }
 
-    public function setMinimumYears(int $years): self
+    public function setMinimumYearsToDegree(int $years): self
     {
         if ($years < 1 || $years > 7) {
-            throw new InvalidArgumentException('Department minimum years must be between 1 and 7.');
+            throw new InvalidArgumentException('Department minimum years to degree must be between 1 and 7.');
         }
 
-        $this->forceFill(['minimum_years' => $years])->save();
+        $this->forceFill(['minimum_years_to_degree' => $years])->save();
 
         return $this->refresh();
     }
@@ -122,20 +128,81 @@ class Department extends Model
         });
     }
 
-    public function assignStaffToLevel(Level $level, StaffProfile $staffProfile): DepartmentLevelStaffAssignment
-    {
-        if ((int) $level->getKey() < 1 || (int) $level->getKey() > 7) {
-            throw new InvalidArgumentException('The level must be one of the canonical levels.');
+    public function assignAdvisorToStudentSet(
+        AcademicSession $entryAcademicSession,
+        StaffProfile $staffProfile,
+        ?AcademicSession $startsAcademicSession = null,
+        ?StaffProfile $assignedByStaffProfile = null,
+    ): StudentSetAdvisorAssignment {
+        $schoolId = (int) $this->faculty()->value('school_id');
+
+        if ((int) $entryAcademicSession->school_id !== $schoolId) {
+            throw new InvalidArgumentException('The entry academic session must belong to the department school.');
+        }
+
+        if ($startsAcademicSession !== null && (int) $startsAcademicSession->school_id !== $schoolId) {
+            throw new InvalidArgumentException('The start academic session must belong to the department school.');
+        }
+
+        if ($startsAcademicSession === null) {
+            $startsAcademicSession = AcademicSession::query()
+                ->where('school_id', $schoolId)
+                ->whereDate('starts_on', '<=', today())
+                ->whereDate('ends_on', '>=', today())
+                ->orderByDesc('starts_on')
+                ->first();
         }
 
         if ((int) $staffProfile->department_id !== (int) $this->getKey()) {
-            throw new InvalidArgumentException('The staff profile must belong to the department.');
+            throw new InvalidArgumentException('The course advisor must belong to the department.');
         }
 
-        return $this->levelStaffAssignments()->updateOrCreate(
-            ['level_id' => $level->getKey()],
-            ['staff_profile_id' => $staffProfile->getKey()],
-        );
+        if ($assignedByStaffProfile !== null && (int) $assignedByStaffProfile->department_id !== (int) $this->getKey()) {
+            throw new InvalidArgumentException('The assigning staff profile must belong to the department.');
+        }
+
+        return DB::transaction(function () use ($entryAcademicSession, $staffProfile, $startsAcademicSession, $assignedByStaffProfile): StudentSetAdvisorAssignment {
+            $department = self::query()
+                ->whereKey($this->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $activeAssignment = $department->studentSetAdvisorAssignments()
+                ->where('entry_academic_session_id', $entryAcademicSession->getKey())
+                ->where('active_marker', 1)
+                ->lockForUpdate()
+                ->first();
+
+            if (
+                $activeAssignment instanceof StudentSetAdvisorAssignment
+                && (int) $activeAssignment->staff_profile_id === (int) $staffProfile->getKey()
+            ) {
+                $activeAssignment->forceFill([
+                    'assigned_by_staff_profile_id' => $assignedByStaffProfile?->getKey(),
+                    'starts_academic_session_id' => $startsAcademicSession?->getKey(),
+                    'ends_academic_session_id' => null,
+                    'active_marker' => 1,
+                ])->save();
+
+                return $activeAssignment->refresh();
+            }
+
+            if ($activeAssignment instanceof StudentSetAdvisorAssignment) {
+                $activeAssignment->forceFill([
+                    'ends_academic_session_id' => $startsAcademicSession?->getKey(),
+                    'active_marker' => null,
+                ])->save();
+            }
+
+            return $department->studentSetAdvisorAssignments()->create([
+                'entry_academic_session_id' => $entryAcademicSession->getKey(),
+                'staff_profile_id' => $staffProfile->getKey(),
+                'assigned_by_staff_profile_id' => $assignedByStaffProfile?->getKey(),
+                'starts_academic_session_id' => $startsAcademicSession?->getKey(),
+                'ends_academic_session_id' => null,
+                'active_marker' => 1,
+            ]);
+        });
     }
 
     /**
@@ -144,7 +211,7 @@ class Department extends Model
     protected function casts(): array
     {
         return [
-            'minimum_years' => 'integer',
+            'minimum_years_to_degree' => 'integer',
         ];
     }
 }

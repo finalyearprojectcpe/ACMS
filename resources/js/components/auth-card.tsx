@@ -52,7 +52,7 @@ function AuthFormHeader({
 }
 
 function AuthFormActions({ children }: { children: ReactNode }) {
-    return <div className="flex flex-col gap-3">{children}</div>;
+    return <div className="flex flex-col gap-4 pt-3 sm:pt-4">{children}</div>;
 }
 
 export { AuthCard, AuthFormActions, AuthFormHeader };
