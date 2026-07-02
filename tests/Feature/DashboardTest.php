@@ -1131,6 +1131,10 @@ test('staff home is scoped to assigned student sets', function () {
         ->has('dashboard.staffHome', fn (Assert $page) => $page
             ->has('assignedSets', 1)
             ->where('assignedSets.0.entrySession.name', '2023/2024')
+            ->has('levels', 5)
+            ->has('students', 2)
+            ->where('students.0.fullName', 'Ada Nwosu')
+            ->where('students.0.registrationNumber', '2023001001')
             ->where('totalStudents', 2)
             ->where('maximumCourseUnits', 24)
             ->where('studentsWithCarryovers', 2)

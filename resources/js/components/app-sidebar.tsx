@@ -273,7 +273,7 @@ function facultyHeadNavigation(): NavItem[] {
             RiCalendarTodoLine,
         ),
         nav(
-            'Settings',
+            'Profile Settings',
             'settings',
             dashboardSection({ section: 'settings' }),
             RiSettings3Line,
@@ -321,7 +321,7 @@ function staffNavigation(
             RiCheckboxCircleLine,
         ),
         nav(
-            'Settings',
+            'Profile Settings',
             'settings',
             dashboardSection({ section: 'settings' }),
             RiSettings3Line,
@@ -383,7 +383,7 @@ function hodNavigation(): NavItem[] {
             RiGraduationCapLine,
         ),
         nav(
-            'Settings',
+            'Profile Settings',
             'settings',
             dashboardSection({ section: 'settings' }),
             RiSettings3Line,

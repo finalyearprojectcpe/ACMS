@@ -1,20 +1,13 @@
 import { useForm } from '@inertiajs/react';
-import { RiImageEditLine, RiSave3Line } from '@remixicon/react';
+import { RiSave3Line } from '@remixicon/react';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 
 import { updateProfilePhoto } from '@/actions/App/Http/Controllers/DashboardController';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { ProfilePhotoIdentityContent } from '@/components/profile-photo-identity-content';
 import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardForm,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
-import { Field, FieldError } from '@/components/ui/field';
-import { initialsFor } from '@/lib/person';
+import { Card, CardForm } from '@/components/ui/card';
+import { FieldError } from '@/components/ui/field';
 import { cn } from '@/lib/utils';
 
 type ProfilePhotoFormData = {
@@ -98,100 +91,50 @@ export function ProfilePhotoSettingsCard({
             )}
         >
             <CardForm onSubmit={submit}>
-                <CardHeader className="border-b border-border/80 pb-4">
-                    <CardTitle className="text-base">Profile Photo</CardTitle>
-                </CardHeader>
-
-                <CardContent className="px-4 pb-4">
-                    <div className="flex items-start gap-4">
-                        <Avatar className="size-18 rounded-none bg-muted/40 after:rounded-none">
-                            <AvatarImage
-                                src={displayPreview ?? undefined}
-                                alt={`${user.name} avatar`}
-                                className="rounded-none"
-                            />
-                            <AvatarFallback className="rounded-none text-lg font-semibold">
-                                {initialsFor(user.name)}
-                            </AvatarFallback>
-                        </Avatar>
-
-                        <div className="grid min-w-0 flex-1 gap-3">
-                            <div className="min-w-0">
-                                <div className="truncate font-semibold tracking-normal">
-                                    {user.name}
-                                </div>
-                                {user.email ? (
-                                    <div className="mt-0.5 truncate text-sm text-muted-foreground">
-                                        {user.email}
-                                    </div>
+                <ProfilePhotoIdentityContent
+                    avatar={displayPreview}
+                    name={user.name}
+                    email={user.email}
+                    inputId={inputId}
+                    inputRef={inputRef}
+                    accept="image/jpeg,image/png,image/webp"
+                    onPhotoChange={changePhoto}
+                    meta={
+                        selectedFileName || form.errors.profile_photo ? (
+                            <div className="grid gap-1">
+                                {selectedFileName ? (
+                                    <span className="truncate text-sm text-muted-foreground">
+                                        {selectedFileName}
+                                    </span>
                                 ) : null}
-                            </div>
-
-                            <Field
-                                className="gap-2"
-                                data-invalid={Boolean(
-                                    form.errors.profile_photo,
-                                )}
-                            >
-                                <input
-                                    ref={inputRef}
-                                    id={inputId}
-                                    type="file"
-                                    accept="image/jpeg,image/png,image/webp"
-                                    className="sr-only"
-                                    onChange={(event) =>
-                                        changePhoto(event.target.files?.[0])
-                                    }
-                                />
-
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        asChild
-                                    >
-                                        <label htmlFor={inputId}>
-                                            <RiImageEditLine />
-                                            Change Photo
-                                        </label>
-                                    </Button>
-
-                                    {selectedFileName ? (
-                                        <>
-                                            <span className="max-w-44 truncate text-sm text-muted-foreground">
-                                                {selectedFileName}
-                                            </span>
-                                            <Button
-                                                type="submit"
-                                                size="sm"
-                                                disabled={form.processing}
-                                            >
-                                                <RiSave3Line />
-                                                {form.processing
-                                                    ? 'Saving...'
-                                                    : 'Save'}
-                                            </Button>
-                                            <Button
-                                                type="button"
-                                                variant="link"
-                                                size="sm"
-                                                className="h-8 px-1 text-link"
-                                                onClick={resetSelection}
-                                            >
-                                                Cancel
-                                            </Button>
-                                        </>
-                                    ) : null}
-                                </div>
-
                                 <FieldError>
                                     {form.errors.profile_photo}
                                 </FieldError>
-                            </Field>
-                        </div>
-                    </div>
-                </CardContent>
+                            </div>
+                        ) : null
+                    }
+                    actions={
+                        hasSelectedPhoto ? (
+                            <>
+                                <Button
+                                    type="submit"
+                                    disabled={form.processing}
+                                >
+                                    <RiSave3Line />
+                                    {form.processing ? 'Saving...' : 'Save'}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="link"
+                                    className="px-1 text-link"
+                                    onClick={resetSelection}
+                                >
+                                    Cancel
+                                </Button>
+                            </>
+                        ) : null
+                    }
+                />
             </CardForm>
         </Card>
     );

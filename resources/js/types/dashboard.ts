@@ -41,10 +41,16 @@ export type DashboardFacultyHead = {
     departments: DashboardFacultyHeadDepartment[];
     pendingAccessCodes: DashboardFacultyHeadAccessCode[];
     staff: DashboardFacultyHeadStaff[];
+    students: DashboardFacultyHeadStudent[];
+    levels: DashboardLevel[];
     pendingTasks: DashboardFacultyHeadTask[];
     courseSetupSession: DashboardAcademicSession | null;
     courseSetup: DashboardFacultyHeadCourseSetup[];
     settings: DashboardFacultyHeadSettings;
+};
+
+export type DashboardFacultyHeadStudent = DashboardStaffStudent & {
+    department: DashboardDepartment;
 };
 
 export type DashboardFacultyHeadSettings = {
@@ -342,6 +348,8 @@ export type DashboardFacultyHeadCourseOfferingForm = {
 
 export type DashboardStaffHome = {
     assignedSets: DashboardStudentSetContext[];
+    levels: DashboardLevel[];
+    students: DashboardStaffStudent[];
     totalStudents: number;
     maximumCourseUnits: number;
     studentsWithCarryovers: number;
@@ -616,6 +624,8 @@ export type DashboardStudentHome = {
         session: string;
     };
     totalCourseUnits: number;
+    levels: DashboardLevel[];
+    gpaProgress: Array<{ level: string; average: number | null }>;
     courses: DashboardStudentHomeCourse[];
     pendingDues: DashboardStudentHomeDue[];
     resits: DashboardStudentHomeResit[];

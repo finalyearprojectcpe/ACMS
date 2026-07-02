@@ -1,4 +1,4 @@
-import { Link, useForm } from '@inertiajs/react';
+import { Link, router, useForm } from '@inertiajs/react';
 import { RiAddLine, RiArrowLeftLine, RiSave3Line } from '@remixicon/react';
 import type { FormEvent } from 'react';
 
@@ -11,19 +11,11 @@ import {
     updateCourseOffering,
 } from '@/actions/App/Http/Controllers/DashboardController';
 import { ActionLink } from '@/components/action-link';
+import { CourseOfferingBrowser } from '@/components/course-offering-browser';
 import { CoursePrerequisitePicker } from '@/components/course-prerequisite-picker';
-import { CourseTypeBadge } from '@/components/course-type-badge';
 import { QualifiedSemester } from '@/components/qualified-semester';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardFooter,
-    CardForm,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardForm } from '@/components/ui/card';
 import {
     Field,
     FieldError,
@@ -32,20 +24,10 @@ import {
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
 import type {
-    DashboardStaffCourseOffering,
     DashboardStaffCourseOfferingForm,
-    DashboardStaffCoursePrerequisite,
-    DashboardStaffCourseScheduleSemester,
     DashboardStaffCourseSchedules,
+    DashboardLevel,
 } from '@/types';
 
 type CourseOfferingFormData = {
@@ -58,37 +40,64 @@ type CourseOfferingFormData = {
 
 export function StaffCourseSchedulesDashboard({
     courseSchedules,
+    levels,
 }: {
     courseSchedules: DashboardStaffCourseSchedules;
+    levels: DashboardLevel[];
 }) {
-    const academicSessionLabel = courseSchedules.academicSession
-        ? `${courseSchedules.academicSession.name} Academic Session`
-        : 'No active academic session';
-    const semesters = [...courseSchedules.semesters].sort((first, second) => {
-        const order = { harmattan: 0, rain: 1 };
-
-        return (
-            (order[first.slug as keyof typeof order] ?? 99) -
-            (order[second.slug as keyof typeof order] ?? 99)
+    function selectLevel(level: DashboardLevel) {
+        router.get(
+            dashboardLevel.url({
+                section: 'courses',
+                level: level.slug,
+            }),
+            {},
+            {
+                preserveScroll: true,
+                preserveState: true,
+            },
         );
-    });
+    }
 
     return (
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">
-            <div className="text-sm font-medium text-muted-foreground">
-                {academicSessionLabel}
-            </div>
-            <div className="grid gap-4 xl:grid-cols-2">
-                {semesters.map((semester) => (
-                    <SemesterOfferingCard
-                        key={semester.id}
-                        level={courseSchedules.level.title}
-                        levelSlug={courseSchedules.level.slug}
-                        semester={semester}
-                    />
-                ))}
-            </div>
-        </div>
+        <CourseOfferingBrowser
+            title="Course Offerings"
+            detail="Manage departmental and elective courses by level and semester."
+            levels={levels}
+            selectedLevel={courseSchedules.level}
+            semesters={courseSchedules.semesters}
+            session={courseSchedules.academicSession}
+            onSelectionChange={selectLevel}
+            renderHeaderAction={(semester) => (
+                <ActionLink
+                    href={createCourseOffering({
+                        level: courseSchedules.level.slug,
+                        semester: semester.slug,
+                    })}
+                    icon={<RiAddLine className="size-4" />}
+                >
+                    Add Course
+                </ActionLink>
+            )}
+            renderCourseAction={(offering, semester) =>
+                offering.canEdit ? (
+                    <ActionLink
+                        href={editCourseOffering({
+                            level: courseSchedules.level.slug,
+                            semester: semester.slug,
+                            offering: offering.id,
+                        })}
+                        className="text-xs"
+                    >
+                        Edit
+                    </ActionLink>
+                ) : (
+                    <span className="text-xs text-muted-foreground">
+                        Faculty course
+                    </span>
+                )
+            }
+        />
     );
 }
 
@@ -356,191 +365,6 @@ export function StaffCourseOfferingForm({
                     </CardFooter>
                 </CardForm>
             </Card>
-        </div>
-    );
-}
-
-function SemesterOfferingCard({
-    level,
-    levelSlug,
-    semester,
-}: {
-    level: string;
-    levelSlug: string;
-    semester: DashboardStaffCourseScheduleSemester;
-}) {
-    return (
-        <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
-            <CardHeader className="flex flex-row items-center justify-between gap-4 border-b border-border">
-                <div className="min-w-0">
-                    <CardTitle>
-                        <QualifiedSemester
-                            level={level}
-                            semester={semester.name}
-                        />
-                    </CardTitle>
-                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                        <span>{semester.totalUnits} units</span>
-                        <span>{semester.facultyCourseCount} faculty</span>
-                        <span>
-                            {semester.departmentalCourseCount} departmental
-                        </span>
-                        <span>{semester.electiveCourseCount} elective</span>
-                    </div>
-                </div>
-                <ActionLink
-                    href={createCourseOffering({
-                        level: levelSlug,
-                        semester: semester.slug,
-                    })}
-                    icon={<RiAddLine className="size-4" />}
-                    className="shrink-0"
-                >
-                    Add course
-                </ActionLink>
-            </CardHeader>
-            <CardContent className="p-0">
-                <CourseOfferingsTable
-                    levelSlug={levelSlug}
-                    semester={semester}
-                />
-            </CardContent>
-        </Card>
-    );
-}
-
-function CourseOfferingsTable({
-    levelSlug,
-    semester,
-}: {
-    levelSlug: string;
-    semester: DashboardStaffCourseScheduleSemester;
-}) {
-    return (
-        <Table className="text-sm">
-            <TableHeader>
-                <TableRow>
-                    <TableHead className="w-[34%] px-4">Course</TableHead>
-                    <TableHead className="w-[10%] text-center">Units</TableHead>
-                    <TableHead className="w-[14%] text-center">
-                        Category
-                    </TableHead>
-                    <TableHead>Prerequisites</TableHead>
-                    <TableHead className="w-[12%] pr-4 text-right">
-                        Action
-                    </TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                {semester.offerings.length > 0 ? (
-                    semester.offerings.map((offering) => (
-                        <CourseOfferingRow
-                            key={offering.id}
-                            levelSlug={levelSlug}
-                            semesterSlug={semester.slug}
-                            offering={offering}
-                        />
-                    ))
-                ) : (
-                    <TableRow>
-                        <TableCell
-                            colSpan={5}
-                            className="px-4 py-6 text-muted-foreground"
-                        >
-                            No courses have been added for this semester.
-                        </TableCell>
-                    </TableRow>
-                )}
-            </TableBody>
-        </Table>
-    );
-}
-
-function CourseOfferingRow({
-    levelSlug,
-    semesterSlug,
-    offering,
-}: {
-    levelSlug: string;
-    semesterSlug: string;
-    offering: DashboardStaffCourseOffering;
-}) {
-    const editRoute = editCourseOffering({
-        level: levelSlug,
-        semester: semesterSlug,
-        offering: offering.id,
-    });
-
-    return (
-        <TableRow className="odd:bg-background even:bg-muted/25">
-            <TableCell className="px-4">
-                <div className="min-w-0">
-                    <div className="font-semibold">
-                        {offering.code}
-                    </div>
-                    <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                        {offering.title}
-                    </div>
-                </div>
-            </TableCell>
-            <TableCell className="text-center font-semibold tabular-nums">
-                {offering.units}
-            </TableCell>
-            <TableCell className="text-center">
-                <CourseTypeBadge type={offering.courseType} />
-            </TableCell>
-            <TableCell>
-                <PrerequisiteBadges prerequisites={offering.prerequisites} />
-            </TableCell>
-            <TableCell className="pr-4 text-right">
-                {offering.canEdit ? (
-                    <ActionLink href={editRoute} className="text-xs">
-                        Edit
-                    </ActionLink>
-                ) : (
-                    <span className="text-xs text-muted-foreground">
-                        Faculty course
-                    </span>
-                )}
-            </TableCell>
-        </TableRow>
-    );
-}
-
-function PrerequisiteBadges({
-    prerequisites,
-}: {
-    prerequisites: DashboardStaffCoursePrerequisite[];
-}) {
-    if (prerequisites.length === 0) {
-        return <span className="text-xs text-muted-foreground">None</span>;
-    }
-
-    const visiblePrerequisites = prerequisites.slice(0, 3);
-    const hiddenPrerequisites = prerequisites.slice(3);
-
-    return (
-        <div className="flex flex-wrap gap-1">
-            {visiblePrerequisites.map((prerequisite) => (
-                <Badge
-                    key={prerequisite.id}
-                    variant="outline"
-                    className="border-border bg-background text-xs"
-                >
-                    {prerequisite.code}
-                </Badge>
-            ))}
-            {hiddenPrerequisites.length > 0 ? (
-                <Badge
-                    variant="outline"
-                    title={hiddenPrerequisites
-                        .map((prerequisite) => prerequisite.code)
-                        .join(', ')}
-                    className="border-border bg-background text-xs"
-                >
-                    +{hiddenPrerequisites.length} more
-                </Badge>
-            ) : null}
         </div>
     );
 }

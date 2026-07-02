@@ -19,6 +19,7 @@ use App\Http\Requests\StoreFacultyHeadTransferRequest;
 use App\Http\Requests\StoreFacultyStaffRequest;
 use App\Http\Requests\StoreSchoolAdminTransferRequest;
 use App\Http\Requests\UpdateFacultyHeadPasswordRequest;
+use App\Http\Requests\UpdateHodPasswordRequest;
 use App\Http\Requests\UpdateProfilePhotoRequest;
 use App\Http\Requests\UpdateSchoolAdminPasswordRequest;
 use App\Models\AcademicSession;
@@ -971,6 +972,20 @@ class DashboardController extends Controller
         ])->with('success', 'Password changed.');
     }
 
+    public function updateHodPassword(UpdateHodPasswordRequest $request): RedirectResponse
+    {
+        $user = $this->authorizedHodUser($request);
+        $validated = $request->validated();
+
+        $user->forceFill([
+            'password' => $validated['password'],
+        ])->save();
+
+        return to_route('dashboard.section', [
+            'section' => 'settings',
+        ])->with('success', 'Password changed.');
+    }
+
     public function updateProfilePhoto(UpdateProfilePhotoRequest $request): RedirectResponse
     {
         $user = $request->user();
@@ -1504,7 +1519,7 @@ class DashboardController extends Controller
             'role' => $role,
             'roleLabel' => $this->roleLabel($role),
             'section' => $section,
-            'sectionTitle' => $this->sectionTitle($section, $levelModel),
+            'sectionTitle' => $this->sectionTitle($section, $levelModel, $role),
             'levelSlug' => $levelModel?->slug,
             'level' => $levelModel?->name,
             'levels' => $this->levelsFor($user, $role),
@@ -1607,9 +1622,13 @@ class DashboardController extends Controller
         return true;
     }
 
-    private function sectionTitle(string $section, ?AcademicYear $level): string
+    private function sectionTitle(string $section, ?AcademicYear $level, string $role): string
     {
         $title = self::SECTION_TITLES[$section];
+
+        if ($section === 'settings' && $role !== 'school_admin') {
+            $title = 'Profile Settings';
+        }
 
         if ($level !== null) {
             return $level->name.' '.$title;
@@ -1963,6 +1982,20 @@ class DashboardController extends Controller
             ->get();
         $pendingAccessCodeUsers = $this->pendingFacultyStaffAccessCodes($faculty);
         $staff = $this->facultyHeadStaffPayload($faculty);
+        $facultyStudents = StudentProfile::query()
+            ->with(['currentLevel', 'entryAcademicSession', 'user', 'department'])
+            ->whereIn('department_id', $departments->pluck('id'))
+            ->get()
+            ->sortBy(fn (StudentProfile $studentProfile): string => sprintf(
+                '%02d-%s',
+                $studentProfile->current_academic_year_id,
+                $studentProfile->user->name,
+            ))
+            ->values();
+        $levels = AcademicYear::query()
+            ->where('id', '<=', max(1, (int) $departments->max('minimum_years_to_degree')))
+            ->orderBy('id')
+            ->get();
         $currentAcademicSession = $this->currentAcademicSessionForFaculty($faculty);
         $departmentsWithoutHod = $departments->whereNull('hod_staff_profile_id')->count();
         $pendingFacultyHeadTransfer = FacultyHeadTransfer::query()
@@ -1991,6 +2024,21 @@ class DashboardController extends Controller
                 ->values()
                 ->all(),
             'staff' => $staff,
+            'students' => $facultyStudents
+                ->map(function (StudentProfile $studentProfile): array {
+                    $department = $studentProfile->department;
+
+                    return [
+                        ...$this->staffStudentPayload($studentProfile, $department),
+                        'department' => $this->departmentPayload($department),
+                    ];
+                })
+                ->values()
+                ->all(),
+            'levels' => $levels
+                ->map(fn (AcademicYear $level): array => $this->levelPayload($level))
+                ->values()
+                ->all(),
             'pendingTasks' => $this->facultyPendingTasks($faculty, $departments, $pendingAccessCodeUsers),
             'courseSetupSession' => $currentAcademicSession === null ? null : $this->academicSessionPayload($currentAcademicSession),
             'courseSetup' => $this->facultyCourseSetupSummary($faculty, $currentAcademicSession),
@@ -3363,6 +3411,8 @@ class DashboardController extends Controller
      *     cgpa: string,
      *     currentSemester: array{name: string, level: string, session: string},
      *     totalCourseUnits: int,
+     *     levels: array<int, array{id: int, title: string, slug: string}>,
+     *     gpaProgress: array<int, array{level: string, average: float}>,
      *     courses: array<int, array{code: string, title: string, units: int, type: string}>,
      *     pendingDues: array<int, array{title: string, context: string, amount: string, dueDate: string}>,
      *     resits: array<int, array{code: string, title: string, units: int, originalSemester: string, resitWindow: string, status: string}>
@@ -3389,6 +3439,21 @@ class DashboardController extends Controller
                 ])
                 ->values()
                 ->all();
+        $gpaProgress = $department === null
+            ? []
+            : collect($this->staffStudentPayload($studentProfile, $department)['levelGpas'])
+                ->map(fn (array $row): array => [
+                    'level' => $row['level'],
+                    'average' => (float) $row['gpa'],
+                ])
+                ->values()
+                ->all();
+        $levels = $department === null
+            ? []
+            : $department->visibleAcademicYears()
+                ->map(fn (AcademicYear $level): array => $this->levelPayload($level))
+                ->values()
+                ->all();
 
         return [
             'cgpa' => '4.32',
@@ -3398,6 +3463,8 @@ class DashboardController extends Controller
                 'session' => $session,
             ],
             'totalCourseUnits' => (int) collect($courses)->sum('units'),
+            'levels' => $levels,
+            'gpaProgress' => $gpaProgress,
             'courses' => $courses,
             'pendingDues' => $this->studentPendingDues($currentLevel),
             'resits' => $this->studentResits($currentLevel),
@@ -5241,6 +5308,14 @@ class DashboardController extends Controller
                 ->map(fn (AcademicSession $academicSession): array => $this->studentSetContextPayload($department, $academicSession))
                 ->values()
                 ->all(),
+            'levels' => $department->visibleAcademicYears()
+                ->map(fn (AcademicYear $level): array => $this->levelPayload($level))
+                ->values()
+                ->all(),
+            'students' => $students
+                ->map(fn (StudentProfile $studentProfile): array => $this->staffStudentPayload($studentProfile, $department))
+                ->values()
+                ->all(),
             'totalStudents' => $students->count(),
             'maximumCourseUnits' => 24,
             'studentsWithCarryovers' => $students
@@ -5272,6 +5347,8 @@ class DashboardController extends Controller
     {
         return [
             'assignedSets' => [],
+            'levels' => [],
+            'students' => [],
             'totalStudents' => 0,
             'maximumCourseUnits' => 24,
             'studentsWithCarryovers' => 0,

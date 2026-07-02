@@ -69,6 +69,8 @@ Route::middleware('auth')->group(function (): void {
         ->name('dashboard.settings.ownership-transfer.destroy');
     Route::patch('/dashboard/settings/faculty-head-password', [DashboardController::class, 'updateFacultyHeadPassword'])
         ->name('dashboard.settings.faculty-head-password.update');
+    Route::patch('/dashboard/settings/hod-password', [DashboardController::class, 'updateHodPassword'])
+        ->name('dashboard.settings.hod-password.update');
     Route::patch('/dashboard/settings/profile-photo', [DashboardController::class, 'updateProfilePhoto'])
         ->name('dashboard.settings.profile-photo.update');
     Route::post('/dashboard/settings/faculty-head-transfer', [DashboardController::class, 'storeFacultyHeadTransfer'])

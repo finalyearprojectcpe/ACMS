@@ -47,6 +47,15 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 - HOD course offering screens are read-only. HODs can inspect department course offerings by session, level, and semester, but course setup/edit/delete controls belong to the appropriate staff/faculty workflows.
 - Do not track daily timetables, venues, or which staff member teaches each course offering. The product tracks course advisers by student set and course offerings by faculty/department/session/level/semester only.
 - Visible course category wording must be `Faculty Course`, `Departmental Course`, or `Elective Course`. Do not show `Mandatory` / `Optional`, and do not add a separate owner column when the category already communicates ownership scope.
+- Course offering screens should use `CourseOfferingBrowser` or match its pattern: a left rail grouped by level with semester options under each level, mobile `Select` controls for level and semester, and one course table for the selected level and semester. Do not show multiple semester tables side by side.
+- Academic session labels in product UI must include the word `Session`, for example `2024/2025 Session`, especially inside selects and page headers.
+- Dashboard charts must keep their filters local to the chart card. Do not use page-level filters to silently change multiple unrelated charts. GPA-by-level comparisons should be bar charts, not line charts, because academic levels are categorical.
+- When the same chart can show a general population or one student set, use one chart with a local scope selector instead of two separate charts. The general population should be the default scope.
+- GPA-by-level bar charts must render against the full relevant academic-year list. Missing years should stay as empty/null slots so one recorded year does not become one oversized bar.
+- Visible student set labels in selects, selected triggers, chart controls, filters, tables, cards, and exports must use `StudentSetLabel` / `studentSetText`. Do not manually compose labels like `${session} Set`, because the current level or `Graduated` state must travel with the set name.
+- Chart palettes should be categorical by default. Use clearly different hues for unrelated categories, not lighter/darker shades of one color. Reserve shade ramps for continuous values only.
+- Pie and multi-category chart legends must include visible color markers that match the chart slices or bars. Do not rely on color alone; keep labels and counts visible.
+- Profile-photo change UI must use `ProfilePhotoIdentityContent` or preserve its layout exactly: avatar, name/email/identifier, then the compact change-picture action in one aligned row. Do not introduce separate noisy profile-photo cards for each role.
 - When a table row, card, or repeated item primarily references a person, use `PersonCell` from `@/components/person-cell` or an equivalent `Avatar` treatment instead of bare name text. Prefer square avatars for platform records, initials fallback, and a concise secondary line such as email or registration number when it helps identification.
 - Registration numbers, access codes, and other identifiers that users may need to relay or paste must use `CopyableValue` or an equivalent boxed copy control. Do not render them as bare text in product tables, cards, or profile summaries.
 - If a row already has an explicit View/Profile action, do not also make the registration number or identifier navigate to that profile. Keep identifiers copyable and keep navigation in the action column or action link.
@@ -139,7 +148,7 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 
 - Execute PHP in app context for debugging and testing code. Do not create models without user approval, prefer tests with factories instead. Prefer existing Artisan commands over custom tinker code.
 - Always use single quotes to prevent shell expansion: `php artisan tinker --execute 'Your::code();'`
-  - Double quotes for PHP strings inside: `php artisan tinker --execute 'User::where("active", true)->count();'`
+    - Double quotes for PHP strings inside: `php artisan tinker --execute 'User::where("active", true)->count();'`
 
 === php rules ===
 

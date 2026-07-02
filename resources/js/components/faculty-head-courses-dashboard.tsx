@@ -14,7 +14,13 @@ import {
     updateFacultyCourseOffering,
 } from '@/actions/App/Http/Controllers/DashboardController';
 import { ActionLink } from '@/components/action-link';
+import { sessionDisplayName } from '@/components/course-offering-browser';
 import { CoursePrerequisitePicker } from '@/components/course-prerequisite-picker';
+import {
+    LevelSemesterRail,
+    LevelSemesterRailGroup,
+    levelSemesterRailTabItemClassName,
+} from '@/components/level-semester-rail';
 import {
     qualifiedSemesterLabel,
     QualifiedSemester,
@@ -69,6 +75,7 @@ import type {
     DashboardFacultyHeadCourseSemester,
     DashboardFacultyHeadCourses,
     DashboardAcademicSession,
+    DashboardLevel,
 } from '@/types';
 
 type FacultyCourseFormData = {
@@ -170,20 +177,10 @@ export function FacultyHeadCoursesDashboard({
                         </Select>
                     </div>
 
-                    <TabsList
-                        variant="line"
-                        className="hidden! h-auto w-full gap-2 bg-background/95 p-2 shadow-sm ring-1 ring-border/70 lg:flex! lg:flex-col lg:items-stretch"
-                    >
-                        {courses.semesters.map((semester) => (
-                            <TabsTrigger
-                                key={semester.id}
-                                value={semester.id}
-                                className="min-h-14 justify-start! px-3 py-3 text-left data-active:bg-primary! data-active:text-primary-foreground! data-active:after:opacity-0! data-active:hover:text-primary-foreground!"
-                            >
-                                <SemesterTabLabel semester={semester} />
-                            </TabsTrigger>
-                        ))}
-                    </TabsList>
+                    <FacultyCourseSemesterRail
+                        levels={courses.levels}
+                        semesters={courses.semesters}
+                    />
 
                     {courses.semesters.map((semester) => (
                         <TabsContent
@@ -245,7 +242,7 @@ function SessionControlCard({
                 <div className="min-w-0">
                     <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                         <h2 className="truncate text-base font-semibold tracking-normal">
-                            {academicSession.name}
+                            {sessionDisplayName(academicSession)}
                         </h2>
                         <SessionStatusBadge status={academicSession.status} />
                     </div>
@@ -265,7 +262,7 @@ function SessionControlCard({
                                     className="mt-2 h-auto min-h-0 max-w-full justify-start p-0 text-left font-medium whitespace-normal"
                                 >
                                     Copy Faculty Courses From{' '}
-                                    {copySourceSession.name}
+                                    {sessionDisplayName(copySourceSession)}
                                 </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
@@ -273,11 +270,15 @@ function SessionControlCard({
                                     <AlertDialogTitle>
                                         Copy all faculty courses from{' '}
                                         <span className={emphasisClassName}>
-                                            {copySourceSession.name}
+                                            {sessionDisplayName(
+                                                copySourceSession,
+                                            )}
                                         </span>{' '}
                                         into{' '}
                                         <span className={emphasisClassName}>
-                                            {academicSession.name}
+                                            {sessionDisplayName(
+                                                academicSession,
+                                            )}
                                         </span>
                                         {'?'}
                                     </AlertDialogTitle>
@@ -285,15 +286,21 @@ function SessionControlCard({
                                         You are copying every faculty course
                                         that matches a level and semester from{' '}
                                         <span className={emphasisClassName}>
-                                            {copySourceSession.name}
+                                            {sessionDisplayName(
+                                                copySourceSession,
+                                            )}
                                         </span>{' '}
                                         into{' '}
                                         <span className={emphasisClassName}>
-                                            {academicSession.name}
+                                            {sessionDisplayName(
+                                                academicSession,
+                                            )}
                                         </span>
                                         . Existing faculty courses in{' '}
                                         <span className={emphasisClassName}>
-                                            {academicSession.name}
+                                            {sessionDisplayName(
+                                                academicSession,
+                                            )}
                                         </span>{' '}
                                         stay unchanged, and duplicate faculty
                                         courses will be skipped.
@@ -321,14 +328,14 @@ function SessionControlCard({
 
                 <Field>
                     <FieldLabel htmlFor="faculty-course-session">
-                        Academic Session
+                        Session
                     </FieldLabel>
                     <Select
                         value={selectedAcademicSessionId}
                         onValueChange={onSelectAcademicSession}
                     >
                         <SelectTrigger id="faculty-course-session">
-                            <SelectValue placeholder="Select academic session" />
+                            <SelectValue placeholder="Select session" />
                         </SelectTrigger>
                         <SelectContent>
                             {courses.academicSessions.map(
@@ -337,8 +344,10 @@ function SessionControlCard({
                                         key={academicSessionOption.id}
                                         value={academicSessionOption.id.toString()}
                                     >
-                                        {academicSessionOption.name} ·{' '}
-                                        {academicSessionOption.status}
+                                        {sessionDisplayName(
+                                            academicSessionOption,
+                                        )}{' '}
+                                        · {academicSessionOption.status}
                                     </SelectItem>
                                 ),
                             )}
@@ -370,13 +379,59 @@ function SemesterTabLabel({
 }) {
     return (
         <span className="grid min-w-0 gap-1">
-            <span className="truncate text-sm font-semibold">
+            <span className="truncate text-base font-semibold">
                 {semesterLabel(semester)}
             </span>
             <span className="truncate text-xs font-normal text-current opacity-70">
                 {semester.courseCount} courses · {semester.totalUnits} units
             </span>
         </span>
+    );
+}
+
+function FacultyCourseSemesterRail({
+    levels,
+    semesters,
+}: {
+    levels: DashboardLevel[];
+    semesters: DashboardFacultyHeadCourseSemester[];
+}) {
+    return (
+        <TabsList
+            variant="line"
+            className="hidden! h-auto w-full bg-background/95 p-0 shadow-sm ring-1 ring-border/70 lg:flex!"
+        >
+            <LevelSemesterRail>
+                {levels.map((level) => {
+                    const levelSemesters = semesters.filter(
+                        (semester) => semester.level.slug === level.slug,
+                    );
+
+                    if (levelSemesters.length === 0) {
+                        return null;
+                    }
+
+                    return (
+                        <LevelSemesterRailGroup
+                            key={level.slug}
+                            label={shortLevelLabel(level.title)}
+                        >
+                            {levelSemesters.map((semester) => (
+                                <TabsTrigger
+                                    key={semester.id}
+                                    value={semester.id}
+                                    className={
+                                        levelSemesterRailTabItemClassName
+                                    }
+                                >
+                                    <SemesterTabLabel semester={semester} />
+                                </TabsTrigger>
+                            ))}
+                        </LevelSemesterRailGroup>
+                    );
+                })}
+            </LevelSemesterRail>
+        </TabsList>
     );
 }
 
@@ -397,6 +452,10 @@ function SemesterMetric({
             </div>
         </div>
     );
+}
+
+function shortLevelLabel(level: string): string {
+    return level.replace(/\s*Level$/i, 'L');
 }
 
 function SessionStatusBadge({
@@ -493,7 +552,7 @@ export function FacultyHeadCourseOfferingForm({
                             semester={form.semester.name}
                         />
                         {' · '}
-                        {form.academicSession.name}
+                        {sessionDisplayName(form.academicSession)}
                     </p>
                 </div>
                 <Link
@@ -749,7 +808,7 @@ function SemesterCopyAction({
                     disabled={copyForm.processing}
                     className="h-auto min-h-0 max-w-full justify-start p-0 text-left font-medium whitespace-normal"
                 >
-                    Copy From {copySourceSession.name}
+                    Copy From {sessionDisplayName(copySourceSession)}
                 </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
@@ -758,7 +817,7 @@ function SemesterCopyAction({
                         Copy <span className={emphasisClassName}>{label}</span>{' '}
                         faculty courses into{' '}
                         <span className={emphasisClassName}>
-                            {academicSession.name}
+                            {sessionDisplayName(academicSession)}
                         </span>
                         {'?'}
                     </AlertDialogTitle>
@@ -767,11 +826,11 @@ function SemesterCopyAction({
                         <span className={emphasisClassName}>{label}</span>{' '}
                         faculty courses from{' '}
                         <span className={emphasisClassName}>
-                            {copySourceSession.name}
+                            {sessionDisplayName(copySourceSession)}
                         </span>{' '}
                         into{' '}
                         <span className={emphasisClassName}>
-                            {academicSession.name}
+                            {sessionDisplayName(academicSession)}
                         </span>
                         . Other semesters will not be changed. Existing faculty
                         courses in this semester stay unchanged, and duplicate
@@ -953,7 +1012,9 @@ function FacultyCourseOfferingRow({
                                         </span>{' '}
                                         for{' '}
                                         <span className={emphasisClassName}>
-                                            {academicSession.name}
+                                            {sessionDisplayName(
+                                                academicSession,
+                                            )}
                                         </span>
                                         {'?'}
                                     </AlertDialogTitle>
@@ -968,7 +1029,9 @@ function FacultyCourseOfferingRow({
                                         </span>{' '}
                                         for{' '}
                                         <span className={emphasisClassName}>
-                                            {academicSession.name}
+                                            {sessionDisplayName(
+                                                academicSession,
+                                            )}
                                         </span>
                                         {'.'} This removes the faculty course
                                         offering from the selected session and

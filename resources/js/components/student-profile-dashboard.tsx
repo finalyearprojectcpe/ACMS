@@ -1,17 +1,12 @@
-import {
-    RiImageEditLine,
-    RiResetLeftLine,
-    RiSave3Line,
-} from '@remixicon/react';
+import { RiResetLeftLine, RiSave3Line } from '@remixicon/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { CopyableValue } from '@/components/copyable-value';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { ProfilePhotoIdentityContent } from '@/components/profile-photo-identity-content';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { fullNameFor, initialsFor } from '@/lib/person';
+import { fullNameFor } from '@/lib/person';
 import { cn } from '@/lib/utils';
 import type { DashboardStudentProfile } from '@/types';
 
@@ -132,52 +127,17 @@ function ProfileIdentityCard({
 }) {
     return (
         <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
-            <CardContent className="flex flex-col gap-5 p-4 sm:flex-row sm:items-center">
-                <Avatar className="size-20">
-                    <AvatarImage
-                        src={avatar ?? undefined}
-                        alt={`${name} avatar`}
-                    />
-                    <AvatarFallback className="text-xl font-semibold">
-                        {initialsFor(name)}
-                    </AvatarFallback>
-                </Avatar>
-
-                <div className="min-w-0 flex-1">
-                    <div className="truncate text-xl font-semibold tracking-normal">
-                        {name}
-                    </div>
-                    <div className="mt-1 truncate text-sm text-muted-foreground">
-                        {email}
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                        <span className="font-medium">Reg. No.</span>
-                        <CopyableValue
-                            value={registrationNumber}
-                            className="h-7"
-                            valueClassName="text-xs"
-                        />
-                    </div>
-                </div>
-
-                <div className="shrink-0">
-                    <input
-                        id="student-avatar"
-                        type="file"
-                        accept="image/*"
-                        className="sr-only"
-                        onChange={(event) =>
-                            onAvatarChange(event.target.files?.[0])
-                        }
-                    />
-                    <Button type="button" variant="outline" asChild>
-                        <label htmlFor="student-avatar">
-                            <RiImageEditLine />
-                            Change picture
-                        </label>
-                    </Button>
-                </div>
-            </CardContent>
+            <ProfilePhotoIdentityContent
+                avatar={avatar}
+                name={name}
+                email={email}
+                inputId="student-avatar"
+                identifier={{
+                    label: 'Reg. No.',
+                    value: registrationNumber,
+                }}
+                onPhotoChange={onAvatarChange}
+            />
         </Card>
     );
 }

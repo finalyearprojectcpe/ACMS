@@ -33,6 +33,7 @@ import {
 } from '@/actions/App/Http/Controllers/DashboardController';
 import { ActionLink } from '@/components/action-link';
 import { CopyableValue } from '@/components/copyable-value';
+import { ChartCard, CountBarChart } from '@/components/dashboard-charts';
 import { PersonCell } from '@/components/person-cell';
 import {
     AlertDialog,
@@ -193,6 +194,32 @@ function SchoolAdminHome({
 }: {
     schoolAdmin: DashboardSchoolAdmin;
 }) {
+    const departmentsByFaculty = useMemo(
+        () =>
+            schoolAdmin.faculties.map((faculty) => ({
+                label: faculty.abbreviation,
+                value: faculty.departmentsCount,
+            })),
+        [schoolAdmin.faculties],
+    );
+    const facultyHeadCoverage = useMemo(
+        () => [
+            {
+                label: 'Assigned',
+                value: schoolAdmin.faculties.filter(
+                    (faculty) => faculty.head !== null,
+                ).length,
+            },
+            {
+                label: 'Needs Head',
+                value: schoolAdmin.faculties.filter(
+                    (faculty) => faculty.head === null,
+                ).length,
+            },
+        ],
+        [schoolAdmin.faculties],
+    );
+
     return (
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -212,6 +239,28 @@ function SchoolAdminHome({
                     label="Faculty Head Coverage"
                     value={schoolAdmin.metrics.facultyHeadCoverage}
                 />
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-2">
+                <ChartCard
+                    title="Departments by Faculty"
+                    detail="How the school structure is distributed."
+                >
+                    <CountBarChart
+                        rows={departmentsByFaculty}
+                        dataLabel="Departments"
+                    />
+                </ChartCard>
+
+                <ChartCard
+                    title="Faculty Head Coverage"
+                    detail="Faculties with an assigned head versus those still pending."
+                >
+                    <CountBarChart
+                        rows={facultyHeadCoverage}
+                        dataLabel="Faculties"
+                    />
+                </ChartCard>
             </div>
 
             <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">

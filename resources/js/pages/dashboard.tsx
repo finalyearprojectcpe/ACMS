@@ -258,6 +258,7 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                         ) : staffCourseSchedules ? (
                             <StaffCourseSchedulesDashboard
                                 courseSchedules={staffCourseSchedules}
+                                levels={dashboard.courseScheduleLevels}
                             />
                         ) : hodStaffForm ? (
                             <HodStaffImport form={hodStaffForm} />

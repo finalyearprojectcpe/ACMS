@@ -380,7 +380,7 @@ function assignedSetLabel(
         return 'No assigned set';
     }
 
-    return `${sets.map((set) => studentSetText(set)).join(', ')} student set`;
+    return sets.map((set) => studentSetText(set)).join(', ');
 }
 
 function gpaColumnsFor(students: DashboardStaffStudent[]): string[] {

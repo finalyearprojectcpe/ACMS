@@ -3,6 +3,11 @@ import type { ReactNode } from 'react';
 
 import { section as dashboardSection } from '@/actions/App/Http/Controllers/DashboardController';
 import {
+    ChartCard,
+    SetGpaProgressBarChart,
+    gpaRowsForLevels,
+} from '@/components/dashboard-charts';
+import {
     QualifiedSemester,
     qualifiedSemesterLabel,
 } from '@/components/qualified-semester';
@@ -46,6 +51,15 @@ export function StudentHomeDashboard({ home }: StudentHomeDashboardProps) {
                     detail={`For ${semesterLabel}`}
                 />
             </div>
+
+            <ChartCard
+                title="GPA Progress"
+                detail="Your recorded GPA by level."
+            >
+                <SetGpaProgressBarChart
+                    rows={gpaRowsForLevels(home.gpaProgress, home.levels)}
+                />
+            </ChartCard>
 
             <SolidCard>
                 <CardHeader className="flex flex-row items-center justify-between gap-3 border-b border-border">

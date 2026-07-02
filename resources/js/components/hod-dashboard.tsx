@@ -1,32 +1,37 @@
-import { Link, router } from '@inertiajs/react';
+import { Link, router, useForm } from '@inertiajs/react';
 import {
     RiArrowLeftLine,
     RiFileExcel2Line,
+    RiLockPasswordLine,
+    RiSave3Line,
     RiSearchLine,
 } from '@remixicon/react';
-import type { ReactNode } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import { useMemo, useState } from 'react';
-import {
-    CartesianGrid,
-    Cell,
-    Line,
-    LineChart,
-    Pie,
-    PieChart,
-    XAxis,
-    YAxis,
-} from 'recharts';
 import * as XLSX from 'xlsx';
 
 import {
     importHodStaff,
     section as dashboardSection,
     storeImportedHodStaff,
+    updateHodPassword,
 } from '@/actions/App/Http/Controllers/DashboardController';
 import { ActionLink } from '@/components/action-link';
 import { CopyableValue } from '@/components/copyable-value';
-import { CourseTypeBadge } from '@/components/course-type-badge';
+import { CourseOfferingBrowser } from '@/components/course-offering-browser';
+import {
+    AverageGpaByLevelBarChart,
+    ChartCard,
+    ChartSelect,
+    ResultClassificationPieChart,
+    averageGpa,
+    averageGpaByLevelRows,
+    classificationRowsForStudents,
+    setChartOptions,
+    studentsForEntrySession,
+} from '@/components/dashboard-charts';
 import { PersonCell } from '@/components/person-cell';
+import { ProfilePhotoSettingsCard } from '@/components/profile-photo-settings-card';
 import { QualifiedSemester } from '@/components/qualified-semester';
 import { RoleBadge } from '@/components/role-badge';
 import { SpreadsheetImportPreview } from '@/components/spreadsheet-import-preview';
@@ -41,14 +46,22 @@ import {
 } from '@/components/student-set-label';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
-    ChartContainer,
-    ChartTooltip,
-    ChartTooltipContent,
-} from '@/components/ui/chart';
-import type { ChartConfig } from '@/components/ui/chart';
+    Card,
+    CardContent,
+    CardFooter,
+    CardForm,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
+import {
+    Field,
+    FieldError,
+    FieldGroup,
+    FieldLabel,
+} from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import {
     Select,
@@ -67,14 +80,9 @@ import {
 } from '@/components/ui/table';
 import type {
     DashboardHod,
-    DashboardHodResultSubmission,
     DashboardHodSetAdvisor,
     DashboardHodStaff,
     DashboardHodStaffForm,
-    DashboardLevel,
-    DashboardStaffCourseOffering,
-    DashboardStaffCourseScheduleSemester,
-    DashboardStaffHomeCarryoverSummary,
     DashboardStaffStudent,
     DashboardStudentRecord,
     DashboardStudentRecordSemester,
@@ -86,6 +94,12 @@ type HodDashboardProps = {
 };
 
 type FilterOption = string | { value: string; label: string };
+
+type PasswordFormData = {
+    current_password: string;
+    password: string;
+    password_confirmation: string;
+};
 
 export function HodDashboard({ hod, section }: HodDashboardProps) {
     if (section === 'staff') {
@@ -112,9 +126,55 @@ export function HodDashboard({ hod, section }: HodDashboardProps) {
 }
 
 function HodHomePage({ hod }: { hod: DashboardHod }) {
+    const setOptions = useMemo(
+        () =>
+            setChartOptions(
+                hod.setAdvisors,
+                hod.department.minimumYearsToDegree,
+            ),
+        [hod.department.minimumYearsToDegree, hod.setAdvisors],
+    );
+    const [gpaScope, setGpaScope] = useState('department');
+    const [classificationScope, setClassificationScope] =
+        useState('department');
+    const gpaOptions = useMemo(
+        () => [
+            {
+                value: 'department',
+                label: `${hod.department.abbreviation} Department`,
+            },
+            ...setOptions,
+        ],
+        [hod.department.abbreviation, setOptions],
+    );
+    const gpaStudents = useMemo(
+        () =>
+            gpaScope === 'department'
+                ? hod.students
+                : studentsForEntrySession(hod.students, gpaScope),
+        [gpaScope, hod.students],
+    );
+    const classificationOptions = useMemo(
+        () => [
+            {
+                value: 'department',
+                label: `${hod.department.abbreviation} Department`,
+            },
+            ...setOptions,
+        ],
+        [hod.department.abbreviation, setOptions],
+    );
+    const classificationStudents = useMemo(
+        () =>
+            classificationScope === 'department'
+                ? hod.students
+                : studentsForEntrySession(hod.students, classificationScope),
+        [classificationScope, hod.students],
+    );
+
     return (
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <MetricBlock
                     label="Department Students"
                     value={hod.metrics.students}
@@ -126,36 +186,58 @@ function HodHomePage({ hod }: { hod: DashboardHod }) {
                     detail={`${hod.metrics.pendingSignups} pending signup`}
                 />
                 <MetricBlock
-                    label="Results Awaiting Review"
-                    value={hod.metrics.resultsAwaitingReview}
-                    detail={`${hod.metrics.missingResults} missing submissions`}
-                />
-                <MetricBlock
                     label="Students With Carryovers"
                     value={hod.metrics.studentsWithCarryovers}
                     detail="Across department levels"
                 />
             </div>
 
+            <div className="grid gap-4 xl:grid-cols-2">
+                <ChartCard
+                    title="GPA by Level"
+                    detail="Academic performance for the selected student scope."
+                    control={
+                        <ChartSelect
+                            value={gpaScope}
+                            options={gpaOptions}
+                            label="Select GPA scope"
+                            onChange={setGpaScope}
+                        />
+                    }
+                >
+                    <AverageGpaByLevelBarChart
+                        rows={averageGpaByLevelRows(gpaStudents, hod.levels)}
+                    />
+                </ChartCard>
+
+                <ChartCard
+                    title="Result Class Distribution"
+                    detail="Student standing by CGPA classification."
+                    control={
+                        <ChartSelect
+                            value={classificationScope}
+                            options={classificationOptions}
+                            label="Select result scope"
+                            onChange={setClassificationScope}
+                        />
+                    }
+                >
+                    <ResultClassificationPieChart
+                        rows={classificationRowsForStudents(
+                            classificationStudents,
+                        )}
+                    />
+                </ChartCard>
+            </div>
+
             <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
                 <DashboardCard title="Set Adviser Coverage">
                     <SetAdvisorTable
                         advisors={hod.setAdvisors}
-                        minimumYearsToDegree={hod.department.minimumYearsToDegree}
+                        minimumYearsToDegree={
+                            hod.department.minimumYearsToDegree
+                        }
                     />
-                </DashboardCard>
-
-                <DashboardCard title="Results Needing Attention">
-                    <ResultSubmissionTable
-                        submissions={hod.resultSubmissions.filter(
-                            (submission) => submission.status !== 'Approved',
-                        )}
-                        compact
-                    />
-                </DashboardCard>
-
-                <DashboardCard title="Carryover Summary">
-                    <CarryoverSummaryTable summaries={hod.carryoverSummaries} />
                 </DashboardCard>
 
                 <DashboardCard title="Recent Staff Onboarding">
@@ -299,10 +381,10 @@ function HodStudentsPage({ hod }: { hod: DashboardHod }) {
         () =>
             setFilter === 'all'
                 ? null
-                : hod.setAdvisors.find(
+                : (hod.setAdvisors.find(
                       (setAdvisor) =>
                           setAdvisor.entrySession.name === setFilter,
-                  ) ?? null,
+                  ) ?? null),
         [hod.setAdvisors, setFilter],
     );
     const visibleStudents = useMemo(
@@ -443,236 +525,175 @@ function HodCourseOfferingsPage({ hod }: { hod: DashboardHod }) {
         );
     }
 
+    if (selectedSession && selectedLevel) {
+        return (
+            <CourseOfferingBrowser
+                title="Course Offerings"
+                detail="View faculty, departmental, and elective courses by session, level, and semester."
+                levels={hod.levels}
+                selectedLevel={selectedLevel}
+                semesters={hod.courseOfferings.semesters}
+                session={selectedSession}
+                sessions={hod.academicSessions}
+                selectedSessionId={selectedSession.id.toString()}
+                onSessionChange={(academicSession) =>
+                    updateSelection({ academicSession })
+                }
+                onSelectionChange={(level) =>
+                    updateSelection({ level: level.slug })
+                }
+            />
+        );
+    }
+
     return (
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                <PageSummary
-                    title="Course Offerings"
-                    detail="View faculty, departmental, and elective courses by session, level, and semester."
-                />
-                <div className="lg:w-64">
-                    <Select
-                        value={selectedSession?.id.toString() ?? ''}
-                        onValueChange={(value) =>
-                            updateSelection({ academicSession: value })
-                        }
-                    >
-                        <SelectTrigger aria-label="Academic session">
-                            <SelectValue placeholder="Academic session" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {hod.academicSessions.map((session) => (
-                                <SelectItem
-                                    key={session.id}
-                                    value={session.id.toString()}
-                                >
-                                    {session.name}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
-            </div>
-
-            {selectedSession && selectedLevel ? (
-                <div className="grid gap-4 lg:grid-cols-[14rem_minmax(0,1fr)]">
-                    <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
-                        <CardHeader className="border-b border-border">
-                            <CardTitle>Levels</CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-3">
-                            <ScrollArea className="max-h-[28rem]">
-                                <div className="flex gap-2 lg:flex-col">
-                                    {hod.levels.map((level) => (
-                                        <Button
-                                            key={level.slug}
-                                            type="button"
-                                            variant={
-                                                level.slug ===
-                                                selectedLevel.slug
-                                                    ? 'default'
-                                                    : 'outline'
-                                            }
-                                            className="h-11 justify-start text-base"
-                                            onClick={() =>
-                                                updateSelection({
-                                                    level: level.slug,
-                                                })
-                                            }
-                                        >
-                                            {level.title}
-                                        </Button>
-                                    ))}
-                                </div>
-                                <ScrollBar orientation="horizontal" />
-                            </ScrollArea>
-                        </CardContent>
-                    </Card>
-                    <div className="grid gap-4 xl:grid-cols-2">
-                        {hod.courseOfferings.semesters.map((semester) => (
-                            <CourseOfferingSemesterCard
-                                key={semester.id}
-                                levelTitle={selectedLevel.title}
-                                semester={semester}
-                                sessionName={selectedSession.name}
-                            />
-                        ))}
-                    </div>
-                </div>
-            ) : (
-                <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
-                    <CardContent className="p-6 text-sm text-muted-foreground">
-                        Add an academic session and level before viewing course
-                        offerings.
-                    </CardContent>
-                </Card>
-            )}
+            <PageSummary
+                title="Course Offerings"
+                detail="View faculty, departmental, and elective courses by session, level, and semester."
+            />
+            <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
+                <CardContent className="p-6 text-sm text-muted-foreground">
+                    Add an academic session and level before viewing course
+                    offerings.
+                </CardContent>
+            </Card>
         </div>
     );
 }
 
 function HodStudentResultsPage({ hod }: { hod: DashboardHod }) {
-    const [levelFilter, setLevelFilter] = useState('all');
-    const [setFilter, setSetFilter] = useState('all');
     const minimumYearsToDegree = hod.department.minimumYearsToDegree;
     const setOptions = useMemo(
-        () =>
-            hod.setAdvisors.map((setAdvisor) => ({
-                value: setAdvisor.entrySession.name,
-                label: setOptionLabel(setAdvisor, minimumYearsToDegree),
-            })),
+        () => setChartOptions(hod.setAdvisors, minimumYearsToDegree),
         [hod.setAdvisors, minimumYearsToDegree],
     );
-    const levelOptions = useMemo(
+    const [gpaScope, setGpaScope] = useState('department');
+    const [classificationScope, setClassificationScope] =
+        useState('department');
+    const gpaOptions = useMemo(
+        () => [
+            {
+                value: 'department',
+                label: `${hod.department.abbreviation} Department`,
+            },
+            ...setOptions,
+        ],
+        [hod.department.abbreviation, setOptions],
+    );
+    const classificationOptions = useMemo(
+        () => [
+            {
+                value: 'department',
+                label: `${hod.department.abbreviation} Department`,
+            },
+            ...setOptions,
+        ],
+        [hod.department.abbreviation, setOptions],
+    );
+    const gpaStudents = useMemo(
         () =>
-            unique(
-                hod.students.map((student) =>
-                    studentSetLevelText(
-                        student.currentLevel,
-                        minimumYearsToDegree,
-                    ),
-                ),
-            ),
-        [hod.students, minimumYearsToDegree],
+            gpaScope === 'department'
+                ? hod.students
+                : studentsForEntrySession(hod.students, gpaScope),
+        [gpaScope, hod.students],
     );
-    const selectedSetAdvisor = useMemo(
+    const classificationStudents = useMemo(
         () =>
-            setFilter === 'all'
-                ? null
-                : hod.setAdvisors.find(
-                      (setAdvisor) =>
-                          setAdvisor.entrySession.name === setFilter,
-                  ) ?? null,
-        [hod.setAdvisors, setFilter],
-    );
-    const visibleStudents = useMemo(
-        () =>
-            filterStudents(hod.students, {
-                query: '',
-                level: levelFilter,
-                set: setFilter,
-                carryover: 'all',
-                minimumYearsToDegree,
-            }),
-        [hod.students, levelFilter, minimumYearsToDegree, setFilter],
-    );
-    const classifications = useMemo(
-        () => classificationRowsFor(visibleStudents),
-        [visibleStudents],
-    );
-    const trendRows = useMemo(
-        () => gpaTrendRowsFor(visibleStudents, hod.levels),
-        [hod.levels, visibleStudents],
+            classificationScope === 'department'
+                ? hod.students
+                : studentsForEntrySession(hod.students, classificationScope),
+        [classificationScope, hod.students],
     );
     const bestStudents = useMemo(
         () =>
-            [...visibleStudents]
+            [...hod.students]
                 .sort(
                     (first, second) => Number(second.cgpa) - Number(first.cgpa),
                 )
                 .slice(0, 5),
-        [visibleStudents],
+        [hod.students],
     );
     const lowestStudents = useMemo(
         () =>
-            [...visibleStudents]
+            [...hod.students]
                 .sort(
                     (first, second) => Number(first.cgpa) - Number(second.cgpa),
                 )
                 .slice(0, 5),
-        [visibleStudents],
+        [hod.students],
     );
-    const averageCgpa =
-        visibleStudents.length === 0
-            ? '0.00'
-            : averageGpa(visibleStudents.map((student) => student.cgpa));
-    const studentsWithCarryovers = visibleStudents.filter(
+    const averageCgpa = averageGpa(hod.students.map((student) => student.cgpa));
+    const studentsWithCarryovers = hod.students.filter(
         (student) => student.pendingCarryovers.length > 0,
     ).length;
 
     return (
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-                <PageSummary
-                    title="Student Results"
-                    detail="Department performance, result submissions, and student standing."
-                />
-                <div className="grid gap-2 sm:grid-cols-2 xl:w-[30rem]">
-                    <FilterSelect
-                        value={setFilter}
-                        onChange={setSetFilter}
-                        label="Entry set"
-                        allLabel="All sets"
-                        options={setOptions}
-                    />
-                    <FilterSelect
-                        value={levelFilter}
-                        onChange={setLevelFilter}
-                        label="Level"
-                        allLabel="All levels"
-                        options={levelOptions}
-                    />
-                </div>
-            </div>
-            {selectedSetAdvisor ? (
-                <div className="text-sm text-muted-foreground">
-                    Course adviser:{' '}
-                    <span className="font-medium text-foreground">
-                        {selectedSetAdvisor.advisor?.name ?? 'Not assigned'}
-                    </span>
-                </div>
-            ) : null}
+            <PageSummary
+                title="Student Results"
+                detail="Department performance, CGPA standing, and set progress."
+            />
 
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <MetricBlock
-                    label="Students In View"
-                    value={visibleStudents.length}
-                    detail={`${hod.studentResults.studentsCount} total students`}
+                    label="Department Students"
+                    value={hod.studentResults.studentsCount}
+                    detail={hod.department.abbreviation}
                 />
                 <MetricBlock
                     label="Average CGPA"
                     value={averageCgpa}
-                    detail="Filtered student set"
+                    detail="Across the department"
                 />
                 <MetricBlock
-                    label="Students With Carryovers"
+                    label="With Carryovers"
                     value={studentsWithCarryovers}
                     detail="Need academic attention"
                 />
                 <MetricBlock
-                    label="Pending Submissions"
-                    value={hod.studentResults.pendingSubmissions}
-                    detail="Awaiting review or missing"
+                    label="Entry Sets"
+                    value={hod.studentResults.sets.length}
+                    detail="Tracked in this department"
                 />
             </div>
 
             <div className="grid gap-4 xl:grid-cols-2">
-                <DashboardCard title="Classification Distribution">
-                    <ClassificationChart rows={classifications} />
-                </DashboardCard>
-                <DashboardCard title="Average GPA Trend">
-                    <GpaTrendChart rows={trendRows} />
-                </DashboardCard>
+                <ChartCard
+                    title="GPA by Level"
+                    detail="Level-by-level performance for the selected scope."
+                    control={
+                        <ChartSelect
+                            value={gpaScope}
+                            options={gpaOptions}
+                            label="Select GPA scope"
+                            onChange={setGpaScope}
+                        />
+                    }
+                >
+                    <AverageGpaByLevelBarChart
+                        rows={averageGpaByLevelRows(gpaStudents, hod.levels)}
+                    />
+                </ChartCard>
+
+                <ChartCard
+                    title="Result Class Distribution"
+                    detail="CGPA classification for the selected scope."
+                    control={
+                        <ChartSelect
+                            value={classificationScope}
+                            options={classificationOptions}
+                            label="Select result scope"
+                            onChange={setClassificationScope}
+                        />
+                    }
+                >
+                    <ResultClassificationPieChart
+                        rows={classificationRowsForStudents(
+                            classificationStudents,
+                        )}
+                    />
+                </ChartCard>
             </div>
 
             <div className="grid gap-4 xl:grid-cols-2">
@@ -689,50 +710,160 @@ function HodStudentResultsPage({ hod }: { hod: DashboardHod }) {
                     />
                 </DashboardCard>
             </div>
-
-            <DashboardCard title="Result Submissions">
-                <ResultSubmissionTable submissions={hod.resultSubmissions} />
-            </DashboardCard>
         </div>
     );
 }
 
 function HodSettingsPage({ hod }: { hod: DashboardHod }) {
     return (
-        <div className="mx-auto grid w-full max-w-5xl gap-4 lg:grid-cols-2">
-            <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
-                <CardHeader className="border-b border-border">
-                    <CardTitle>Profile</CardTitle>
-                </CardHeader>
-                <CardContent className="p-4">
-                    <PersonCell
-                        name={hod.settings.hod.name}
-                        secondary={hod.settings.hod.email}
-                        avatar={hod.settings.hod.avatar}
-                        size="md"
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+            <PageSummary
+                title="Profile Settings"
+                detail="Manage your account profile and HOD access."
+            />
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+                <div className="grid content-start gap-4">
+                    <ProfilePhotoSettingsCard
+                        inputId="hod-profile-photo"
+                        user={hod.settings.hod}
                     />
-                </CardContent>
-            </Card>
-            <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
-                <CardHeader className="border-b border-border">
-                    <CardTitle>Department</CardTitle>
-                </CardHeader>
-                <CardContent className="grid gap-3 p-4 text-sm">
-                    <SummaryLine
-                        label="Department"
-                        value={hod.department.name}
-                    />
-                    <SummaryLine
-                        label="Abbreviation"
-                        value={hod.department.abbreviation}
-                    />
-                    <SummaryLine
-                        label="Faculty"
-                        value={hod.faculty?.name ?? 'Not set'}
-                    />
-                </CardContent>
-            </Card>
+                    <HodPasswordSettingsCard />
+                </div>
+
+                <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
+                    <CardHeader className="border-b border-border">
+                        <CardTitle>Profile Summary</CardTitle>
+                    </CardHeader>
+                    <CardContent className="grid gap-4 p-4 text-sm">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <RoleBadge
+                                role="HOD"
+                                context={hod.department.abbreviation}
+                            />
+                        </div>
+                        <SummaryLine
+                            label="Department"
+                            value={hod.department.name}
+                        />
+                        <SummaryLine
+                            label="Abbreviation"
+                            value={hod.department.abbreviation}
+                        />
+                        <SummaryLine
+                            label="Faculty"
+                            value={hod.faculty?.name ?? 'Not set'}
+                        />
+                    </CardContent>
+                </Card>
+            </div>
         </div>
+    );
+}
+
+function HodPasswordSettingsCard() {
+    const form = useForm<PasswordFormData>({
+        current_password: '',
+        password: '',
+        password_confirmation: '',
+    });
+
+    function submit(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+
+        form.submit(updateHodPassword(), {
+            onSuccess: () => form.reset(),
+        });
+    }
+
+    return (
+        <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
+            <CardForm onSubmit={submit}>
+                <CardHeader className="gap-2">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                        <RiLockPasswordLine className="size-4 text-muted-foreground" />
+                        Change Password
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="px-5 pb-6">
+                    <FieldGroup className="gap-6">
+                        <Field
+                            data-invalid={Boolean(form.errors.current_password)}
+                        >
+                            <FieldLabel htmlFor="hod-current-password">
+                                Current Password
+                            </FieldLabel>
+                            <PasswordInput
+                                id="hod-current-password"
+                                value={form.data.current_password}
+                                autoComplete="current-password"
+                                aria-invalid={Boolean(
+                                    form.errors.current_password,
+                                )}
+                                onChange={(event) =>
+                                    form.setData(
+                                        'current_password',
+                                        event.target.value,
+                                    )
+                                }
+                                required
+                            />
+                            <FieldError>
+                                {form.errors.current_password}
+                            </FieldError>
+                        </Field>
+                        <Field data-invalid={Boolean(form.errors.password)}>
+                            <FieldLabel htmlFor="hod-new-password">
+                                New Password
+                            </FieldLabel>
+                            <PasswordInput
+                                id="hod-new-password"
+                                value={form.data.password}
+                                autoComplete="new-password"
+                                aria-invalid={Boolean(form.errors.password)}
+                                onChange={(event) =>
+                                    form.setData('password', event.target.value)
+                                }
+                                required
+                            />
+                            <FieldError>{form.errors.password}</FieldError>
+                        </Field>
+                        <Field
+                            data-invalid={Boolean(
+                                form.errors.password_confirmation,
+                            )}
+                        >
+                            <FieldLabel htmlFor="hod-confirm-password">
+                                Confirm Password
+                            </FieldLabel>
+                            <PasswordInput
+                                id="hod-confirm-password"
+                                value={form.data.password_confirmation}
+                                autoComplete="new-password"
+                                aria-invalid={Boolean(
+                                    form.errors.password_confirmation,
+                                )}
+                                onChange={(event) =>
+                                    form.setData(
+                                        'password_confirmation',
+                                        event.target.value,
+                                    )
+                                }
+                                required
+                            />
+                            <FieldError>
+                                {form.errors.password_confirmation}
+                            </FieldError>
+                        </Field>
+                    </FieldGroup>
+                </CardContent>
+                <CardFooter className="justify-end border-t bg-muted/20 px-5 py-4">
+                    <Button type="submit" disabled={form.processing}>
+                        <RiSave3Line />
+                        {form.processing ? 'Saving...' : 'Save Password'}
+                    </Button>
+                </CardFooter>
+            </CardForm>
+        </Card>
     );
 }
 
@@ -889,12 +1020,10 @@ export function StudentRecordDashboard({
                         />
                         <SummaryLine
                             label="Current Level"
-                            value={
-                                studentSetLevelText(
-                                    record.student.currentLevel,
-                                    record.department?.minimumYearsToDegree,
-                                )
-                            }
+                            value={studentSetLevelText(
+                                record.student.currentLevel,
+                                record.department?.minimumYearsToDegree,
+                            )}
                         />
                     </div>
                 </DashboardCard>
@@ -912,121 +1041,6 @@ export function StudentRecordDashboard({
                 ))}
             </div>
         </div>
-    );
-}
-
-function CourseOfferingSemesterCard({
-    levelTitle,
-    semester,
-    sessionName,
-}: {
-    levelTitle: string;
-    semester: DashboardStaffCourseScheduleSemester;
-    sessionName: string;
-}) {
-    return (
-        <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
-            <CardHeader className="border-b border-border">
-                <div>
-                    <CardTitle>
-                        <QualifiedSemester
-                            level={levelTitle}
-                            semester={semester.name}
-                        />
-                    </CardTitle>
-                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                        <span>{sessionName}</span>
-                        <span>{semester.totalUnits} units</span>
-                        <span>{semester.facultyCourseCount} faculty</span>
-                        <span>
-                            {semester.departmentalCourseCount} departmental
-                        </span>
-                        <span>{semester.electiveCourseCount} elective</span>
-                    </div>
-                </div>
-            </CardHeader>
-            <CardContent className="p-0">
-                <CourseOfferingsTable semester={semester} />
-            </CardContent>
-        </Card>
-    );
-}
-
-function CourseOfferingsTable({
-    semester,
-}: {
-    semester: DashboardStaffCourseScheduleSemester;
-}) {
-    return (
-        <ScrollArea>
-            <Table className="min-w-[580px] text-sm">
-                <TableHeader>
-                    <TableRow>
-                        <TableHead className="px-4">Course</TableHead>
-                        <TableHead className="w-20 text-center">
-                            Units
-                        </TableHead>
-                        <TableHead className="w-32">Category</TableHead>
-                        <TableHead>Prerequisites</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {semester.offerings.length > 0 ? (
-                        semester.offerings.map((offering) => (
-                            <CourseOfferingRow
-                                key={offering.id}
-                                offering={offering}
-                            />
-                        ))
-                    ) : (
-                        <EmptyTableRow colSpan={4}>
-                            No course offerings for this semester.
-                        </EmptyTableRow>
-                    )}
-                </TableBody>
-            </Table>
-            <ScrollBar orientation="horizontal" />
-        </ScrollArea>
-    );
-}
-
-function CourseOfferingRow({
-    offering,
-}: {
-    offering: DashboardStaffCourseOffering;
-}) {
-    return (
-        <TableRow className="odd:bg-background even:bg-muted/25">
-            <TableCell className="px-4">
-                <div className="font-semibold">{offering.code}</div>
-                <div className="text-xs text-muted-foreground">
-                    {offering.title}
-                </div>
-            </TableCell>
-            <TableCell className="text-center font-medium tabular-nums">
-                {offering.units}
-            </TableCell>
-            <TableCell>
-                <CourseTypeBadge type={offering.courseType} />
-            </TableCell>
-            <TableCell>
-                {offering.prerequisites.length > 0 ? (
-                    <div className="flex flex-wrap gap-1">
-                        {offering.prerequisites.map((course) => (
-                            <Badge
-                                key={course.id}
-                                variant="outline"
-                                className="border-border bg-muted/60"
-                            >
-                                {course.code}
-                            </Badge>
-                        ))}
-                    </div>
-                ) : (
-                    <span className="text-muted-foreground">None</span>
-                )}
-            </TableCell>
-        </TableRow>
     );
 }
 
@@ -1076,9 +1090,7 @@ function StaffTable({
                                 <TableCell className="text-muted-foreground">
                                     {member.assignedSets.length > 0
                                         ? member.assignedSets
-                                              .map((set) =>
-                                                  studentSetText(set),
-                                              )
+                                              .map((set) => studentSetText(set))
                                               .join(', ')
                                         : 'Not assigned'}
                                 </TableCell>
@@ -1125,7 +1137,9 @@ function StudentsTable({
                         <TableHead className="min-w-52">Student</TableHead>
                         <TableHead className="min-w-32">Reg. No.</TableHead>
                         <TableHead className="min-w-44">Set</TableHead>
-                        <TableHead className="min-w-44">Course Adviser</TableHead>
+                        <TableHead className="min-w-44">
+                            Course Adviser
+                        </TableHead>
                         <TableHead className="min-w-44">Carryovers</TableHead>
                         <TableHead className="w-24 text-center">CGPA</TableHead>
                         <TableHead className="w-24 pr-4 text-right">
@@ -1258,221 +1272,6 @@ function SetAdvisorTable({
     );
 }
 
-function ResultSubmissionTable({
-    submissions,
-    compact = false,
-}: {
-    submissions: DashboardHodResultSubmission[];
-    compact?: boolean;
-}) {
-    return (
-        <ScrollArea>
-            <Table className="min-w-[700px] text-sm">
-                <TableHeader>
-                    <TableRow>
-                        <TableHead className="w-[32%] px-4">Course</TableHead>
-                        {!compact ? <TableHead>Level</TableHead> : null}
-                        <TableHead className="w-[16%]">Status</TableHead>
-                        <TableHead className="w-[16%] pr-4 text-right">
-                            Submitted
-                        </TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {submissions.length > 0 ? (
-                        submissions.map((submission) => (
-                            <TableRow
-                                key={submission.id}
-                                className="odd:bg-background even:bg-muted/25"
-                            >
-                                <TableCell className="px-4">
-                                    <div className="font-semibold">
-                                        {submission.course
-                                            .split(' ')
-                                            .slice(0, 2)
-                                            .join(' ')}
-                                    </div>
-                                    <div className="truncate text-xs text-muted-foreground">
-                                        {submission.course
-                                            .split(' ')
-                                            .slice(2)
-                                            .join(' ')}
-                                    </div>
-                                </TableCell>
-                                {!compact ? (
-                                    <TableCell className="text-muted-foreground">
-                                        {submission.level} {submission.semester}
-                                    </TableCell>
-                                ) : null}
-                                <TableCell>
-                                    <StatusBadge status={submission.status} />
-                                </TableCell>
-                                <TableCell className="pr-4 text-right text-muted-foreground tabular-nums">
-                                    {submission.submittedAt}
-                                </TableCell>
-                            </TableRow>
-                        ))
-                    ) : (
-                        <EmptyTableRow colSpan={compact ? 3 : 4}>
-                            No result submissions.
-                        </EmptyTableRow>
-                    )}
-                </TableBody>
-            </Table>
-            <ScrollBar orientation="horizontal" />
-        </ScrollArea>
-    );
-}
-
-function CarryoverSummaryTable({
-    summaries,
-}: {
-    summaries: DashboardStaffHomeCarryoverSummary[];
-}) {
-    return (
-        <Table className="text-sm">
-            <TableHeader>
-                <TableRow>
-                    <TableHead className="w-[56%] px-4">Course</TableHead>
-                    <TableHead className="w-[16%] text-center">Units</TableHead>
-                    <TableHead className="w-[28%] pr-4 text-right">
-                        Students
-                    </TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                {summaries.length > 0 ? (
-                    summaries.map((summary) => (
-                        <TableRow
-                            key={summary.code}
-                            className="odd:bg-background even:bg-muted/25"
-                        >
-                            <TableCell className="px-4">
-                                <div className="font-semibold">
-                                    {summary.code}
-                                </div>
-                                <div className="truncate text-xs text-muted-foreground">
-                                    {summary.title}
-                                </div>
-                            </TableCell>
-                            <TableCell className="text-center font-medium tabular-nums">
-                                {summary.units}
-                            </TableCell>
-                            <TableCell className="pr-4 text-right font-semibold tabular-nums">
-                                {summary.students.length}
-                            </TableCell>
-                        </TableRow>
-                    ))
-                ) : (
-                    <EmptyTableRow colSpan={3}>
-                        No carryover records.
-                    </EmptyTableRow>
-                )}
-            </TableBody>
-        </Table>
-    );
-}
-
-function ClassificationChart({
-    rows,
-}: {
-    rows: Array<{ classification: string; students: number; fill: string }>;
-}) {
-    const chartConfig = {
-        students: { label: 'Students' },
-        first: { label: 'First Class', color: 'var(--chart-1)' },
-        secondUpper: { label: 'Second Class Upper', color: 'var(--chart-2)' },
-        secondLower: { label: 'Second Class Lower', color: 'var(--chart-3)' },
-        third: { label: 'Third Class', color: 'var(--chart-4)' },
-        below: { label: 'Below Third Class', color: 'var(--chart-5)' },
-    } satisfies ChartConfig;
-
-    return (
-        <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_14rem]">
-            <ChartContainer
-                config={chartConfig}
-                className="min-h-64 w-full"
-                initialDimension={{ width: 420, height: 260 }}
-            >
-                <PieChart>
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Pie
-                        data={rows}
-                        dataKey="students"
-                        nameKey="classification"
-                        innerRadius={56}
-                        outerRadius={92}
-                        paddingAngle={2}
-                    >
-                        {rows.map((row) => (
-                            <Cell key={row.classification} fill={row.fill} />
-                        ))}
-                    </Pie>
-                </PieChart>
-            </ChartContainer>
-            <div className="grid content-center gap-2 text-sm">
-                {rows.map((row) => (
-                    <div
-                        key={row.classification}
-                        className="flex items-center justify-between gap-3"
-                    >
-                        <span className="text-muted-foreground">
-                            {row.classification}
-                        </span>
-                        <span className="font-semibold tabular-nums">
-                            {row.students}
-                        </span>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-}
-
-function GpaTrendChart({
-    rows,
-}: {
-    rows: Array<{ level: string; average: number }>;
-}) {
-    const chartConfig = {
-        average: { label: 'Average GPA', color: 'var(--chart-1)' },
-    } satisfies ChartConfig;
-
-    return (
-        <div className="p-4">
-            <ChartContainer
-                config={chartConfig}
-                className="min-h-64 w-full"
-                initialDimension={{ width: 520, height: 260 }}
-            >
-                <LineChart data={rows} margin={{ left: 8, right: 12 }}>
-                    <CartesianGrid vertical={false} />
-                    <XAxis
-                        dataKey="level"
-                        tickLine={false}
-                        axisLine={false}
-                        tickMargin={8}
-                    />
-                    <YAxis
-                        domain={[0, 5]}
-                        tickLine={false}
-                        axisLine={false}
-                        tickMargin={8}
-                    />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Line
-                        type="monotone"
-                        dataKey="average"
-                        stroke="var(--color-average)"
-                        strokeWidth={2}
-                        dot
-                    />
-                </LineChart>
-            </ChartContainer>
-        </div>
-    );
-}
-
 function StudentStandingTable({
     students,
     minimumYearsToDegree,
@@ -1538,23 +1337,15 @@ function CompactStudentSet({
     student: DashboardStaffStudent;
     minimumYearsToDegree?: number;
 }) {
-    const setName =
-        student.entrySession === null
-            ? 'No entry set'
-            : `${student.entrySession.name} Set`;
+    const set = studentSetText({
+        entrySession: student.entrySession,
+        currentLevel: student.currentLevel,
+        minimumYearsToDegree,
+    });
 
     return (
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <span className="truncate font-medium">{setName}</span>
-            <Badge
-                variant="outline"
-                className="border-border bg-muted/60 text-xs text-muted-foreground"
-            >
-                {studentSetLevelText(
-                    student.currentLevel,
-                    minimumYearsToDegree,
-                )}
-            </Badge>
+            <span className="truncate font-medium">{set}</span>
         </div>
     );
 }
@@ -1919,100 +1710,6 @@ function filterStudents(
                 (filters.carryover === 'No carryover' && !hasCarryover))
         );
     });
-}
-
-function classificationRowsFor(students: DashboardStaffStudent[]) {
-    const labels = [
-        ['First Class', 'var(--chart-1)'],
-        ['Second Class Upper', 'var(--chart-2)'],
-        ['Second Class Lower', 'var(--chart-3)'],
-        ['Third Class', 'var(--chart-4)'],
-        ['Below Third Class', 'var(--chart-5)'],
-    ] as const;
-
-    return labels.map(([classification, fill]) => ({
-        classification,
-        fill,
-        students: students.filter(
-            (student) =>
-                classificationFor(Number(student.cgpa)) === classification,
-        ).length,
-    }));
-}
-
-function classificationFor(cgpa: number): string {
-    if (cgpa >= 4.5) {
-        return 'First Class';
-    }
-
-    if (cgpa >= 3.5) {
-        return 'Second Class Upper';
-    }
-
-    if (cgpa >= 2.4) {
-        return 'Second Class Lower';
-    }
-
-    if (cgpa >= 1.5) {
-        return 'Third Class';
-    }
-
-    return 'Below Third Class';
-}
-
-function gpaTrendRowsFor(
-    students: DashboardStaffStudent[],
-    levels: DashboardLevel[],
-) {
-    return levels
-        .map((academicLevel) => {
-            const level = shortLevelTitle(academicLevel.title);
-            const gpas = students
-                .map((student) =>
-                    student.levelGpas.find((row) => row.level === level),
-                )
-                .filter((row) => row !== undefined)
-                .map((row) => Number(row.gpa));
-
-            return {
-                level,
-                average:
-                    gpas.length === 0
-                        ? 0
-                        : Number(
-                              (
-                                  gpas.reduce((total, gpa) => total + gpa, 0) /
-                                  gpas.length
-                              ).toFixed(2),
-                          ),
-            };
-        })
-        .filter((row) => row.average > 0);
-}
-
-function averageGpa(values: string[]): string {
-    const validValues = values
-        .map((value) => Number(value))
-        .filter((value) => !Number.isNaN(value));
-
-    if (validValues.length === 0) {
-        return '0.00';
-    }
-
-    return (
-        validValues.reduce((total, value) => total + value, 0) /
-        validValues.length
-    ).toFixed(2);
-}
-
-function shortLevelTitle(level: string): string {
-    const match = level.match(/^(\d+)00 Level$/);
-
-    if (match) {
-        return `${match[1]}00L`;
-    }
-
-    return level.replace(' Level', 'L');
 }
 
 function unique(values: Array<string | undefined | null>): string[] {

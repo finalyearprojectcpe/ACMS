@@ -25,6 +25,14 @@ import { section as dashboardSection } from '@/actions/App/Http/Controllers/Dash
 import { ActionLink } from '@/components/action-link';
 import { CopyableValue } from '@/components/copyable-value';
 import {
+    AverageGpaByLevelBarChart,
+    ChartCard,
+    ChartSelect,
+    ResultClassificationPieChart,
+    averageGpaByLevelRows,
+    classificationRowsForStudents,
+} from '@/components/dashboard-charts';
+import {
     FacultyHeadCourseOfferingForm,
     FacultyHeadCoursesDashboard,
 } from '@/components/faculty-head-courses-dashboard';
@@ -203,6 +211,41 @@ function FacultyHeadHome({
 }: {
     facultyHead: DashboardFacultyHead;
 }) {
+    const departmentOptions = useMemo(
+        () => [
+            { value: 'all', label: 'All Departments' },
+            ...facultyHead.departments.map((department) => ({
+                value: department.abbreviation,
+                label: `${department.abbreviation} Department`,
+            })),
+        ],
+        [facultyHead.departments],
+    );
+    const [gpaDepartment, setGpaDepartment] = useState('all');
+    const [classificationDepartment, setClassificationDepartment] =
+        useState('all');
+    const gpaStudents = useMemo(
+        () =>
+            gpaDepartment === 'all'
+                ? facultyHead.students
+                : facultyHead.students.filter(
+                      (student) =>
+                          student.department.abbreviation === gpaDepartment,
+                  ),
+        [facultyHead.students, gpaDepartment],
+    );
+    const classificationStudents = useMemo(
+        () =>
+            classificationDepartment === 'all'
+                ? facultyHead.students
+                : facultyHead.students.filter(
+                      (student) =>
+                          student.department.abbreviation ===
+                          classificationDepartment,
+                  ),
+        [classificationDepartment, facultyHead.students],
+    );
+
     return (
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -224,6 +267,47 @@ function FacultyHeadHome({
                 />
             </div>
 
+            <div className="grid gap-4 xl:grid-cols-2">
+                <ChartCard
+                    title="GPA by Level"
+                    detail="Academic performance across the selected faculty scope."
+                    control={
+                        <ChartSelect
+                            value={gpaDepartment}
+                            options={departmentOptions}
+                            label="Select department"
+                            onChange={setGpaDepartment}
+                        />
+                    }
+                >
+                    <AverageGpaByLevelBarChart
+                        rows={averageGpaByLevelRows(
+                            gpaStudents,
+                            facultyHead.levels,
+                        )}
+                    />
+                </ChartCard>
+
+                <ChartCard
+                    title="Result Class Distribution"
+                    detail="CGPA classification across the selected faculty scope."
+                    control={
+                        <ChartSelect
+                            value={classificationDepartment}
+                            options={departmentOptions}
+                            label="Select department"
+                            onChange={setClassificationDepartment}
+                        />
+                    }
+                >
+                    <ResultClassificationPieChart
+                        rows={classificationRowsForStudents(
+                            classificationStudents,
+                        )}
+                    />
+                </ChartCard>
+            </div>
+
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
                 <NeedsAttentionPanel tasks={facultyHead.pendingTasks} />
                 <PendingSignupPanel
@@ -243,7 +327,9 @@ function FacultyHeadSettingsPage({
 }) {
     return (
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-            <h1 className="text-xl font-semibold tracking-normal">Settings</h1>
+            <h1 className="text-xl font-semibold tracking-normal">
+                Profile Settings
+            </h1>
             <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
                 <div className="grid content-start gap-4">
                     <ProfilePhotoSettingsCard
@@ -1615,9 +1701,7 @@ function FacultyHeadStaffPage({
                                             <TableCell>
                                                 <RoleBadge
                                                     role={member.role}
-                                                    context={
-                                                        member.roleContext
-                                                    }
+                                                    context={member.roleContext}
                                                 />
                                             </TableCell>
                                             <TableCell>

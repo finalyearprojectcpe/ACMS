@@ -1,8 +1,20 @@
 import { Link } from '@inertiajs/react';
 import type { ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 
 import { section as dashboardSection } from '@/actions/App/Http/Controllers/DashboardController';
 import { CopyableValue } from '@/components/copyable-value';
+import {
+    AverageGpaByLevelBarChart,
+    ChartCard,
+    ChartSelect,
+    CountBarChart,
+    ResultClassificationPieChart,
+    averageGpaByLevelRows,
+    classificationRowsForStudents,
+    setChartOptions,
+    studentsForEntrySession,
+} from '@/components/dashboard-charts';
 import { PersonCell } from '@/components/person-cell';
 import { studentSetText } from '@/components/student-set-label';
 import { Badge } from '@/components/ui/badge';
@@ -34,6 +46,48 @@ type StaffHomeDashboardProps = {
 
 export function StaffHomeDashboard({ home }: StaffHomeDashboardProps) {
     const assignedSet = assignedSetLabel(home.assignedSets);
+    const setOptions = useMemo(
+        () => setChartOptions(home.assignedSets),
+        [home.assignedSets],
+    );
+    const [gpaScope, setGpaScope] = useState('assigned');
+    const [classificationScope, setClassificationScope] = useState('assigned');
+    const gpaOptions = useMemo(
+        () => [
+            { value: 'assigned', label: 'Assigned Students' },
+            ...setOptions,
+        ],
+        [setOptions],
+    );
+    const gpaStudents = useMemo(
+        () =>
+            gpaScope === 'assigned'
+                ? home.students
+                : studentsForEntrySession(home.students, gpaScope),
+        [gpaScope, home.students],
+    );
+    const classificationOptions = useMemo(
+        () => [
+            { value: 'assigned', label: 'Assigned Students' },
+            ...setOptions,
+        ],
+        [setOptions],
+    );
+    const classificationStudents = useMemo(
+        () =>
+            classificationScope === 'assigned'
+                ? home.students
+                : studentsForEntrySession(home.students, classificationScope),
+        [classificationScope, home.students],
+    );
+    const carryoverRows = useMemo(
+        () =>
+            home.carryoverSummaries.map((summary) => ({
+                label: summary.code,
+                value: summary.students.length,
+            })),
+        [home.carryoverSummaries],
+    );
 
     return (
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
@@ -53,6 +107,51 @@ export function StaffHomeDashboard({ home }: StaffHomeDashboardProps) {
                     value={home.studentsWithCarryovers}
                     detail="Students needing resits"
                 />
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-2">
+                <ChartCard
+                    title="GPA by Level"
+                    detail="Performance for the selected student scope."
+                    control={
+                        <ChartSelect
+                            value={gpaScope}
+                            options={gpaOptions}
+                            label="Select GPA scope"
+                            onChange={setGpaScope}
+                        />
+                    }
+                >
+                    <AverageGpaByLevelBarChart
+                        rows={averageGpaByLevelRows(gpaStudents, home.levels)}
+                    />
+                </ChartCard>
+
+                <ChartCard
+                    title="Result Class Distribution"
+                    detail="CGPA classification for the selected students."
+                    control={
+                        <ChartSelect
+                            value={classificationScope}
+                            options={classificationOptions}
+                            label="Select result scope"
+                            onChange={setClassificationScope}
+                        />
+                    }
+                >
+                    <ResultClassificationPieChart
+                        rows={classificationRowsForStudents(
+                            classificationStudents,
+                        )}
+                    />
+                </ChartCard>
+
+                <ChartCard
+                    title="Carryovers by Course"
+                    detail="Courses creating the most resit pressure."
+                >
+                    <CountBarChart rows={carryoverRows} dataLabel="Students" />
+                </ChartCard>
             </div>
 
             <div className="grid gap-4 xl:grid-cols-2">
@@ -431,9 +530,7 @@ function EmptyTableRow({
     );
 }
 
-function assignedSetLabel(
-    sets: DashboardStaffHome['assignedSets'],
-): string {
+function assignedSetLabel(sets: DashboardStaffHome['assignedSets']): string {
     if (sets.length === 0) {
         return 'No assigned set';
     }
