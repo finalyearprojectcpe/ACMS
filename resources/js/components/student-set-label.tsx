@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import type { DashboardAcademicSession, DashboardLevel } from '@/types';
 
 type StudentSetLabelProps = {
@@ -29,6 +30,45 @@ export function StudentSetLabel({
     );
 }
 
+export function StudentSetChoiceLabel({
+    entrySession,
+    currentLevel,
+    minimumYearsToDegree,
+    meta,
+    className,
+}: StudentSetLabelProps & {
+    meta?: string;
+}) {
+    return (
+        <span
+            className={cn(
+                'flex min-w-0 flex-1 items-center justify-between gap-3 text-left',
+                className,
+            )}
+        >
+            <span className="min-w-0 truncate font-medium text-foreground">
+                {studentSetName(entrySession)}
+            </span>
+            <span className="ml-auto flex shrink-0 items-center gap-2 text-xs">
+                {meta ? (
+                    <span className="hidden max-w-28 truncate text-muted-foreground sm:inline">
+                        {meta}
+                    </span>
+                ) : null}
+                <span className="font-semibold text-muted-foreground">
+                    {studentSetLevelText(currentLevel, minimumYearsToDegree)}
+                </span>
+            </span>
+        </span>
+    );
+}
+
+export function studentSetName(
+    entrySession: DashboardAcademicSession | null,
+): string {
+    return entrySession === null ? 'No entry set' : `${entrySession.name} Set`;
+}
+
 export function studentSetText({
     entrySession,
     currentLevel,
@@ -38,10 +78,7 @@ export function studentSetText({
     currentLevel: DashboardLevel | null;
     minimumYearsToDegree?: number | null;
 }): string {
-    const setName =
-        entrySession === null ? 'No entry set' : `${entrySession.name} Set`;
-
-    return `${setName} · ${studentSetLevelText(currentLevel, minimumYearsToDegree)}`;
+    return `${studentSetName(entrySession)} · ${studentSetLevelText(currentLevel, minimumYearsToDegree)}`;
 }
 
 export function studentSetLevelText(

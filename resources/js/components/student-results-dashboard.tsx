@@ -1,3 +1,4 @@
+import { GradeDisplay } from '@/components/grade-display';
 import { QualifiedSemester } from '@/components/qualified-semester';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -127,9 +128,8 @@ function ResultsTable({
             <TableHeader>
                 <TableRow>
                     <TableHead className="w-[52%] px-4">Course</TableHead>
-                    <TableHead className="w-[16%] text-center">Units</TableHead>
-                    <TableHead className="w-[16%] text-center">Score</TableHead>
-                    <TableHead className="w-[16%] pr-4 text-center">
+                    <TableHead className="w-[20%] text-center">Units</TableHead>
+                    <TableHead className="w-[20%] pr-4 text-center">
                         Grade
                     </TableHead>
                 </TableRow>
@@ -137,7 +137,7 @@ function ResultsTable({
             <TableBody>
                 {courses.length > 0 ? (
                     courses.map((course) => (
-                        <TableRow key={course.code}>
+                        <TableRow key={course.code} className="odd:bg-muted/25">
                             <TableCell className="px-4">
                                 <div className="flex min-w-0 flex-col gap-0.5">
                                     <span className="font-semibold">
@@ -151,20 +151,15 @@ function ResultsTable({
                             <TableCell className="text-center font-medium tabular-nums">
                                 {course.units}
                             </TableCell>
-                            <TableCell className="text-center font-medium tabular-nums">
-                                {course.score}
-                            </TableCell>
-                            <TableCell
-                                className={`pr-4 text-center text-sm font-semibold ${gradeClass(course.grade)}`}
-                            >
-                                {course.grade}
+                            <TableCell className="pr-4 text-center text-sm">
+                                <GradeDisplay grade={course.grade} />
                             </TableCell>
                         </TableRow>
                     ))
                 ) : (
                     <TableRow>
                         <TableCell
-                            colSpan={4}
+                            colSpan={3}
                             className="px-4 py-6 text-muted-foreground"
                         >
                             No results recorded.
@@ -174,12 +169,4 @@ function ResultsTable({
             </TableBody>
         </Table>
     );
-}
-
-function gradeClass(grade: string): string {
-    if (grade === 'F') {
-        return 'text-destructive';
-    }
-
-    return 'text-foreground';
 }

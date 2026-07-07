@@ -72,6 +72,30 @@ class Department extends Model
     }
 
     /**
+     * @return HasMany<ResultSheet, $this>
+     */
+    public function resultSheets(): HasMany
+    {
+        return $this->hasMany(ResultSheet::class);
+    }
+
+    /**
+     * @return HasMany<Due, $this>
+     */
+    public function dues(): HasMany
+    {
+        return $this->hasMany(Due::class);
+    }
+
+    /**
+     * @return HasMany<PaymentAccount, $this>
+     */
+    public function paymentAccounts(): HasMany
+    {
+        return $this->hasMany(PaymentAccount::class);
+    }
+
+    /**
      * @return Collection<int, AcademicYear>
      */
     public function visibleAcademicYears(): Collection

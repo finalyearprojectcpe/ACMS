@@ -74,6 +74,30 @@ class StaffProfile extends Model
     }
 
     /**
+     * @return HasMany<Due, $this>
+     */
+    public function createdDues(): HasMany
+    {
+        return $this->hasMany(Due::class, 'created_by_staff_profile_id');
+    }
+
+    /**
+     * @return HasMany<PaymentAccount, $this>
+     */
+    public function paymentAccounts(): HasMany
+    {
+        return $this->hasMany(PaymentAccount::class);
+    }
+
+    /**
+     * @return HasMany<CourseRegistration, $this>
+     */
+    public function reviewedCourseRegistrations(): HasMany
+    {
+        return $this->hasMany(CourseRegistration::class, 'reviewer_staff_profile_id');
+    }
+
+    /**
      * @return BelongsToMany<AcademicSession, $this>
      */
     public function advisedEntryAcademicSessions(): BelongsToMany

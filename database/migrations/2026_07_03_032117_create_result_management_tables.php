@@ -1,0 +1,97 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        // Stores a semester result sheet for one department set before and after HOD review.
+        Schema::create('result_sheets', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('school_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('department_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('entry_academic_session_id')->constrained('academic_sessions')->cascadeOnDelete();
+            $table->foreignId('academic_session_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('academic_year_semester_id')->constrained()->restrictOnDelete();
+            $table->foreignId('created_by_user_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('submitted_by_user_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('reviewed_by_user_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->string('status')->default('draft');
+            $table->text('correction_note')->nullable();
+            $table->timestamp('submitted_at')->nullable();
+            $table->timestamp('approved_at')->nullable();
+            $table->timestamp('returned_at')->nullable();
+            $table->timestamps();
+
+            $table->unique(
+                ['department_id', 'entry_academic_session_id', 'academic_session_id', 'academic_year_semester_id'],
+                'result_sheets_context_unique'
+            );
+            $table->index(['department_id', 'status']);
+            $table->index(['school_id', 'academic_session_id']);
+        });
+
+        // Stores the course columns for a result sheet with title and units snapshotted for transcripts.
+        Schema::create('result_sheet_courses', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('result_sheet_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('course_offering_id')->constrained()->restrictOnDelete();
+            $table->string('course_code');
+            $table->string('course_title');
+            $table->unsignedTinyInteger('credit_units');
+            $table->unsignedSmallInteger('sort_order')->default(0);
+            $table->timestamps();
+
+            $table->unique(['result_sheet_id', 'course_code']);
+            $table->index(['course_code', 'result_sheet_id']);
+        });
+
+        // Stores one student row summary in a result sheet, including the calculated semester GPA.
+        Schema::create('student_semester_results', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('result_sheet_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('student_profile_id')->constrained()->cascadeOnDelete();
+            $table->unsignedSmallInteger('total_units')->default(0);
+            $table->unsignedSmallInteger('total_grade_points')->default(0);
+            $table->decimal('gpa', 3, 2)->default(0);
+            $table->timestamps();
+
+            $table->unique(['result_sheet_id', 'student_profile_id'], 'student_semester_results_sheet_student_unique');
+            $table->index(['student_profile_id', 'gpa']);
+        });
+
+        // Stores each grade cell for a student and course in a result sheet.
+        Schema::create('student_course_results', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('student_semester_result_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('result_sheet_course_id')->constrained()->cascadeOnDelete();
+            $table->string('grade', 1);
+            $table->unsignedTinyInteger('grade_point');
+            $table->unsignedSmallInteger('quality_points');
+            $table->timestamps();
+
+            $table->unique(
+                ['student_semester_result_id', 'result_sheet_course_id'],
+                'student_course_results_row_course_unique'
+            );
+            $table->index(['result_sheet_course_id', 'grade']);
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('student_course_results');
+        Schema::dropIfExists('student_semester_results');
+        Schema::dropIfExists('result_sheet_courses');
+        Schema::dropIfExists('result_sheets');
+    }
+};

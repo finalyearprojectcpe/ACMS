@@ -16,6 +16,9 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->redirectGuestsTo('/');
         $middleware->redirectUsersTo('/dashboard');
+        $middleware->validateCsrfTokens(except: [
+            'paystack/webhook',
+        ]);
 
         $middleware->web(append: [
             ResolveCurrentSchool::class,

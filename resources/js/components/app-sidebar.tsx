@@ -1,13 +1,12 @@
 import { Link } from '@inertiajs/react';
 import {
+    RiBankCardLine,
     RiBookOpenLine,
     RiBuilding2Line,
     RiBuildingLine,
     RiCalendarEventLine,
     RiCalendarTodoLine,
     RiCashLine,
-    RiCheckboxCircleLine,
-    RiFileChartLine,
     RiGraduationCapLine,
     RiHome5Line,
     RiLogoutBoxRLine,
@@ -218,7 +217,7 @@ function navigationFor(dashboard: DashboardContext): NavItem[] {
         return hodNavigation();
     }
 
-    return staffNavigation(dashboard.levels, dashboard.courseScheduleLevels);
+    return staffNavigation();
 }
 
 function schoolAdminNavigation(): NavItem[] {
@@ -281,10 +280,7 @@ function facultyHeadNavigation(): NavItem[] {
     ];
 }
 
-function staffNavigation(
-    levels: DashboardLevel[],
-    courseScheduleLevels: DashboardLevel[],
-): NavItem[] {
+function staffNavigation(): NavItem[] {
     return [
         nav('Home', 'home', dashboardHome(), RiHome5Line),
         nav(
@@ -296,29 +292,27 @@ function staffNavigation(
         nav(
             'Course Offerings',
             'courses',
-            undefined,
+            dashboardSection({ section: 'courses' }),
             RiBookOpenLine,
-            levelLinks('courses', courseScheduleLevels),
         ),
         nav(
-            'Grades',
-            'grades',
-            undefined,
+            'Course Registrations',
+            'course-registration',
+            dashboardSection({ section: 'course-registration' }),
+            RiCalendarTodoLine,
+        ),
+        nav(
+            'Result Management',
+            'result-management',
+            dashboardSection({ section: 'result-management' }),
             RiGraduationCapLine,
-            levelLinks('grades', levels),
         ),
-        nav('Dues', 'dues', undefined, RiCashLine, dueLinks(levels)),
+        nav('Dues', 'dues', dashboardSection({ section: 'dues' }), RiCashLine),
         nav(
-            'Reports',
-            'reports',
-            dashboardSection({ section: 'reports' }),
-            RiFileChartLine,
-        ),
-        nav(
-            'Approvals',
-            'approvals',
-            dashboardSection({ section: 'approvals' }),
-            RiCheckboxCircleLine,
+            'Paystack Settings',
+            'payment-settings',
+            dashboardSection({ section: 'payment-settings' }),
+            RiBankCardLine,
         ),
         nav(
             'Profile Settings',
@@ -341,15 +335,15 @@ function studentNavigation(levels: DashboardLevel[]): NavItem[] {
         ),
         nav('Dues', 'dues', dashboardSection({ section: 'dues' }), RiCashLine),
         nav(
-            'Course schedules',
-            'course-schedules',
-            dashboardSection({ section: 'course-schedules' }),
+            'Course Registration',
+            'course-registration',
+            dashboardSection({ section: 'course-registration' }),
             RiCalendarTodoLine,
         ),
         nav(
-            'Profile',
-            'profile',
-            dashboardSection({ section: 'profile' }),
+            'Profile Settings',
+            'profile-settings',
+            dashboardSection({ section: 'profile-settings' }),
             RiUser3Line,
         ),
     ];
@@ -383,6 +377,12 @@ function hodNavigation(): NavItem[] {
             RiGraduationCapLine,
         ),
         nav(
+            'Result Approvals',
+            'result-approvals',
+            dashboardSection({ section: 'result-approvals' }),
+            RiGraduationCapLine,
+        ),
+        nav(
             'Profile Settings',
             'settings',
             dashboardSection({ section: 'settings' }),
@@ -402,7 +402,7 @@ function nav(
 }
 
 function levelLinks(
-    section: 'courses' | 'grades' | 'results',
+    section: 'results',
     levels: DashboardLevel[],
 ): NavSubItem[] {
     return levels.map((level) => ({
@@ -411,18 +411,6 @@ function levelLinks(
         levelSlug: level.slug,
         href: dashboardLevel({
             section,
-            level: level.slug,
-        }),
-    }));
-}
-
-function dueLinks(levels: DashboardLevel[]): NavSubItem[] {
-    return levels.map((level) => ({
-        title: level.title,
-        section: 'dues',
-        levelSlug: level.slug,
-        href: dashboardLevel({
-            section: 'dues',
             level: level.slug,
         }),
     }));

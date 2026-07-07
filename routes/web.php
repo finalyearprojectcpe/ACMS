@@ -24,6 +24,9 @@ Route::middleware('guest')->group(function (): void {
     Route::post('/faculty-head-transfer/{token}', [FacultyHeadTransferController::class, 'store'])->name('faculty-head-transfer.store');
 });
 
+Route::post('/paystack/webhook', [DashboardController::class, 'handlePaystackWebhook'])
+    ->name('paystack.webhook');
+
 Route::middleware('auth')->group(function (): void {
     Route::get('/dashboard', [DashboardController::class, 'home'])->name('dashboard');
     Route::get('/dashboard/academic-sessions/create', [DashboardController::class, 'createAcademicSession'])
@@ -71,8 +74,16 @@ Route::middleware('auth')->group(function (): void {
         ->name('dashboard.settings.faculty-head-password.update');
     Route::patch('/dashboard/settings/hod-password', [DashboardController::class, 'updateHodPassword'])
         ->name('dashboard.settings.hod-password.update');
+    Route::patch('/dashboard/settings/staff-password', [DashboardController::class, 'updateStaffPassword'])
+        ->name('dashboard.settings.staff-password.update');
+    Route::get('/dashboard/payment-settings/create', [DashboardController::class, 'createStaffPaymentAccount'])
+        ->name('dashboard.payment-settings.create');
+    Route::post('/dashboard/payment-settings', [DashboardController::class, 'storeStaffPaymentAccount'])
+        ->name('dashboard.payment-settings.store');
     Route::patch('/dashboard/settings/profile-photo', [DashboardController::class, 'updateProfilePhoto'])
         ->name('dashboard.settings.profile-photo.update');
+    Route::patch('/dashboard/profile-settings', [DashboardController::class, 'updateStudentProfile'])
+        ->name('dashboard.profile-settings.update');
     Route::post('/dashboard/settings/faculty-head-transfer', [DashboardController::class, 'storeFacultyHeadTransfer'])
         ->name('dashboard.settings.faculty-head-transfer.store');
     Route::delete('/dashboard/settings/faculty-head-transfer/{facultyHeadTransfer}', [DashboardController::class, 'destroyFacultyHeadTransfer'])
@@ -97,6 +108,9 @@ Route::middleware('auth')->group(function (): void {
         ->name('dashboard.staff.import');
     Route::post('/dashboard/staff/import', [DashboardController::class, 'storeImportedFacultyStaff'])
         ->name('dashboard.staff.import.store');
+    Route::get('/dashboard/staff/{staffEmail}', [DashboardController::class, 'showStaffProfile'])
+        ->where('staffEmail', '[^/]+')
+        ->name('dashboard.staff.show');
     Route::get('/dashboard/department-staff/import', [DashboardController::class, 'importHodStaff'])
         ->name('dashboard.department-staff.import');
     Route::post('/dashboard/department-staff/import', [DashboardController::class, 'storeImportedHodStaff'])
@@ -156,11 +170,67 @@ Route::middleware('auth')->group(function (): void {
         ->whereIn('semester', ['harmattan', 'rain'])
         ->whereNumber('offering')
         ->name('dashboard.courses.update');
-    Route::get('/dashboard/students/{studentProfile}', [DashboardController::class, 'showStudentProfile'])
-        ->whereNumber('studentProfile')
+    Route::get('/dashboard/results/import', [DashboardController::class, 'createResultSheetImport'])
+        ->name('dashboard.results.import');
+    Route::post('/dashboard/results/import', [DashboardController::class, 'storeResultSheetImport'])
+        ->name('dashboard.results.import.store');
+    Route::get('/dashboard/results/{resultSheet}', [DashboardController::class, 'showResultSheet'])
+        ->whereNumber('resultSheet')
+        ->name('dashboard.results.show');
+    Route::get('/dashboard/result-approvals/{resultSheet}', [DashboardController::class, 'showResultSheetApproval'])
+        ->whereNumber('resultSheet')
+        ->name('dashboard.result-approvals.show');
+    Route::patch('/dashboard/results/{resultSheet}/review', [DashboardController::class, 'reviewResultSheet'])
+        ->whereNumber('resultSheet')
+        ->name('dashboard.results.review');
+    Route::post('/dashboard/course-registration', [DashboardController::class, 'storeCourseRegistration'])
+        ->name('dashboard.course-registration.store');
+    Route::get('/dashboard/course-registration/{courseRegistration}', [DashboardController::class, 'showCourseRegistrationReview'])
+        ->whereNumber('courseRegistration')
+        ->name('dashboard.course-registration.show');
+    Route::patch('/dashboard/course-registration/{courseRegistration}/approve', [DashboardController::class, 'approveCourseRegistration'])
+        ->whereNumber('courseRegistration')
+        ->name('dashboard.course-registration.approve');
+    Route::patch('/dashboard/course-registration/{courseRegistration}/return', [DashboardController::class, 'returnCourseRegistration'])
+        ->whereNumber('courseRegistration')
+        ->name('dashboard.course-registration.return');
+    Route::get('/dashboard/dues/create', [DashboardController::class, 'createStaffDue'])
+        ->name('dashboard.dues.create');
+    Route::post('/dashboard/dues', [DashboardController::class, 'storeStaffDue'])
+        ->name('dashboard.dues.store');
+    Route::get('/dashboard/dues/{due}', [DashboardController::class, 'showStaffDue'])
+        ->whereNumber('due')
+        ->name('dashboard.dues.show');
+    Route::post('/dashboard/dues/assignments/{studentDueAssignment}/pay', [DashboardController::class, 'startDuePayment'])
+        ->whereNumber('studentDueAssignment')
+        ->name('dashboard.dues.payments.store');
+    Route::get('/dashboard/dues/payments/{duePayment}/callback', [DashboardController::class, 'handleDuePaymentCallback'])
+        ->whereNumber('duePayment')
+        ->name('dashboard.dues.payments.callback');
+    Route::get('/dashboard/dues/payments/{duePayment}/receipt', [DashboardController::class, 'downloadDuePaymentReceipt'])
+        ->whereNumber('duePayment')
+        ->name('dashboard.dues.payments.receipt');
+    Route::get('/dashboard/students/{registrationNumber}/statement-of-results', [DashboardController::class, 'downloadStudentStatement'])
+        ->where('registrationNumber', '[^/]+')
+        ->name('dashboard.students.statement');
+    Route::get('/dashboard/students/{registrationNumber}', [DashboardController::class, 'showStudentProfile'])
+        ->where('registrationNumber', '[^/]+')
         ->name('dashboard.students.show');
+    Route::redirect('/dashboard/grades', '/dashboard/result-management');
+    Route::redirect('/dashboard/grades/{level}', '/dashboard/result-management')
+        ->whereIn('level', ['100-level', '200-level', '300-level', '400-level', '500-level', '600-level', '700-level']);
+    Route::get('/dashboard/courses/{level}', fn (string $level) => redirect()->route('dashboard.section', [
+        'section' => 'courses',
+        'level' => $level,
+    ]))->whereIn('level', ['100-level', '200-level', '300-level', '400-level', '500-level', '600-level', '700-level']);
+    Route::redirect('/dashboard/course-schedules', '/dashboard/course-registration');
+    Route::redirect('/dashboard/profile', '/dashboard/profile-settings');
+    Route::get('/dashboard/dues/{level}', fn (string $level) => redirect()->route('dashboard.section', [
+        'section' => 'dues',
+        'level' => $level,
+    ]))->whereIn('level', ['100-level', '200-level', '300-level', '400-level', '500-level', '600-level', '700-level']);
     Route::get('/dashboard/{section}/{level}', [DashboardController::class, 'level'])
-        ->whereIn('section', ['courses', 'grades', 'dues', 'results'])
+        ->whereIn('section', ['results'])
         ->whereIn('level', ['100-level', '200-level', '300-level', '400-level', '500-level', '600-level', '700-level'])
         ->name('dashboard.level');
     Route::get('/dashboard/{section}', [DashboardController::class, 'section'])
@@ -173,18 +243,18 @@ Route::middleware('auth')->group(function (): void {
             'staff',
             'students',
             'courses',
-            'grades',
+            'result-management',
             'dues',
-            'reports',
-            'approvals',
+            'payment-settings',
             'settings',
             'results',
             'student-results',
-            'course-schedules',
-            'profile',
+            'result-approvals',
+            'course-registration',
+            'profile-settings',
         ])
         ->name('dashboard.section');
-    Route::redirect('/profile', '/dashboard/profile');
+    Route::redirect('/profile', '/dashboard/profile-settings');
 
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
 });

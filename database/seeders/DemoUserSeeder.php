@@ -8,14 +8,26 @@ use App\Models\AcademicYear;
 use App\Models\AcademicYearSemester;
 use App\Models\ApprovalRequest;
 use App\Models\Course;
+use App\Models\CourseOffering;
+use App\Models\CourseRegistration;
+use App\Models\CourseRegistrationItem;
 use App\Models\Department;
+use App\Models\Due;
+use App\Models\DuePayment;
 use App\Models\EmailDelivery;
 use App\Models\Faculty;
 use App\Models\ImportBatch;
+use App\Models\PaymentAccount;
+use App\Models\ResultSheet;
+use App\Models\ResultSheetCourse;
 use App\Models\School;
 use App\Models\Semester;
 use App\Models\StaffProfile;
+use App\Models\StudentDueAssignment;
+use App\Models\StudentProfile;
 use App\Models\User;
+use App\Services\GpaCalculator;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -74,6 +86,9 @@ class DemoUserSeeder extends Seeder
         $academicSessions->each(
             fn (AcademicSession $academicSession) => $this->seedCourses($faculty, $department, $academicSession),
         );
+        $this->seedResultSheets($faculty, $department, $staffProfiles);
+        $this->seedCourseRegistrations($faculty, $department, $staffProfiles);
+        $this->seedDues($department, $staffProfiles);
         $this->seedFacultyHeadDemoData($faculty, $facultyHead);
     }
 
@@ -548,6 +563,676 @@ class DemoUserSeeder extends Seeder
         foreach ($this->coursePrerequisites() as $courseCode => $prerequisiteCode) {
             $courses->get($courseCode)->addPrerequisite($courses->get($prerequisiteCode));
         }
+    }
+
+    /**
+     * @param  Collection<string, StaffProfile>  $staffProfiles
+     */
+    private function seedResultSheets(Faculty $faculty, Department $department, Collection $staffProfiles): void
+    {
+        $students = $department->studentProfiles()
+            ->with(['user', 'currentAcademicYear', 'entryAcademicSession'])
+            ->get()
+            ->groupBy('entry_academic_session_id');
+        $semesters = Semester::query()
+            ->whereIn('slug', ['harmattan', 'rain'])
+            ->orderBy('sort_order')
+            ->get();
+
+        foreach ($students as $entryAcademicSessionId => $setStudents) {
+            $entryAcademicSession = AcademicSession::query()->find($entryAcademicSessionId);
+
+            if (! $entryAcademicSession instanceof AcademicSession) {
+                continue;
+            }
+
+            $currentLevelId = (int) $setStudents->max('current_academic_year_id');
+
+            for ($levelId = 1; $levelId <= $currentLevelId; $levelId++) {
+                $level = AcademicYear::query()->find($levelId);
+                $academicSession = $this->academicSessionForEntryLevel($faculty->school, $entryAcademicSession, $levelId);
+
+                if (! $level instanceof AcademicYear || ! $academicSession instanceof AcademicSession) {
+                    continue;
+                }
+
+                foreach ($semesters as $semester) {
+                    $status = match (true) {
+                        $entryAcademicSession->name === '2023/2024'
+                            && $level->slug === '300-level'
+                            && $semester->slug === 'rain' => ResultSheet::StatusSubmitted,
+                        $entryAcademicSession->name === '2024/2025'
+                            && $level->slug === '200-level'
+                            && $semester->slug === 'rain' => ResultSheet::StatusReturned,
+                        $entryAcademicSession->name === '2025/2026'
+                            && $level->slug === '100-level'
+                            && $semester->slug === 'harmattan' => ResultSheet::StatusDraft,
+                        default => ResultSheet::StatusApproved,
+                    };
+
+                    $this->seedResultSheet(
+                        $faculty,
+                        $department,
+                        $staffProfiles,
+                        $setStudents->filter(fn (StudentProfile $studentProfile): bool => (int) $studentProfile->current_academic_year_id >= $levelId)->values(),
+                        $entryAcademicSession,
+                        $academicSession,
+                        $level,
+                        $semester,
+                        $status,
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * @param  Collection<string, StaffProfile>  $staffProfiles
+     */
+    private function seedDues(Department $department, Collection $staffProfiles): void
+    {
+        $currentAcademicSession = $this->academicSessionByName($department->faculty->school, '2025/2026');
+        $studentsBySet = $department->studentProfiles()
+            ->with(['currentAcademicYear', 'entryAcademicSession', 'user'])
+            ->whereNotNull('entry_academic_session_id')
+            ->get()
+            ->groupBy('entry_academic_session_id');
+
+        foreach ($studentsBySet as $entryAcademicSessionId => $students) {
+            $entryAcademicSession = AcademicSession::query()->find($entryAcademicSessionId);
+
+            if (! $entryAcademicSession instanceof AcademicSession) {
+                continue;
+            }
+
+            $level = AcademicYear::query()->find((int) $students->max('current_academic_year_id'));
+            $levelName = $level?->name ?? 'Current Level';
+            $advisor = $this->advisorForEntrySession($staffProfiles, $entryAcademicSession)
+                ?? $staffProfiles->first();
+            $paymentAccount = $advisor instanceof StaffProfile
+                ? $this->seedPaymentAccount($department, $advisor, $entryAcademicSession, $levelName)
+                : null;
+
+            foreach ($this->duesForLevel($levelName) as $index => $dueData) {
+                $due = Due::query()->updateOrCreate(
+                    [
+                        'department_id' => $department->id,
+                        'entry_academic_session_id' => $entryAcademicSession->id,
+                        'title' => $dueData['title'],
+                    ],
+                    [
+                        'school_id' => $department->faculty->school_id,
+                        'academic_session_id' => $currentAcademicSession->id,
+                        'created_by_staff_profile_id' => $advisor?->id,
+                        'payment_account_id' => $paymentAccount?->id,
+                        'description' => $dueData['description'],
+                        'amount_kobo' => $dueData['amount_kobo'],
+                        'currency' => 'NGN',
+                        'due_on' => now()->addDays(21 + $index * 7)->toDateString(),
+                        'status' => Due::StatusPublished,
+                        'published_at' => now()->subDays(5),
+                    ],
+                );
+
+                foreach ($students as $student) {
+                    $assignment = StudentDueAssignment::query()->updateOrCreate(
+                        [
+                            'due_id' => $due->id,
+                            'student_profile_id' => $student->id,
+                        ],
+                        [
+                            'amount_kobo' => $due->amount_kobo,
+                            'status' => StudentDueAssignment::StatusPending,
+                            'paid_at' => null,
+                            'latest_due_payment_id' => null,
+                        ],
+                    );
+
+                    if (((int) substr($student->registration_number, -1) + $index) % 3 === 0) {
+                        $payment = DuePayment::query()->updateOrCreate(
+                            [
+                                'reference' => "DUE-DEMO-{$due->id}-{$student->id}",
+                            ],
+                            [
+                                'student_due_assignment_id' => $assignment->id,
+                                'student_profile_id' => $student->id,
+                                'school_id' => $department->faculty->school_id,
+                                'payment_account_id' => $paymentAccount?->id,
+                                'provider' => DuePayment::ProviderPaystack,
+                                'status' => DuePayment::StatusSuccess,
+                                'amount_kobo' => $assignment->amount_kobo,
+                                'currency' => 'NGN',
+                                'authorization_url' => null,
+                                'access_code' => null,
+                                'paystack_transaction_id' => 'demo-'.$due->id.'-'.$student->id,
+                                'channel' => 'card',
+                                'fees_kobo' => 15000,
+                                'gateway_response' => 'Successful',
+                                'paid_at' => now()->subDays(2 + $index),
+                                'receipt_number' => sprintf('GM-DEMO-%03d-%03d', $due->id, $student->id),
+                                'provider_payload' => ['demo' => true],
+                            ],
+                        );
+
+                        $assignment->forceFill([
+                            'status' => StudentDueAssignment::StatusPaid,
+                            'paid_at' => $payment->paid_at,
+                            'latest_due_payment_id' => $payment->id,
+                        ])->save();
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * @param  Collection<string, StaffProfile>  $staffProfiles
+     */
+    private function seedCourseRegistrations(Faculty $faculty, Department $department, Collection $staffProfiles): void
+    {
+        $currentAcademicSession = $this->academicSessionByName($faculty->school, '2025/2026');
+        $harmattan = Semester::query()->where('slug', 'harmattan')->firstOrFail();
+        $rain = Semester::query()->where('slug', 'rain')->firstOrFail();
+        $students = $department->studentProfiles()
+            ->with(['currentAcademicYear', 'entryAcademicSession'])
+            ->get();
+
+        foreach ($students as $student) {
+            if (! $student->currentAcademicYear instanceof AcademicYear || ! $student->entryAcademicSession instanceof AcademicSession) {
+                continue;
+            }
+
+            $status = match ($student->registration_number) {
+                '2025000001', '2022000004' => CourseRegistration::StatusSubmitted,
+                '2023000003' => CourseRegistration::StatusReturned,
+                '2024000002', '2021000005' => CourseRegistration::StatusApproved,
+                default => CourseRegistration::StatusDraft,
+            };
+
+            $this->seedCourseRegistration(
+                $faculty,
+                $department,
+                $staffProfiles,
+                $student,
+                $currentAcademicSession,
+                $student->currentAcademicYear,
+                $harmattan,
+                $status,
+                $student->registration_number === '2023000003',
+            );
+
+            $previousLevel = AcademicYear::query()
+                ->where('id', (int) $student->currentAcademicYear->id - 1)
+                ->first();
+
+            if ($previousLevel instanceof AcademicYear) {
+                $previousAcademicSession = $this->academicSessionForEntryLevel(
+                    $faculty->school,
+                    $student->entryAcademicSession,
+                    (int) $previousLevel->id,
+                );
+
+                if ($previousAcademicSession instanceof AcademicSession) {
+                    $this->seedCourseRegistration(
+                        $faculty,
+                        $department,
+                        $staffProfiles,
+                        $student,
+                        $previousAcademicSession,
+                        $previousLevel,
+                        $rain,
+                        CourseRegistration::StatusApproved,
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * @param  Collection<string, StaffProfile>  $staffProfiles
+     */
+    private function seedCourseRegistration(
+        Faculty $faculty,
+        Department $department,
+        Collection $staffProfiles,
+        StudentProfile $student,
+        AcademicSession $academicSession,
+        AcademicYear $level,
+        Semester $semester,
+        string $status,
+        bool $includeCarryover = false,
+    ): void {
+        $academicYearSemester = $this->academicYearSemester($level->slug, $semester->slug);
+        $advisor = $student->entryAcademicSession instanceof AcademicSession
+            ? $this->advisorForEntrySession($staffProfiles, $student->entryAcademicSession)
+            : null;
+        $isDraft = $status === CourseRegistration::StatusDraft;
+        $isReviewed = in_array($status, [CourseRegistration::StatusApproved, CourseRegistration::StatusReturned], true);
+
+        $registration = CourseRegistration::query()->updateOrCreate(
+            [
+                'student_profile_id' => $student->id,
+                'academic_session_id' => $academicSession->id,
+                'academic_year_semester_id' => $academicYearSemester->id,
+            ],
+            [
+                'school_id' => $faculty->school_id,
+                'department_id' => $department->id,
+                'reviewer_staff_profile_id' => $advisor?->id,
+                'status' => $status,
+                'feedback_note' => $status === CourseRegistration::StatusReturned
+                    ? 'Remove the extra elective and send the course registration again.'
+                    : null,
+                'submitted_at' => $isDraft ? null : now()->subDays($isReviewed ? 6 : 2),
+                'reviewed_at' => $isReviewed ? now()->subDays(3) : null,
+            ],
+        );
+
+        $registration->items()->delete();
+
+        $offerings = $this->courseOfferingsForResultSheet($faculty, $department, $academicSession, $academicYearSemester)
+            ->filter(fn (CourseOffering $offering): bool => (bool) $offering->is_mandatory
+                || crc32($student->registration_number.$offering->course->code) % 2 === 0)
+            ->values();
+
+        if ($includeCarryover) {
+            $carryoverOffering = $this->courseOfferingForCode($faculty, $department, $academicSession, 'CPE 204');
+
+            if ($carryoverOffering instanceof CourseOffering) {
+                $offerings->push($carryoverOffering);
+            }
+        }
+
+        $offerings
+            ->unique(fn (CourseOffering $offering): int => (int) $offering->id)
+            ->sortBy(fn (CourseOffering $offering): string => $offering->course->code)
+            ->values()
+            ->each(function (CourseOffering $offering) use ($department, $registration, $includeCarryover): void {
+                $isCarryover = $includeCarryover && $offering->course->code === 'CPE 204';
+
+                $registration->items()->create([
+                    'course_offering_id' => $offering->id,
+                    'source' => $isCarryover
+                        ? CourseRegistrationItem::SourceCarryover
+                        : ($offering->is_mandatory ? CourseRegistrationItem::SourceCurrentSet : CourseRegistrationItem::SourceElective),
+                    'category' => $this->courseRegistrationCategory($department, $offering),
+                    'course_code' => $offering->course->code,
+                    'course_title' => $offering->course->title,
+                    'credit_units' => (int) $offering->course->credit_units,
+                ]);
+            });
+    }
+
+    private function courseOfferingForCode(
+        Faculty $faculty,
+        Department $department,
+        AcademicSession $academicSession,
+        string $courseCode,
+    ): ?CourseOffering {
+        $query = CourseOffering::query()
+            ->with('course')
+            ->where('academic_session_id', $academicSession->id)
+            ->whereHas('course', fn ($query) => $query->where('code', $courseCode));
+
+        $this->whereDemoOfferingOwner($query, $faculty, $department);
+
+        return $query->first();
+    }
+
+    private function courseRegistrationCategory(Department $department, CourseOffering $offering): string
+    {
+        if (! $offering->is_mandatory) {
+            return 'Elective Course';
+        }
+
+        return $offering->owner_type === Department::class && (int) $offering->owner_id === (int) $department->id
+            ? 'Departmental Course'
+            : 'Faculty Course';
+    }
+
+    private function seedPaymentAccount(
+        Department $department,
+        StaffProfile $staffProfile,
+        AcademicSession $entryAcademicSession,
+        string $levelName,
+    ): PaymentAccount {
+        $accountNumber = sprintf('30%08d', $entryAcademicSession->id);
+        $accountCode = Str::of($department->abbreviation.'-'.$entryAcademicSession->name)
+            ->replace('/', '-')
+            ->upper()
+            ->toString();
+
+        return PaymentAccount::query()->updateOrCreate(
+            [
+                'department_id' => $department->id,
+                'staff_profile_id' => $staffProfile->id,
+                'entry_academic_session_id' => $entryAcademicSession->id,
+            ],
+            [
+                'school_id' => $department->faculty->school_id,
+                'provider' => PaymentAccount::ProviderPaystack,
+                'label' => "{$levelName} dues payout",
+                'business_name' => "{$department->abbreviation} {$levelName} Dues",
+                'bank_code' => '058',
+                'bank_name' => 'Guaranty Trust Bank',
+                'account_number' => $accountNumber,
+                'account_number_last4' => substr($accountNumber, -4),
+                'account_name' => $staffProfile->user->name,
+                'paystack_subaccount_code' => "ACCT_DEMO_{$accountCode}",
+                'status' => PaymentAccount::StatusActive,
+                'verified_at' => now()->subDays(10),
+                'activated_at' => now()->subDays(10),
+                'provider_payload' => [
+                    'demo' => true,
+                    'source' => 'DemoUserSeeder',
+                ],
+            ],
+        );
+    }
+
+    /**
+     * @return array<int, array{title: string, description: string, amount_kobo: int}>
+     */
+    private function duesForLevel(string $levelName): array
+    {
+        return [
+            [
+                'title' => "Departmental Dues {$levelName}",
+                'description' => 'Department levy.',
+                'amount_kobo' => 1500000,
+            ],
+            [
+                'title' => "Student Association Levy {$levelName}",
+                'description' => 'Student association levy.',
+                'amount_kobo' => 500000,
+            ],
+        ];
+    }
+
+    /**
+     * @param  Collection<string, StaffProfile>  $staffProfiles
+     * @param  Collection<int, StudentProfile>  $students
+     */
+    private function seedResultSheet(
+        Faculty $faculty,
+        Department $department,
+        Collection $staffProfiles,
+        Collection $students,
+        AcademicSession $entryAcademicSession,
+        AcademicSession $academicSession,
+        AcademicYear $level,
+        Semester $semester,
+        string $status,
+    ): void {
+        $academicYearSemester = $this->academicYearSemester($level->slug, $semester->slug);
+        $advisor = $this->advisorForEntrySession($staffProfiles, $entryAcademicSession)
+            ?? $staffProfiles->first();
+        $offerings = $this->courseOfferingsForResultSheet($faculty, $department, $academicSession, $academicYearSemester);
+        $courses = $offerings
+            ->map(fn (CourseOffering $offering): array => [
+                'course_offering_id' => $offering->id,
+                'code' => $offering->course->code,
+                'title' => $offering->course->title,
+                'credit_units' => (int) $offering->course->credit_units,
+                'is_mandatory' => (bool) $offering->is_mandatory,
+            ])
+            ->merge($this->seededCarryoverCoursesForResultSheet($faculty, $department, $entryAcademicSession, $academicSession, $level, $semester))
+            ->values()
+            ->all();
+
+        if ($courses === [] || $students->isEmpty()) {
+            return;
+        }
+
+        $hodUserId = $department->hod_staff_profile_id === null
+            ? null
+            : StaffProfile::query()->find($department->hod_staff_profile_id)?->user_id;
+        $isDraft = $status === ResultSheet::StatusDraft;
+        $isSubmitted = $status === ResultSheet::StatusSubmitted;
+        $isReturned = $status === ResultSheet::StatusReturned;
+        $isApproved = $status === ResultSheet::StatusApproved;
+
+        $sheet = ResultSheet::query()->updateOrCreate(
+            [
+                'department_id' => $department->id,
+                'entry_academic_session_id' => $entryAcademicSession->id,
+                'academic_session_id' => $academicSession->id,
+                'academic_year_semester_id' => $academicYearSemester->id,
+            ],
+            [
+                'school_id' => $faculty->school_id,
+                'created_by_user_id' => $advisor?->user_id,
+                'submitted_by_user_id' => $isDraft ? null : $advisor?->user_id,
+                'reviewed_by_user_id' => $isApproved || $isReturned ? $hodUserId : null,
+                'status' => $status,
+                'correction_note' => $isReturned
+                    ? 'Confirm the missing grade entries and send the sheet again.'
+                    : null,
+                'submitted_at' => $isDraft ? null : now()->subDays($isSubmitted ? 2 : 14),
+                'approved_at' => $isApproved ? now()->subDays(8) : null,
+                'returned_at' => $isReturned ? now()->subDays(3) : null,
+            ],
+        );
+
+        $sheet->courses()->delete();
+        $sheet->studentResults()->delete();
+
+        $sheetCourses = collect($courses)
+            ->mapWithKeys(fn (array $course, int $index): array => [
+                $course['code'] => $sheet->courses()->create([
+                    'course_offering_id' => $course['course_offering_id'],
+                    'course_code' => $course['code'],
+                    'course_title' => $course['title'],
+                    'credit_units' => $course['credit_units'],
+                    'sort_order' => $index + 1,
+                ]),
+            ]);
+        $calculator = app(GpaCalculator::class);
+
+        foreach ($students as $student) {
+            $gradedCourses = collect($courses)
+                ->filter(fn (array $course): bool => $this->studentTakesSeededCourse($student, $course))
+                ->map(fn (array $course): array => [
+                    'course' => $course,
+                    'grade' => $this->seededGradeFor($student, $level, $semester, $course['code']),
+                ])
+                ->values();
+
+            if ($gradedCourses->isEmpty()) {
+                continue;
+            }
+
+            $summary = $calculator->semesterSummary(
+                $gradedCourses
+                    ->map(fn (array $row): array => [
+                        'credit_units' => $row['course']['credit_units'],
+                        'grade' => $row['grade'],
+                    ])
+                    ->all(),
+            );
+            $studentResult = $sheet->studentResults()->create([
+                'student_profile_id' => $student->id,
+                'total_units' => $summary['total_units'],
+                'total_grade_points' => $summary['total_grade_points'],
+                'gpa' => $summary['gpa'],
+            ]);
+
+            foreach ($gradedCourses as $row) {
+                /** @var ResultSheetCourse $sheetCourse */
+                $sheetCourse = $sheetCourses->get($row['course']['code']);
+                $gradePoint = $calculator->gradePoint($row['grade']);
+
+                $studentResult->courseResults()->create([
+                    'result_sheet_course_id' => $sheetCourse->id,
+                    'grade' => $row['grade'],
+                    'grade_point' => $gradePoint,
+                    'quality_points' => $gradePoint * (int) $row['course']['credit_units'],
+                ]);
+            }
+        }
+    }
+
+    private function academicSessionForEntryLevel(School $school, AcademicSession $entryAcademicSession, int $levelId): ?AcademicSession
+    {
+        if (preg_match('/^(?<start>\d{4})\/(?<end>\d{4})$/', $entryAcademicSession->name, $matches) !== 1) {
+            return null;
+        }
+
+        $startYear = (int) $matches['start'] + $levelId - 1;
+
+        return $school->academicSessions()
+            ->where('name', $startYear.'/'.($startYear + 1))
+            ->first();
+    }
+
+    /**
+     * @param  Collection<string, StaffProfile>  $staffProfiles
+     */
+    private function advisorForEntrySession(Collection $staffProfiles, AcademicSession $entryAcademicSession): ?StaffProfile
+    {
+        return match ($entryAcademicSession->name) {
+            '2025/2026' => $staffProfiles->get('staff2@futo.edu'),
+            '2024/2025' => $staffProfiles->get('staff3@futo.edu'),
+            '2023/2024' => $staffProfiles->get('staff4@futo.edu'),
+            '2022/2023' => $staffProfiles->get('staff5@futo.edu'),
+            '2021/2022' => $staffProfiles->get('staff6@futo.edu'),
+            default => null,
+        };
+    }
+
+    /**
+     * @return Collection<int, CourseOffering>
+     */
+    private function courseOfferingsForResultSheet(
+        Faculty $faculty,
+        Department $department,
+        AcademicSession $academicSession,
+        AcademicYearSemester $academicYearSemester,
+    ): Collection {
+        $query = CourseOffering::query()
+            ->with('course')
+            ->where('academic_session_id', $academicSession->id)
+            ->where('academic_year_semester_id', $academicYearSemester->id);
+
+        $this->whereDemoOfferingOwner($query, $faculty, $department);
+
+        return $query
+            ->get()
+            ->sortBy(fn (CourseOffering $offering): string => $offering->course->code)
+            ->values();
+    }
+
+    private function whereDemoOfferingOwner(Builder $query, Faculty $faculty, Department $department): void
+    {
+        $query->where(function (Builder $query) use ($faculty, $department): void {
+            $query->where(function (Builder $query) use ($faculty): void {
+                $query
+                    ->where('owner_type', Faculty::class)
+                    ->where('owner_id', $faculty->id);
+            })->orWhere(function (Builder $query) use ($department): void {
+                $query
+                    ->where('owner_type', Department::class)
+                    ->where('owner_id', $department->id);
+            });
+        });
+    }
+
+    /**
+     * @return array<int, array{course_offering_id: int, code: string, title: string, credit_units: int, is_mandatory: bool, carryover_registration_number: string}>
+     */
+    private function seededCarryoverCoursesForResultSheet(
+        Faculty $faculty,
+        Department $department,
+        AcademicSession $entryAcademicSession,
+        AcademicSession $academicSession,
+        AcademicYear $level,
+        Semester $semester,
+    ): array {
+        if ($entryAcademicSession->name !== '2023/2024' || $level->slug !== '300-level' || $semester->slug !== 'harmattan') {
+            return [];
+        }
+
+        $carryoverOffering = CourseOffering::query()
+            ->with('course')
+            ->where('academic_session_id', $academicSession->id)
+            ->where(function ($query) use ($faculty, $department): void {
+                $query->where(function ($query) use ($faculty): void {
+                    $query
+                        ->where('owner_type', Faculty::class)
+                        ->where('owner_id', $faculty->id);
+                })->orWhere(function ($query) use ($department): void {
+                    $query
+                        ->where('owner_type', Department::class)
+                        ->where('owner_id', $department->id);
+                });
+            })
+            ->whereHas('course', fn ($query) => $query->where('code', 'CPE 204'))
+            ->first();
+
+        if (! $carryoverOffering instanceof CourseOffering) {
+            return [];
+        }
+
+        return [
+            [
+                'course_offering_id' => (int) $carryoverOffering->id,
+                'code' => $carryoverOffering->course->code,
+                'title' => $carryoverOffering->course->title,
+                'credit_units' => (int) $carryoverOffering->course->credit_units,
+                'is_mandatory' => false,
+                'carryover_registration_number' => '2023000003',
+            ],
+        ];
+    }
+
+    /**
+     * @param  array{code: string, title: string, credit_units: int, is_mandatory: bool, carryover_registration_number?: string}  $course
+     */
+    private function studentTakesSeededCourse(StudentProfile $student, array $course): bool
+    {
+        if (isset($course['carryover_registration_number'])) {
+            return $student->registration_number === $course['carryover_registration_number'];
+        }
+
+        if ($course['is_mandatory']) {
+            return true;
+        }
+
+        return crc32($student->registration_number.$course['code']) % 2 === 0;
+    }
+
+    private function seededGradeFor(
+        StudentProfile $student,
+        AcademicYear $level,
+        Semester $semester,
+        string $courseCode,
+    ): string {
+        if (
+            $student->registration_number === '2023000003'
+            && $level->slug === '300-level'
+            && $semester->slug === 'harmattan'
+            && $courseCode === 'CPE 204'
+        ) {
+            return 'B';
+        }
+
+        if (
+            $student->registration_number === '2023000003'
+            && $level->slug === '200-level'
+            && $semester->slug === 'rain'
+            && $courseCode === 'CPE 204'
+        ) {
+            return 'F';
+        }
+
+        return match (abs(crc32($student->registration_number.$level->slug.$semester->slug.$courseCode)) % 6) {
+            0 => 'A',
+            1 => 'B',
+            2 => 'B',
+            3 => 'C',
+            4 => 'D',
+            default => 'E',
+        };
     }
 
     private function academicYearSemester(string $academicYearSlug, string $semesterSlug): AcademicYearSemester

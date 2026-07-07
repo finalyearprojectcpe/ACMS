@@ -44,6 +44,7 @@ type CourseOfferingBrowserProps = {
     session: Pick<DashboardAcademicSession, 'name'> | null;
     sessions?: DashboardAcademicSession[];
     selectedSessionId?: string;
+    headerControl?: ReactNode;
     onSessionChange?: (sessionId: string) => void;
     onSelectionChange?: (
         level: DashboardLevel,
@@ -67,6 +68,7 @@ export function CourseOfferingBrowser({
     session,
     sessions = [],
     selectedSessionId,
+    headerControl,
     onSessionChange,
     onSelectionChange,
     renderHeaderAction,
@@ -136,29 +138,36 @@ export function CourseOfferingBrowser({
                     ) : null}
                 </div>
 
-                {sessions.length > 0 && onSessionChange ? (
-                    <Field className="lg:w-72">
-                        <FieldLabel>Academic Session</FieldLabel>
-                        <Select
-                            value={selectedSessionId ?? ''}
-                            onValueChange={onSessionChange}
-                        >
-                            <SelectTrigger aria-label="Academic session">
-                                <SelectValue placeholder="Select session" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {sessions.map((sessionOption) => (
-                                    <SelectItem
-                                        key={sessionOption.id}
-                                        value={sessionOption.id.toString()}
-                                    >
-                                        {sessionDisplayName(sessionOption)} ·{' '}
-                                        {sessionOption.status}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </Field>
+                {headerControl || (sessions.length > 0 && onSessionChange) ? (
+                    <div className="grid gap-3 sm:grid-cols-2 lg:flex lg:items-end">
+                        {headerControl}
+                        {sessions.length > 0 && onSessionChange ? (
+                            <Field className="lg:w-72">
+                                <FieldLabel>Academic Session</FieldLabel>
+                                <Select
+                                    value={selectedSessionId ?? ''}
+                                    onValueChange={onSessionChange}
+                                >
+                                    <SelectTrigger aria-label="Academic session">
+                                        <SelectValue placeholder="Select session" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {sessions.map((sessionOption) => (
+                                            <SelectItem
+                                                key={sessionOption.id}
+                                                value={sessionOption.id.toString()}
+                                            >
+                                                {sessionDisplayName(
+                                                    sessionOption,
+                                                )}{' '}
+                                                · {sessionOption.status}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </Field>
+                        ) : null}
+                    </div>
                 ) : null}
             </div>
 

@@ -14,6 +14,7 @@ type CopyableValueProps = {
     className?: string;
     valueClassName?: string;
     emptyLabel?: string;
+    fullWidth?: boolean;
 };
 
 export function CopyableValue({
@@ -21,6 +22,7 @@ export function CopyableValue({
     className,
     valueClassName,
     emptyLabel = 'Not set',
+    fullWidth = false,
 }: CopyableValueProps) {
     const [copied, setCopied] = useState(false);
     const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -45,7 +47,8 @@ export function CopyableValue({
     return (
         <div
             className={cn(
-                'inline-flex h-8 max-w-full items-stretch overflow-hidden rounded-md border border-border bg-muted/60 align-middle text-foreground shadow-xs transition-colors',
+                'inline-flex h-8 w-fit max-w-full items-stretch overflow-hidden rounded-md border border-border bg-muted/60 align-middle text-foreground shadow-xs transition-colors',
+                fullWidth && 'w-full',
                 copied &&
                     'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300',
                 className,
@@ -54,7 +57,8 @@ export function CopyableValue({
             <span
                 title={copyValue || undefined}
                 className={cn(
-                    'flex min-w-0 items-center truncate px-2.5 font-mono text-sm font-semibold tracking-normal tabular-nums',
+                    'flex min-w-0 max-w-[min(18rem,calc(100vw-5rem))] items-center truncate px-2.5 font-mono text-sm font-semibold tracking-normal tabular-nums',
+                    fullWidth && 'max-w-none flex-1',
                     !canCopy && 'text-muted-foreground',
                     valueClassName,
                 )}
@@ -69,7 +73,7 @@ export function CopyableValue({
                             type="button"
                             variant="ghost"
                             size="icon-xs"
-                            className="h-full w-8 rounded-none border-l border-border bg-background/45 text-muted-foreground hover:bg-background hover:text-foreground"
+                            className="h-full w-8 shrink-0 rounded-none border-l border-border bg-background/45 text-muted-foreground hover:bg-background hover:text-foreground"
                             aria-label={copied ? 'Copied' : 'Copy'}
                             onClick={() => void copyToClipboard()}
                         >

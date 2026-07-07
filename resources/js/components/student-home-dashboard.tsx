@@ -3,11 +3,6 @@ import type { ReactNode } from 'react';
 
 import { section as dashboardSection } from '@/actions/App/Http/Controllers/DashboardController';
 import {
-    ChartCard,
-    SetGpaProgressBarChart,
-    gpaRowsForLevels,
-} from '@/components/dashboard-charts';
-import {
     QualifiedSemester,
     qualifiedSemesterLabel,
 } from '@/components/qualified-semester';
@@ -39,7 +34,7 @@ export function StudentHomeDashboard({ home }: StudentHomeDashboardProps) {
 
     return (
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-3">
                 <MetricBlock
                     label="CGPA"
                     value={home.cgpa}
@@ -50,16 +45,13 @@ export function StudentHomeDashboard({ home }: StudentHomeDashboardProps) {
                     value={home.totalCourseUnits}
                     detail={`For ${semesterLabel}`}
                 />
-            </div>
-
-            <ChartCard
-                title="GPA Progress"
-                detail="Your recorded GPA by level."
-            >
-                <SetGpaProgressBarChart
-                    rows={gpaRowsForLevels(home.gpaProgress, home.levels)}
+                <MetricBlock
+                    label="Course Adviser"
+                    value={home.courseAdvisor}
+                    detail="Reviews course registration"
+                    valueClassName="text-lg"
                 />
-            </ChartCard>
+            </div>
 
             <SolidCard>
                 <CardHeader className="flex flex-row items-center justify-between gap-3 border-b border-border">
@@ -92,14 +84,16 @@ export function StudentHomeDashboard({ home }: StudentHomeDashboardProps) {
                     </CardContent>
                 </SolidCard>
 
-                <SolidCard>
-                    <CardHeader className="border-b border-border">
-                        <CardTitle>Pending Carryover Courses</CardTitle>
+                <DangerCard>
+                    <CardHeader className="border-b border-red-200 bg-red-50/60 py-4 dark:border-red-500/30 dark:bg-red-950/20">
+                        <CardTitle className="text-red-800 dark:text-red-200">
+                            Pending Carryover Courses
+                        </CardTitle>
                     </CardHeader>
                     <CardContent className="p-0">
                         <ResitList resits={home.resits} />
                     </CardContent>
-                </SolidCard>
+                </DangerCard>
             </div>
         </div>
     );
@@ -113,14 +107,24 @@ function SolidCard({ children }: { children: ReactNode }) {
     );
 }
 
+function DangerCard({ children }: { children: ReactNode }) {
+    return (
+        <Card className="border border-red-200 bg-background py-0 shadow-sm ring-1 ring-red-200/80 dark:border-red-500/30 dark:ring-red-500/20">
+            {children}
+        </Card>
+    );
+}
+
 function MetricBlock({
     label,
     value,
     detail,
+    valueClassName,
 }: {
     label: string;
     value: ReactNode;
     detail: string;
+    valueClassName?: string;
 }) {
     return (
         <Card
@@ -133,7 +137,12 @@ function MetricBlock({
                 </CardTitle>
             </CardHeader>
             <CardContent>
-                <div className="text-3xl font-semibold tracking-normal tabular-nums">
+                <div
+                    className={[
+                        'font-semibold tracking-normal tabular-nums',
+                        valueClassName ?? 'text-3xl',
+                    ].join(' ')}
+                >
                     {value}
                 </div>
                 <div className="mt-1 text-xs text-muted-foreground">
@@ -161,7 +170,7 @@ function CourseLoadTable({
             <TableBody>
                 {courses.length > 0 ? (
                     courses.map((course) => (
-                        <TableRow key={course.code}>
+                        <TableRow key={course.code} className="odd:bg-muted/25">
                             <TableCell className="px-4">
                                 <div className="flex min-w-0 flex-col gap-0.5">
                                     <span className="font-semibold">
@@ -237,10 +246,10 @@ function ResitList({ resits }: { resits: DashboardStudentHomeResit[] }) {
             {resits.map((resit) => (
                 <div
                     key={`${resit.code}-${resit.resitWindow}`}
-                    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 py-3"
+                    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 py-3 odd:bg-muted/25"
                 >
                     <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold">
+                        <div className="truncate text-sm font-semibold text-foreground">
                             {resit.code}
                         </div>
                         <div className="truncate text-xs text-muted-foreground">

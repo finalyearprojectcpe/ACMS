@@ -1,11 +1,25 @@
-import { RiResetLeftLine, RiSave3Line } from '@remixicon/react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useForm } from '@inertiajs/react';
+import { RiSave3Line } from '@remixicon/react';
+import type { FormEvent } from 'react';
 
-import { ProfilePhotoIdentityContent } from '@/components/profile-photo-identity-content';
+import { updateStudentProfile } from '@/actions/App/Http/Controllers/DashboardController';
+import { ProfilePhotoSettingsCard } from '@/components/profile-photo-settings-card';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Card,
+    CardContent,
+    CardFooter,
+    CardForm,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
+import {
+    Field,
+    FieldError,
+    FieldGroup,
+    FieldLabel,
+} from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { fullNameFor } from '@/lib/person';
 import { cn } from '@/lib/utils';
 import type { DashboardStudentProfile } from '@/types';
@@ -14,196 +28,176 @@ type StudentProfileDashboardProps = {
     profile: DashboardStudentProfile;
 };
 
+type NameFormData = {
+    surname: string;
+    other_names: string;
+};
+
 export function StudentProfileDashboard({
     profile,
 }: StudentProfileDashboardProps) {
-    const [avatarPreview, setAvatarPreview] = useState<string | null>(
-        profile.avatar,
-    );
-    const [savedAvatar, setSavedAvatar] = useState<string | null>(
-        profile.avatar,
-    );
-    const [savedName, setSavedName] = useState(profile.name);
-    const [surname, setSurname] = useState(profile.name.surname);
-    const [otherNames, setOtherNames] = useState(profile.name.otherNames);
-    const objectUrls = useRef<string[]>([]);
-    const draftFullName = useMemo(
-        () => fullNameFor(surname, otherNames),
-        [surname, otherNames],
-    );
-    const isNameDirty =
-        surname !== savedName.surname || otherNames !== savedName.otherNames;
-    const isAvatarDirty = avatarPreview !== savedAvatar;
-    const hasProfileChanges = isNameDirty || isAvatarDirty;
-
-    useEffect(() => {
-        const objectUrlList = objectUrls.current;
-
-        return () => {
-            objectUrlList.forEach((url) => URL.revokeObjectURL(url));
-        };
-    }, []);
-
-    function changeAvatar(file: File | undefined) {
-        if (!file) {
-            return;
-        }
-
-        const nextAvatar = URL.createObjectURL(file);
-
-        objectUrls.current.push(nextAvatar);
-        setAvatarPreview(nextAvatar);
-    }
-
-    function saveProfile() {
-        setSavedName({
-            full: draftFullName,
-            surname,
-            otherNames,
-        });
-        setSavedAvatar(avatarPreview);
-    }
-
-    function resetProfile() {
-        setSurname(savedName.surname);
-        setOtherNames(savedName.otherNames);
-        setAvatarPreview(savedAvatar);
-    }
-
     return (
-        <div className="mx-auto grid w-full max-w-6xl gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-            <ProfileIdentityCard
-                avatar={avatarPreview}
-                name={draftFullName || savedName.full}
-                email={profile.email}
-                registrationNumber={profile.registrationNumber}
-                onAvatarChange={changeAvatar}
-            />
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+                <div className="grid content-start gap-4">
+                    <ProfilePhotoSettingsCard
+                        inputId="student-profile-photo"
+                        user={{
+                            name: profile.name.full,
+                            email: profile.email,
+                            avatar: profile.avatar,
+                        }}
+                    />
+                    <NameSettingsCard profile={profile} />
+                </div>
 
-            <NameEditorCard
-                surname={surname}
-                otherNames={otherNames}
-                onSurnameChange={setSurname}
-                onOtherNamesChange={setOtherNames}
-            />
-
-            <AcademicSummaryCard profile={profile} />
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end xl:col-span-2">
-                <Button
-                    type="button"
-                    variant="outline"
-                    disabled={!hasProfileChanges}
-                    onClick={resetProfile}
-                >
-                    <RiResetLeftLine />
-                    Reset
-                </Button>
-                <Button
-                    type="button"
-                    disabled={!hasProfileChanges}
-                    onClick={saveProfile}
-                >
-                    <RiSave3Line />
-                    Save Profile
-                </Button>
+                <ProfileSummaryCard profile={profile} />
             </div>
         </div>
     );
 }
 
-function ProfileIdentityCard({
-    avatar,
-    name,
-    email,
-    registrationNumber,
-    onAvatarChange,
-}: {
-    avatar: string | null;
-    name: string;
-    email: string;
-    registrationNumber: string;
-    onAvatarChange: (file: File | undefined) => void;
-}) {
+function NameSettingsCard({ profile }: { profile: DashboardStudentProfile }) {
+    const form = useForm<NameFormData>({
+        surname: profile.name.surname,
+        other_names: profile.name.otherNames,
+    });
+    const fullName = fullNameFor(form.data.surname, form.data.other_names);
+    const hasChanges =
+        form.data.surname !== profile.name.surname ||
+        form.data.other_names !== profile.name.otherNames;
+
+    function submit(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+
+        if (!hasChanges) {
+            return;
+        }
+
+        form.submit(updateStudentProfile(), {
+            preserveScroll: true,
+        });
+    }
+
+    function resetName() {
+        form.setData({
+            surname: profile.name.surname,
+            other_names: profile.name.otherNames,
+        });
+        form.clearErrors();
+    }
+
     return (
         <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
-            <ProfilePhotoIdentityContent
-                avatar={avatar}
-                name={name}
-                email={email}
-                inputId="student-avatar"
-                identifier={{
-                    label: 'Reg. No.',
-                    value: registrationNumber,
-                }}
-                onPhotoChange={onAvatarChange}
-            />
+            <CardForm onSubmit={submit}>
+                <CardHeader className="gap-1">
+                    <CardTitle className="text-base">Name</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                        This is how your name appears on your student profile.
+                    </p>
+                </CardHeader>
+                <CardContent className="px-5 pb-6">
+                    <FieldGroup className="gap-6">
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <Field
+                                data-invalid={Boolean(form.errors.surname)}
+                            >
+                                <FieldLabel htmlFor="student-surname">
+                                    Surname
+                                </FieldLabel>
+                                <Input
+                                    id="student-surname"
+                                    value={form.data.surname}
+                                    autoComplete="family-name"
+                                    aria-invalid={Boolean(form.errors.surname)}
+                                    onChange={(event) =>
+                                        form.setData(
+                                            'surname',
+                                            event.target.value,
+                                        )
+                                    }
+                                    required
+                                />
+                                <FieldError>{form.errors.surname}</FieldError>
+                            </Field>
+                            <Field
+                                data-invalid={Boolean(
+                                    form.errors.other_names,
+                                )}
+                            >
+                                <FieldLabel htmlFor="student-other-names">
+                                    Other Names
+                                </FieldLabel>
+                                <Input
+                                    id="student-other-names"
+                                    value={form.data.other_names}
+                                    autoComplete="given-name"
+                                    aria-invalid={Boolean(
+                                        form.errors.other_names,
+                                    )}
+                                    onChange={(event) =>
+                                        form.setData(
+                                            'other_names',
+                                            event.target.value,
+                                        )
+                                    }
+                                    required
+                                />
+                                <FieldError>
+                                    {form.errors.other_names}
+                                </FieldError>
+                            </Field>
+                        </div>
+
+                        <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+                            <span className="text-muted-foreground">
+                                Display name
+                            </span>
+                            <span className="ml-2 font-medium text-foreground">
+                                {fullName || profile.name.full}
+                            </span>
+                        </div>
+                    </FieldGroup>
+                </CardContent>
+                <CardFooter className="justify-end gap-2 border-t bg-muted/20 px-5 py-4">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        disabled={!hasChanges || form.processing}
+                        onClick={resetName}
+                    >
+                        Reset
+                    </Button>
+                    <Button
+                        type="submit"
+                        disabled={!hasChanges || form.processing}
+                    >
+                        <RiSave3Line />
+                        {form.processing ? 'Saving...' : 'Save Name'}
+                    </Button>
+                </CardFooter>
+            </CardForm>
         </Card>
     );
 }
 
-function NameEditorCard({
-    surname,
-    otherNames,
-    onSurnameChange,
-    onOtherNamesChange,
-}: {
-    surname: string;
-    otherNames: string;
-    onSurnameChange: (value: string) => void;
-    onOtherNamesChange: (value: string) => void;
-}) {
-    return (
-        <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
-            <CardHeader className="border-b border-border">
-                <CardTitle>Edit Name</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                        <Label htmlFor="student-surname">Surname</Label>
-                        <Input
-                            id="student-surname"
-                            value={surname}
-                            onChange={(event) =>
-                                onSurnameChange(event.target.value)
-                            }
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="student-other-names">Other Names</Label>
-                        <Input
-                            id="student-other-names"
-                            value={otherNames}
-                            onChange={(event) =>
-                                onOtherNamesChange(event.target.value)
-                            }
-                        />
-                    </div>
-                </div>
-            </CardContent>
-        </Card>
-    );
-}
-
-function AcademicSummaryCard({
+function ProfileSummaryCard({
     profile,
 }: {
     profile: DashboardStudentProfile;
 }) {
     return (
-        <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70 xl:col-span-2">
+        <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
             <CardHeader className="border-b border-border">
                 <CardTitle>Profile Summary</CardTitle>
             </CardHeader>
-            <CardContent>
-                <div className="grid gap-x-8 gap-y-4 md:grid-cols-[minmax(7rem,0.7fr)_minmax(18rem,1.4fr)] xl:grid-cols-[minmax(7rem,0.6fr)_minmax(22rem,1.8fr)_minmax(14rem,1fr)]">
-                    <SummaryItem label="CGPA" value={profile.cgpa} />
+            <CardContent className="grid gap-5 p-5 text-sm">
+                <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
                     <SummaryItem
-                        label="Faculty"
-                        value={facultyLabel(profile.faculty)}
-                        className="md:col-span-1"
+                        label="Registration Number"
+                        value={profile.registrationNumber}
                     />
+                    <SummaryItem label="CGPA" value={profile.cgpa} />
                     <SummaryItem
                         label="Department"
                         value={departmentLabel(profile.department)}
@@ -211,6 +205,13 @@ function AcademicSummaryCard({
                     <SummaryItem
                         label="Current Level"
                         value={profile.currentLevel?.title ?? 'Unassigned'}
+                    />
+                </div>
+
+                <div className="grid gap-4 rounded-md border border-border bg-muted/20 p-4">
+                    <SummaryItem
+                        label="Faculty"
+                        value={facultyLabel(profile.faculty)}
                     />
                     <SummaryItem
                         label="Course Adviser"
@@ -236,7 +237,9 @@ function SummaryItem({
             <div className="text-xs font-medium text-muted-foreground">
                 {label}
             </div>
-            <div className="mt-1 text-sm font-semibold">{value}</div>
+            <div className="mt-1 break-words text-sm font-semibold">
+                {value}
+            </div>
         </div>
     );
 }
@@ -246,7 +249,7 @@ function facultyLabel(faculty: DashboardStudentProfile['faculty']): string {
         return 'Unassigned';
     }
 
-    return `${faculty.abbreviation} - ${faculty.name}`;
+    return `${faculty.name} (${faculty.abbreviation})`;
 }
 
 function departmentLabel(
@@ -256,5 +259,5 @@ function departmentLabel(
         return 'Unassigned';
     }
 
-    return `${department.abbreviation} - ${department.name}`;
+    return `${department.name} (${department.abbreviation})`;
 }

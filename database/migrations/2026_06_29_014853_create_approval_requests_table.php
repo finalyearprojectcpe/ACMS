@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Tracks approval workflows such as imports, course schedules, and profile changes.
+        // Tracks approval workflows such as imports, course registrations, and profile changes.
         Schema::create('approval_requests', function (Blueprint $table) {
             $table->id();
             $table->foreignId('school_id')->constrained()->cascadeOnDelete();

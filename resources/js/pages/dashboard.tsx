@@ -5,7 +5,6 @@ import { toast } from 'sonner';
 
 import {
     home as dashboardHome,
-    level as dashboardLevel,
     section as dashboardSection,
 } from '@/actions/App/Http/Controllers/DashboardController';
 import { AppSidebar } from '@/components/app-sidebar';
@@ -15,14 +14,29 @@ import {
     HodStaffImport,
     StudentRecordDashboard,
 } from '@/components/hod-dashboard';
+import { ResultSheetDetailDashboard } from '@/components/result-sheet-detail-dashboard';
 import { SchoolAdminDashboard } from '@/components/school-admin-dashboard';
+import { StaffCourseRegistrationDashboard } from '@/components/staff-course-registration-dashboard';
 import {
     StaffCourseOfferingForm,
     StaffCourseSchedulesDashboard,
 } from '@/components/staff-course-schedules-dashboard';
+import {
+    StaffDueDetailDashboard,
+    StaffDueFormDashboard,
+    StaffDuesDashboard,
+} from '@/components/staff-dues-dashboard';
 import { StaffHomeDashboard } from '@/components/staff-home-dashboard';
+import {
+    StaffPaymentAccountFormDashboard,
+    StaffPaymentSettingsDashboard,
+} from '@/components/staff-payment-settings-dashboard';
+import { StaffProfileDashboard } from '@/components/staff-profile-dashboard';
+import { StaffResultImportWizard } from '@/components/staff-result-import-wizard';
+import { StaffResultsDashboard } from '@/components/staff-results-dashboard';
+import { StaffSettingsDashboard } from '@/components/staff-settings-dashboard';
 import { StaffStudentsDashboard } from '@/components/staff-students-dashboard';
-import { StudentCourseSchedulesDashboard } from '@/components/student-course-schedules-dashboard';
+import { StudentCourseRegistrationDashboard } from '@/components/student-course-registration-dashboard';
 import { StudentDuesDashboard } from '@/components/student-dues-dashboard';
 import { StudentHomeDashboard } from '@/components/student-home-dashboard';
 import { StudentProfileDashboard } from '@/components/student-profile-dashboard';
@@ -117,6 +131,60 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
         dashboard.staffCourseOfferingForm !== null
             ? dashboard.staffCourseOfferingForm
             : null;
+    const staffCourseRegistration =
+        dashboard.role === 'staff' &&
+        dashboard.section === 'course-registration' &&
+        dashboard.staffCourseRegistration !== null
+            ? dashboard.staffCourseRegistration
+            : null;
+    const staffResults =
+        dashboard.role === 'staff' &&
+        dashboard.section === 'result-management' &&
+        dashboard.staffResults !== null
+            ? dashboard.staffResults
+            : null;
+    const staffResultImportForm =
+        dashboard.role === 'staff' &&
+        dashboard.section === 'result-management' &&
+        dashboard.staffResultImportForm !== null
+            ? dashboard.staffResultImportForm
+            : null;
+    const staffDues =
+        dashboard.role === 'staff' &&
+        dashboard.section === 'dues' &&
+        dashboard.staffDues !== null
+            ? dashboard.staffDues
+            : null;
+    const staffDueForm =
+        dashboard.role === 'staff' &&
+        dashboard.section === 'dues' &&
+        dashboard.staffDueForm !== null
+            ? dashboard.staffDueForm
+            : null;
+    const staffDueDetail =
+        dashboard.role === 'staff' &&
+        dashboard.section === 'dues' &&
+        dashboard.staffDueDetail !== null
+            ? dashboard.staffDueDetail
+            : null;
+    const staffPaymentSettings =
+        dashboard.role === 'staff' &&
+        dashboard.section === 'payment-settings' &&
+        dashboard.staffPaymentSettings !== null
+            ? dashboard.staffPaymentSettings
+            : null;
+    const staffPaymentAccountForm =
+        dashboard.role === 'staff' &&
+        dashboard.section === 'payment-settings' &&
+        dashboard.staffPaymentAccountForm !== null
+            ? dashboard.staffPaymentAccountForm
+            : null;
+    const staffSettings =
+        dashboard.role === 'staff' &&
+        dashboard.section === 'settings' &&
+        dashboard.staffSettings !== null
+            ? dashboard.staffSettings
+            : null;
     const hodStaffForm =
         dashboard.role === 'hod' && dashboard.hodStaffForm !== null
             ? dashboard.hodStaffForm
@@ -139,15 +207,15 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
         dashboard.studentDues !== null
             ? dashboard.studentDues
             : null;
-    const studentCourseSchedules =
+    const studentCourseRegistration =
         dashboard.role === 'student' &&
-        dashboard.section === 'course-schedules' &&
-        dashboard.studentCourseSchedules !== null
-            ? dashboard.studentCourseSchedules
+        dashboard.section === 'course-registration' &&
+        dashboard.studentCourseRegistration !== null
+            ? dashboard.studentCourseRegistration
             : null;
     const studentProfile =
         dashboard.role === 'student' &&
-        dashboard.section === 'profile' &&
+        dashboard.section === 'profile-settings' &&
         dashboard.studentProfile !== null
             ? dashboard.studentProfile
             : null;
@@ -155,6 +223,16 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
         ['staff', 'hod'].includes(dashboard.role) &&
         dashboard.studentRecord !== null
             ? dashboard.studentRecord
+            : null;
+    const staffRecord =
+        ['faculty_head', 'hod', 'staff'].includes(dashboard.role) &&
+        dashboard.staffRecord !== null
+            ? dashboard.staffRecord
+            : null;
+    const resultSheetDetail =
+        ['staff', 'hod'].includes(dashboard.role) &&
+        dashboard.resultSheetDetail !== null
+            ? dashboard.resultSheetDetail
             : null;
 
     return (
@@ -238,6 +316,20 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                                 section={dashboard.section}
                                 sectionTitle={dashboard.sectionTitle}
                             />
+                        ) : resultSheetDetail ? (
+                            <ResultSheetDetailDashboard
+                                detail={resultSheetDetail}
+                            />
+                        ) : staffRecord ? (
+                            <StaffProfileDashboard record={staffRecord} />
+                        ) : staffResultImportForm ? (
+                            <StaffResultImportWizard
+                                form={staffResultImportForm}
+                            />
+                        ) : staffDueForm ? (
+                            <StaffDueFormDashboard form={staffDueForm} />
+                        ) : staffDueDetail ? (
+                            <StaffDueDetailDashboard detail={staffDueDetail} />
                         ) : staffCourseOfferingForm ? (
                             <StaffCourseOfferingForm
                                 form={staffCourseOfferingForm}
@@ -258,8 +350,25 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                         ) : staffCourseSchedules ? (
                             <StaffCourseSchedulesDashboard
                                 courseSchedules={staffCourseSchedules}
-                                levels={dashboard.courseScheduleLevels}
                             />
+                        ) : staffResults ? (
+                            <StaffResultsDashboard results={staffResults} />
+                        ) : staffCourseRegistration ? (
+                            <StaffCourseRegistrationDashboard
+                                registration={staffCourseRegistration}
+                            />
+                        ) : staffDues ? (
+                            <StaffDuesDashboard dues={staffDues} />
+                        ) : staffPaymentAccountForm ? (
+                            <StaffPaymentAccountFormDashboard
+                                form={staffPaymentAccountForm}
+                            />
+                        ) : staffPaymentSettings ? (
+                            <StaffPaymentSettingsDashboard
+                                settings={staffPaymentSettings}
+                            />
+                        ) : staffSettings ? (
+                            <StaffSettingsDashboard settings={staffSettings} />
                         ) : hodStaffForm ? (
                             <HodStaffImport form={hodStaffForm} />
                         ) : studentRecord ? (
@@ -279,9 +388,9 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                             <StudentResultsDashboard results={studentResults} />
                         ) : studentDues ? (
                             <StudentDuesDashboard dues={studentDues} />
-                        ) : studentCourseSchedules ? (
-                            <StudentCourseSchedulesDashboard
-                                courseSchedules={studentCourseSchedules}
+                        ) : studentCourseRegistration ? (
+                            <StudentCourseRegistrationDashboard
+                                registration={studentCourseRegistration}
                             />
                         ) : studentProfile ? (
                             <StudentProfileDashboard profile={studentProfile} />
@@ -365,11 +474,55 @@ function dashboardBackTarget(dashboard: DashboardContext) {
 
     if (dashboard.staffCourseOfferingForm !== null) {
         return {
-            href: dashboardLevel({
-                section: 'courses',
-                level: dashboard.staffCourseOfferingForm.level.slug,
-            }),
+            href: dashboardSection(
+                { section: 'courses' },
+                {
+                    query: {
+                        academic_session:
+                            dashboard.staffCourseOfferingForm.academicSession
+                                .id,
+                        level: dashboard.staffCourseOfferingForm.level.slug,
+                    },
+                },
+            ),
             label: 'Back to Course Offerings',
+        };
+    }
+
+    if (dashboard.staffResultImportForm !== null) {
+        return {
+            href: dashboardSection({ section: 'result-management' }),
+            label: 'Back to Result Management',
+        };
+    }
+
+    if (dashboard.staffCourseRegistration?.review !== null) {
+        return {
+            href: dashboardSection({ section: 'course-registration' }),
+            label: 'Back to Course Registrations',
+        };
+    }
+
+    if (dashboard.staffDueForm !== null || dashboard.staffDueDetail !== null) {
+        return {
+            href: dashboardSection({ section: 'dues' }),
+            label: 'Back to Dues',
+        };
+    }
+
+    if (dashboard.staffPaymentAccountForm !== null) {
+        return {
+            href: dashboardSection({ section: 'payment-settings' }),
+            label: 'Back to Paystack Settings',
+        };
+    }
+
+    if (dashboard.resultSheetDetail !== null) {
+        return {
+            href: dashboardSection({
+                section: dashboard.resultSheetDetail.returnSection,
+            }),
+            label: dashboard.resultSheetDetail.returnLabel,
         };
     }
 
@@ -384,6 +537,13 @@ function dashboardBackTarget(dashboard: DashboardContext) {
         return {
             href: dashboardSection({ section: 'students' }),
             label: 'Back to Students',
+        };
+    }
+
+    if (dashboard.staffRecord !== null) {
+        return {
+            href: dashboardSection({ section: 'staff' }),
+            label: 'Back to Staff',
         };
     }
 

@@ -418,7 +418,7 @@ test('staff course schedules show faculty courses as read only', function () {
         2,
     );
 
-    $response = $this->actingAs($staffUser)->get(route('dashboard.level', [
+    $response = $this->actingAs($staffUser)->get(route('dashboard.section', [
         'section' => 'courses',
         'level' => '100-level',
     ]));

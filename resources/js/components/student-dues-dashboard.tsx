@@ -1,6 +1,8 @@
+import { Link } from '@inertiajs/react';
 import { RiCheckboxCircleFill } from '@remixicon/react';
 import type { ReactNode } from 'react';
 
+import { ActionLink } from '@/components/action-link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     Table,
@@ -98,6 +100,9 @@ function PendingDuesTable({ dues }: { dues: DashboardStudentDue[] }) {
                     <TableHead className="hidden md:table-cell">
                         Description
                     </TableHead>
+                    <TableHead className="hidden w-[16%] text-center md:table-cell">
+                        Due Date
+                    </TableHead>
                     <TableHead className="w-[14%] text-center">
                         Amount
                     </TableHead>
@@ -116,21 +121,26 @@ function PendingDuesTable({ dues }: { dues: DashboardStudentDue[] }) {
                             <TableCell className="hidden max-w-[28rem] truncate text-muted-foreground md:table-cell">
                                 {due.description}
                             </TableCell>
+                            <TableCell className="hidden text-center tabular-nums md:table-cell">
+                                {due.dueDate ?? 'Not set'}
+                            </TableCell>
                             <TableCell className="text-center font-semibold tabular-nums">
                                 {due.amount}
                             </TableCell>
                             <TableCell className="pr-4 text-right">
-                                <a
+                                <Link
                                     href={due.paymentUrl}
+                                    method="post"
+                                    as="button"
                                     className="text-xs font-medium text-link"
                                 >
                                     Pay now
-                                </a>
+                                </Link>
                             </TableCell>
                         </TableRow>
                     ))
                 ) : (
-                    <EmptyTableRow colSpan={4}>No pending dues.</EmptyTableRow>
+                    <EmptyTableRow colSpan={5}>No pending dues.</EmptyTableRow>
                 )}
             </TableBody>
         </Table>
@@ -177,12 +187,9 @@ function PaidDuesTable({ dues }: { dues: DashboardStudentPaidDue[] }) {
                                 {due.paidAt}
                             </TableCell>
                             <TableCell className="pr-4 text-right">
-                                <a
-                                    href={due.receiptUrl}
-                                    className="text-xs font-medium text-link"
-                                >
+                                <ActionLink href={due.receiptUrl}>
                                     Download receipt
-                                </a>
+                                </ActionLink>
                             </TableCell>
                         </TableRow>
                     ))

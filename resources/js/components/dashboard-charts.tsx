@@ -4,6 +4,8 @@ import {
     BarChart,
     CartesianGrid,
     Cell,
+    Line,
+    LineChart,
     Pie,
     PieChart,
     XAxis,
@@ -79,7 +81,7 @@ export function ChartCard({
                         </p>
                     ) : null}
                 </div>
-                {control ? <div className="lg:w-56">{control}</div> : null}
+                {control ? <div className="w-full lg:w-80">{control}</div> : null}
             </CardHeader>
             <CardContent className="p-4">{children}</CardContent>
         </Card>
@@ -119,6 +121,12 @@ export function AverageGpaByLevelBarChart({ rows }: { rows: GpaChartRow[] }) {
 
 export function SetGpaProgressBarChart({ rows }: { rows: GpaChartRow[] }) {
     return <GpaBarChart rows={rows} emptyText="No GPA records for this set." />;
+}
+
+export function StudentGpaTrendLineChart({ rows }: { rows: GpaChartRow[] }) {
+    return (
+        <GpaLineChart rows={rows} emptyText="No GPA records to display yet." />
+    );
 }
 
 function GpaBarChart({
@@ -168,6 +176,57 @@ function GpaBarChart({
     );
 }
 
+function GpaLineChart({
+    rows,
+    emptyText = 'No GPA records to display.',
+}: {
+    rows: GpaChartRow[];
+    emptyText?: string;
+}) {
+    const chartConfig = {
+        average: { label: 'GPA', color: 'var(--chart-2)' },
+    } satisfies ChartConfig;
+    const hasValues = rows.some((row) => row.average !== null);
+
+    if (!hasValues) {
+        return <EmptyChartState>{emptyText}</EmptyChartState>;
+    }
+
+    return (
+        <ChartContainer
+            config={chartConfig}
+            className="min-h-64 w-full"
+            initialDimension={{ width: 520, height: 260 }}
+        >
+            <LineChart data={rows} margin={{ left: 8, right: 12, top: 8 }}>
+                <CartesianGrid vertical={false} />
+                <XAxis
+                    dataKey="level"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                />
+                <YAxis
+                    domain={[0, 5]}
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Line
+                    type="monotone"
+                    dataKey="average"
+                    stroke="var(--color-average)"
+                    strokeWidth={2.5}
+                    dot={{ r: 4, strokeWidth: 2 }}
+                    activeDot={{ r: 5 }}
+                    connectNulls={false}
+                />
+            </LineChart>
+        </ChartContainer>
+    );
+}
+
 export function ResultClassificationPieChart({
     rows,
 }: {
@@ -188,10 +247,10 @@ export function ResultClassificationPieChart({
     }
 
     return (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_14rem]">
+        <div className="grid justify-items-center gap-4 lg:grid-cols-[minmax(0,1fr)_14rem] lg:items-center lg:justify-items-stretch">
             <ChartContainer
                 config={chartConfig}
-                className="min-h-64 w-full"
+                className="mx-auto min-h-64 w-full max-w-sm lg:max-w-none"
                 initialDimension={{ width: 420, height: 260 }}
             >
                 <PieChart>
@@ -210,7 +269,7 @@ export function ResultClassificationPieChart({
                     </Pie>
                 </PieChart>
             </ChartContainer>
-            <div className="grid content-center gap-2 text-sm">
+            <div className="grid w-full max-w-sm content-center gap-2 text-sm lg:max-w-none">
                 {rows.map((row) => (
                     <div
                         key={row.classification}

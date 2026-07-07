@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\AcademicSession;
 use App\Models\Course;
 use App\Models\CourseOffering;
 use App\Models\Department;
@@ -12,7 +13,7 @@ test('course advisors see course schedules up to their assigned level', function
 
     $user = User::query()->where('email', 'staff4@futo.edu')->firstOrFail();
 
-    $response = $this->actingAs($user)->get(route('dashboard.level', [
+    $response = $this->actingAs($user)->get(route('dashboard.section', [
         'section' => 'courses',
         'level' => '300-level',
     ]));
@@ -22,7 +23,7 @@ test('course advisors see course schedules up to their assigned level', function
         ->component('dashboard')
         ->where('dashboard.role', 'staff')
         ->where('dashboard.section', 'courses')
-        ->where('dashboard.sectionTitle', '300 Level Course Offerings')
+        ->where('dashboard.sectionTitle', 'Course Offerings')
         ->has('dashboard.levels', 1)
         ->where('dashboard.levels.0.slug', '300-level')
         ->has('dashboard.courseScheduleLevels', 3)
@@ -30,7 +31,11 @@ test('course advisors see course schedules up to their assigned level', function
         ->where('dashboard.courseScheduleLevels.2.slug', '300-level')
         ->has('dashboard.staffCourseSchedules', fn (Assert $page) => $page
             ->where('level.title', '300 Level')
+            ->has('levels', 3)
+            ->where('levels.2.slug', '300-level')
             ->where('academicSession.name', '2025/2026')
+            ->where('selectedSet.currentLevel.title', '300 Level')
+            ->has('assignedSets', 1)
             ->has('semesters', 2)
             ->where('semesters.0.name', 'Harmattan')
             ->where('semesters.0.totalUnits', 14)
@@ -106,6 +111,7 @@ test('course advisors can create a department course offering with prerequisites
 
     $user = User::query()->where('email', 'staff4@futo.edu')->firstOrFail();
     $department = Department::query()->where('abbreviation', 'CPE')->firstOrFail();
+    $academicSession = AcademicSession::query()->where('name', '2025/2026')->firstOrFail();
     $prerequisite = Course::query()->where('code', 'CPE 301')->firstOrFail();
 
     $response = $this->actingAs($user)->post(route('dashboard.courses.store', [
@@ -119,9 +125,10 @@ test('course advisors can create a department course offering with prerequisites
         'prerequisite_course_ids' => [$prerequisite->id],
     ]);
 
-    $response->assertRedirect(route('dashboard.level', [
+    $response->assertRedirect(route('dashboard.section', [
         'section' => 'courses',
         'level' => '300-level',
+        'academic_session' => $academicSession->id,
     ]));
 
     $course = Course::query()->where('code', 'CPE 309')->firstOrFail();

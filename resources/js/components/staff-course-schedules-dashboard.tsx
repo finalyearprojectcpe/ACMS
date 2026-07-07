@@ -5,7 +5,6 @@ import type { FormEvent } from 'react';
 import {
     createCourseOffering,
     editCourseOffering,
-    level as dashboardLevel,
     section as dashboardSection,
     storeCourseOffering,
     updateCourseOffering,
@@ -14,6 +13,8 @@ import { ActionLink } from '@/components/action-link';
 import { CourseOfferingBrowser } from '@/components/course-offering-browser';
 import { CoursePrerequisitePicker } from '@/components/course-prerequisite-picker';
 import { QualifiedSemester } from '@/components/qualified-semester';
+import { StudentSetChoiceLabel } from '@/components/student-set-label';
+import { StudentSetPicker } from '@/components/student-set-picker';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardForm } from '@/components/ui/card';
 import {
@@ -27,7 +28,6 @@ import { Switch } from '@/components/ui/switch';
 import type {
     DashboardStaffCourseOfferingForm,
     DashboardStaffCourseSchedules,
-    DashboardLevel,
 } from '@/types';
 
 type CourseOfferingFormData = {
@@ -40,17 +40,27 @@ type CourseOfferingFormData = {
 
 export function StaffCourseSchedulesDashboard({
     courseSchedules,
-    levels,
 }: {
     courseSchedules: DashboardStaffCourseSchedules;
-    levels: DashboardLevel[];
 }) {
-    function selectLevel(level: DashboardLevel) {
+    const selectedLevel = courseSchedules.level;
+
+    function updateSelection(params: {
+        entrySession?: string | number | null;
+        level?: string | null;
+    }) {
         router.get(
-            dashboardLevel.url({
-                section: 'courses',
-                level: level.slug,
-            }),
+            dashboardSection.url(
+                { section: 'courses' },
+                {
+                    query: {
+                        entry_session:
+                            params.entrySession ??
+                            courseSchedules.selectedSet?.entrySession.id,
+                        level: params.level ?? selectedLevel?.slug,
+                    },
+                },
+            ),
             {},
             {
                 preserveScroll: true,
@@ -59,21 +69,37 @@ export function StaffCourseSchedulesDashboard({
         );
     }
 
+    if (!selectedLevel) {
+        return (
+            <Card className="mx-auto w-full max-w-7xl border border-border bg-background shadow-sm ring-1 ring-border/70">
+                <CardContent className="p-6 text-sm text-muted-foreground">
+                    No advised set is available for course offerings yet.
+                </CardContent>
+            </Card>
+        );
+    }
+
     return (
         <CourseOfferingBrowser
             title="Course Offerings"
-            detail="Manage departmental and elective courses by level and semester."
-            levels={levels}
-            selectedLevel={courseSchedules.level}
+            detail="Manage departmental and elective courses for the selected advised set."
+            levels={courseSchedules.levels}
+            selectedLevel={selectedLevel}
             semesters={courseSchedules.semesters}
             session={courseSchedules.academicSession}
-            onSelectionChange={selectLevel}
+            headerControl={setHeaderControl(courseSchedules, updateSelection)}
+            onSelectionChange={(level) =>
+                updateSelection({ level: level.slug })
+            }
             renderHeaderAction={(semester) => (
                 <ActionLink
-                    href={createCourseOffering({
-                        level: courseSchedules.level.slug,
-                        semester: semester.slug,
-                    })}
+                    href={createCourseOffering(
+                        {
+                            level: selectedLevel.slug,
+                            semester: semester.slug,
+                        },
+                        { query: courseScheduleQuery(courseSchedules) },
+                    )}
                     icon={<RiAddLine className="size-4" />}
                 >
                     Add Course
@@ -82,11 +108,14 @@ export function StaffCourseSchedulesDashboard({
             renderCourseAction={(offering, semester) =>
                 offering.canEdit ? (
                     <ActionLink
-                        href={editCourseOffering({
-                            level: courseSchedules.level.slug,
-                            semester: semester.slug,
-                            offering: offering.id,
-                        })}
+                        href={editCourseOffering(
+                            {
+                                level: selectedLevel.slug,
+                                semester: semester.slug,
+                                offering: offering.id,
+                            },
+                            { query: courseScheduleQuery(courseSchedules) },
+                        )}
                         className="text-xs"
                     >
                         Edit
@@ -101,6 +130,76 @@ export function StaffCourseSchedulesDashboard({
     );
 }
 
+function setHeaderControl(
+    courseSchedules: DashboardStaffCourseSchedules,
+    updateSelection: (params: {
+        entrySession?: string | number | null;
+        level?: string | null;
+    }) => void,
+) {
+    if (courseSchedules.assignedSets.length === 0) {
+        return null;
+    }
+
+    if (courseSchedules.assignedSets.length === 1) {
+        const selectedSet = courseSchedules.selectedSet;
+
+        if (!selectedSet) {
+            return null;
+        }
+
+        return (
+            <div className="min-w-0 rounded-md border border-border bg-background px-3 py-2 text-sm">
+                <div className="text-xs font-medium text-muted-foreground">
+                    Advised Set
+                </div>
+                <div className="mt-1 font-medium text-foreground">
+                    <StudentSetChoiceLabel
+                        entrySession={selectedSet.entrySession}
+                        currentLevel={selectedSet.currentLevel}
+                        minimumYearsToDegree={
+                            selectedSet.minimumYearsToDegree
+                        }
+                    />
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <Field className="lg:w-96">
+            <FieldLabel>Advised Set</FieldLabel>
+            <StudentSetPicker
+                value={
+                    courseSchedules.selectedSet?.entrySession.id.toString() ??
+                    ''
+                }
+                onValueChange={(entrySession) =>
+                    updateSelection({ entrySession })
+                }
+                options={courseSchedules.assignedSets.map((set) => ({
+                    value: set.entrySession.id.toString(),
+                    entrySession: set.entrySession,
+                    currentLevel: set.currentLevel,
+                    minimumYearsToDegree: set.minimumYearsToDegree,
+                }))}
+                ariaLabel="Advised set"
+            />
+        </Field>
+    );
+}
+
+function courseScheduleQuery(courseSchedules: DashboardStaffCourseSchedules) {
+    return {
+        ...(courseSchedules.academicSession
+            ? { academic_session: courseSchedules.academicSession.id }
+            : {}),
+        ...(courseSchedules.selectedSet
+            ? { entry_session: courseSchedules.selectedSet.entrySession.id }
+            : {}),
+    };
+}
+
 export function StaffCourseOfferingForm({
     form,
     role = 'staff',
@@ -109,9 +208,10 @@ export function StaffCourseOfferingForm({
     role?: string;
 }) {
     const courseForm = useForm<CourseOfferingFormData>({
-        code: form.offering?.code ?? '',
-        title: form.offering?.title ?? '',
-        credit_units: form.offering?.creditUnits ?? 3,
+        code: form.offering?.code ?? form.prefill?.code ?? '',
+        title: form.offering?.title ?? form.prefill?.title ?? '',
+        credit_units:
+            form.offering?.creditUnits ?? form.prefill?.creditUnits ?? 3,
         is_mandatory: form.offering?.isMandatory ?? true,
         prerequisite_course_ids: form.offering?.prerequisiteCourseIds ?? [],
     });
@@ -123,13 +223,24 @@ export function StaffCourseOfferingForm({
                       query: {
                           academic_session: form.academicSession.id,
                           level: form.level.slug,
+                          ...(form.entrySessionId
+                              ? { entry_session: form.entrySessionId }
+                              : {}),
                       },
                   },
               )
-            : dashboardLevel({
-                  section: 'courses',
-                  level: form.level.slug,
-              });
+            : dashboardSection(
+                  { section: 'courses' },
+                  {
+                      query: {
+                          academic_session: form.academicSession.id,
+                          level: form.level.slug,
+                          ...(form.entrySessionId
+                              ? { entry_session: form.entrySessionId }
+                              : {}),
+                      },
+                  },
+              );
     const title =
         form.mode === 'create' ? 'Add Course' : `Edit ${form.offering?.code}`;
 
@@ -146,6 +257,12 @@ export function StaffCourseOfferingForm({
                     {
                         query: {
                             academic_session: form.academicSession.id,
+                            ...(form.entrySessionId
+                                ? { entry_session: form.entrySessionId }
+                                : {}),
+                            ...(form.returnTo
+                                ? { return_to: form.returnTo }
+                                : {}),
                         },
                     },
                 ),
@@ -165,6 +282,9 @@ export function StaffCourseOfferingForm({
                     {
                         query: {
                             academic_session: form.academicSession.id,
+                            ...(form.entrySessionId
+                                ? { entry_session: form.entrySessionId }
+                                : {}),
                         },
                     },
                 ),

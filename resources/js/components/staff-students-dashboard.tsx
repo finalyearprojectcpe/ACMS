@@ -1,11 +1,11 @@
-import { RiLayoutGridLine, RiTableLine } from '@remixicon/react';
+import { RiSearchLine } from '@remixicon/react';
 import { useMemo, useState } from 'react';
 
 import { ActionLink } from '@/components/action-link';
 import { CopyableValue } from '@/components/copyable-value';
 import { PersonCell } from '@/components/person-cell';
 import { studentSetText } from '@/components/student-set-label';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { StudentSetPicker } from '@/components/student-set-picker';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -13,6 +13,8 @@ import {
     HoverCardContent,
     HoverCardTrigger,
 } from '@/components/ui/hover-card';
+import { Input } from '@/components/ui/input';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import {
     Table,
     TableBody,
@@ -22,67 +24,88 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { initialsFor } from '@/lib/person';
 import type { DashboardStaffStudent, DashboardStaffStudents } from '@/types';
 
 type StaffStudentsDashboardProps = {
     students: DashboardStaffStudents;
 };
 
-type StudentView = 'table' | 'cards';
-
 export function StaffStudentsDashboard({
     students,
 }: StaffStudentsDashboardProps) {
-    const [view, setView] = useState<StudentView>('table');
+    const [query, setQuery] = useState('');
+    const [setFilter, setSetFilter] = useState(
+        students.assignedSets[0]?.entrySession.id.toString() ?? 'all',
+    );
+    const visibleStudents = useMemo(
+        () =>
+            students.students.filter((student) => {
+                const searchText = [
+                    student.fullName,
+                    student.email,
+                    student.registrationNumber,
+                    student.advisorName,
+                    student.entrySession?.name,
+                ]
+                    .join(' ')
+                    .toLowerCase();
+
+                return (
+                    searchText.includes(query.trim().toLowerCase()) &&
+                    (setFilter === 'all' ||
+                        student.entrySession?.id.toString() === setFilter)
+                );
+            }),
+        [students.students, query, setFilter],
+    );
     const gpaColumns = useMemo(
-        () => gpaColumnsFor(students.students),
-        [students.students],
+        () => gpaColumnsFor(visibleStudents),
+        [visibleStudents],
     );
 
     return (
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                 <div className="text-sm text-muted-foreground">
                     <span className="font-medium text-foreground">
-                        {assignedSetLabel(students.assignedSets)}
+                        {assignedSetLabel(students.assignedSets, setFilter)}
                     </span>{' '}
                     <span className="tabular-nums">
-                        {students.totalStudents}{' '}
-                        {students.totalStudents === 1 ? 'student' : 'students'}
+                        {visibleStudents.length}{' '}
+                        {visibleStudents.length === 1 ? 'student' : 'students'}
                     </span>
                 </div>
 
-                <ToggleGroup
-                    type="single"
-                    value={view}
-                    onValueChange={(value) => {
-                        if (value) {
-                            setView(value as StudentView);
+                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(20rem,24rem)] lg:min-w-[44rem]">
+                    <div className="relative">
+                        <RiSearchLine className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            value={query}
+                            onChange={(event) => setQuery(event.target.value)}
+                            placeholder="Search students"
+                            className="bg-background pl-9"
+                        />
+                    </div>
+                    <StudentSetPicker
+                        value={setFilter}
+                        onValueChange={setSetFilter}
+                        options={students.assignedSets.map((set) => ({
+                            value: set.entrySession.id.toString(),
+                            entrySession: set.entrySession,
+                            currentLevel: set.currentLevel,
+                            minimumYearsToDegree: set.minimumYearsToDegree,
+                        }))}
+                        allOption={
+                            students.assignedSets.length > 1
+                                ? { value: 'all', label: 'All sets' }
+                                : undefined
                         }
-                    }}
-                    variant="outline"
-                    size="sm"
-                    aria-label="Student roster view"
-                >
-                    <ToggleGroupItem value="table" aria-label="Table view">
-                        <RiTableLine className="size-4" />
-                    </ToggleGroupItem>
-                    <ToggleGroupItem value="cards" aria-label="Card view">
-                        <RiLayoutGridLine className="size-4" />
-                    </ToggleGroupItem>
-                </ToggleGroup>
+                        ariaLabel="Filter by set"
+                    />
+                </div>
             </div>
 
-            {view === 'table' ? (
-                <StudentsTable
-                    students={students.students}
-                    gpaColumns={gpaColumns}
-                />
-            ) : (
-                <StudentsCards students={students.students} />
-            )}
+            <StudentsTable students={visibleStudents} gpaColumns={gpaColumns} />
         </div>
     );
 }
@@ -97,222 +120,138 @@ function StudentsTable({
     return (
         <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
             <CardContent className="p-0">
-                <Table className="text-sm">
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead className="w-14 px-4 text-center">
-                                S/N
-                            </TableHead>
-                            <TableHead className="min-w-48">
-                                Full Name
-                            </TableHead>
-                            <TableHead className="min-w-32">Reg. No.</TableHead>
-                            <TableHead className="min-w-44">
-                                Pending Carryovers
-                            </TableHead>
-                            {gpaColumns.map((level) => (
-                                <TableHead
-                                    key={level}
-                                    className="min-w-24 text-center"
-                                >
-                                    {level} GPA
+                <ScrollArea className="max-h-[calc(100vh-16rem)]">
+                    <Table className="min-w-[920px] text-sm">
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-14 px-4 text-center">
+                                    S/N
                                 </TableHead>
-                            ))}
-                            <TableHead className="w-24 pr-4 text-center">
-                                CGPA
-                            </TableHead>
-                            <TableHead className="w-24 pr-4 text-right">
-                                Action
-                            </TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
+                                <TableHead className="min-w-48">
+                                    Full Name
+                                </TableHead>
+                                <TableHead className="min-w-32">
+                                    Reg. No.
+                                </TableHead>
+                                <TableHead className="min-w-44">
+                                    Pending Carryovers
+                                </TableHead>
+                                {gpaColumns.map((level) => (
+                                    <TableHead
+                                        key={level}
+                                        className="min-w-24 text-center"
+                                    >
+                                        {level} GPA
+                                    </TableHead>
+                                ))}
+                                <TableHead className="w-24 pr-4 text-center">
+                                    CGPA
+                                </TableHead>
+                                <TableHead className="w-24 pr-4 text-right">
+                                    Action
+                                </TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {students.length > 0 ? (
+                                students.map((student, index) => (
+                                    <TableRow
+                                        key={student.id}
+                                        className="odd:bg-background even:bg-muted/25"
+                                    >
+                                        <TableCell className="px-4 text-center text-muted-foreground tabular-nums">
+                                            {index + 1}
+                                        </TableCell>
+                                        <TableCell>
+                                            <PersonCell
+                                                name={student.fullName}
+                                                secondary={student.email}
+                                                avatar={student.avatar}
+                                            />
+                                        </TableCell>
+                                        <TableCell>
+                                            <CopyableValue
+                                                value={
+                                                    student.registrationNumber
+                                                }
+                                            />
+                                        </TableCell>
+                                        <TableCell className="whitespace-normal">
+                                            <CarryoverBadges
+                                                courses={
+                                                    student.pendingCarryovers
+                                                }
+                                                limit={2}
+                                            />
+                                        </TableCell>
+                                        {gpaColumns.map((level) => (
+                                            <TableCell
+                                                key={`${student.id}-${level}`}
+                                                className="text-center font-medium tabular-nums"
+                                            >
+                                                {gpaForLevel(student, level)}
+                                            </TableCell>
+                                        ))}
+                                        <TableCell className="pr-4 text-center font-semibold tabular-nums">
+                                            {student.cgpa}
+                                        </TableCell>
+                                        <TableCell className="pr-4 text-right">
+                                            <ActionLink
+                                                href={student.profileUrl}
+                                            >
+                                                View
+                                            </ActionLink>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            ) : (
+                                <TableRow>
+                                    <TableCell
+                                        colSpan={6 + gpaColumns.length}
+                                        className="px-4 py-6 text-muted-foreground"
+                                    >
+                                        No students match the current filters.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
                         {students.length > 0 ? (
-                            students.map((student, index) => (
-                                <TableRow
-                                    key={student.id}
-                                    className="odd:bg-background even:bg-muted/25"
-                                >
-                                    <TableCell className="px-4 text-center text-muted-foreground tabular-nums">
-                                        {index + 1}
-                                    </TableCell>
-                                    <TableCell>
-                                        <PersonCell
-                                            name={student.fullName}
-                                            secondary={student.email}
-                                            avatar={student.avatar}
-                                        />
-                                    </TableCell>
-                                    <TableCell>
-                                        <CopyableValue
-                                            value={student.registrationNumber}
-                                        />
-                                    </TableCell>
-                                    <TableCell className="whitespace-normal">
-                                        <CarryoverBadges
-                                            courses={student.pendingCarryovers}
-                                            limit={2}
-                                        />
+                            <TableFooter className="sticky bottom-0 z-20 border-t border-border bg-background shadow-[0_-1px_0_hsl(var(--border))]">
+                                <TableRow>
+                                    <TableCell
+                                        colSpan={4}
+                                        className="px-4 font-semibold"
+                                    >
+                                        Set average
                                     </TableCell>
                                     {gpaColumns.map((level) => (
                                         <TableCell
-                                            key={`${student.id}-${level}`}
-                                            className="text-center font-medium tabular-nums"
+                                            key={`average-${level}`}
+                                            className="text-center font-semibold tabular-nums"
                                         >
-                                            {gpaForLevel(student, level)}
+                                            {averageGpa(
+                                                students.map((student) =>
+                                                    gpaForLevel(student, level),
+                                                ),
+                                            )}
                                         </TableCell>
                                     ))}
                                     <TableCell className="pr-4 text-center font-semibold tabular-nums">
-                                        {student.cgpa}
-                                    </TableCell>
-                                    <TableCell className="pr-4 text-right">
-                                        <ActionLink href={student.profileUrl}>
-                                            View
-                                        </ActionLink>
-                                    </TableCell>
-                                </TableRow>
-                            ))
-                        ) : (
-                            <TableRow>
-                                <TableCell
-                                    colSpan={6 + gpaColumns.length}
-                                    className="px-4 py-6 text-muted-foreground"
-                                >
-                                    No students assigned to this set.
-                                </TableCell>
-                            </TableRow>
-                        )}
-                    </TableBody>
-                    {students.length > 0 ? (
-                        <TableFooter>
-                            <TableRow>
-                                <TableCell
-                                    colSpan={4}
-                                    className="px-4 font-semibold"
-                                >
-                                    Set average
-                                </TableCell>
-                                {gpaColumns.map((level) => (
-                                    <TableCell
-                                        key={`average-${level}`}
-                                        className="text-center font-semibold tabular-nums"
-                                    >
                                         {averageGpa(
-                                            students.map((student) =>
-                                                gpaForLevel(student, level),
+                                            students.map(
+                                                (student) => student.cgpa,
                                             ),
                                         )}
                                     </TableCell>
-                                ))}
-                                <TableCell className="pr-4 text-center font-semibold tabular-nums">
-                                    {averageGpa(
-                                        students.map((student) => student.cgpa),
-                                    )}
-                                </TableCell>
-                                <TableCell />
-                            </TableRow>
-                        </TableFooter>
-                    ) : null}
-                </Table>
+                                    <TableCell />
+                                </TableRow>
+                            </TableFooter>
+                        ) : null}
+                    </Table>
+                    <ScrollBar orientation="horizontal" />
+                </ScrollArea>
             </CardContent>
         </Card>
-    );
-}
-
-function StudentsCards({ students }: { students: DashboardStaffStudent[] }) {
-    if (students.length === 0) {
-        return (
-            <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
-                <CardContent className="p-6 text-sm text-muted-foreground">
-                    No students assigned to this set.
-                </CardContent>
-            </Card>
-        );
-    }
-
-    return (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {students.map((student) => (
-                <Card
-                    key={student.id}
-                    className="border border-border bg-background shadow-sm ring-1 ring-border/70"
-                >
-                    <CardContent className="flex flex-col gap-3 p-3">
-                        <div className="flex min-w-0 items-center gap-3">
-                            <Avatar className="size-10 rounded-none after:rounded-none">
-                                <AvatarImage
-                                    src={student.avatar ?? undefined}
-                                    alt={`${student.fullName} avatar`}
-                                    className="rounded-none"
-                                />
-                                <AvatarFallback className="rounded-none font-medium">
-                                    {initialsFor(student.fullName)}
-                                </AvatarFallback>
-                            </Avatar>
-                            <div className="min-w-0">
-                                <div className="truncate font-semibold">
-                                    {student.fullName}
-                                </div>
-                                <div className="truncate text-xs text-muted-foreground">
-                                    {student.email}
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center justify-between gap-2">
-                            <CopyableValue
-                                value={student.registrationNumber}
-                                className="h-7"
-                                valueClassName="text-xs"
-                            />
-                            <ActionLink href={student.profileUrl}>
-                                View
-                            </ActionLink>
-                        </div>
-
-                        <div className="grid grid-cols-[5.25rem_minmax(0,1fr)] gap-2 text-sm">
-                            <StudentStat label="CGPA" value={student.cgpa} />
-                            <div className="border border-border bg-muted/40 px-2 py-1.5">
-                                <div className="mb-1 text-xs text-muted-foreground">
-                                    Carryovers
-                                </div>
-                                <CarryoverBadges
-                                    courses={student.pendingCarryovers}
-                                    limit={2}
-                                />
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-1.5">
-                            {student.levelGpas.map((levelGpa) => (
-                                <div
-                                    key={levelGpa.level}
-                                    className="border border-border bg-muted/40 px-2 py-1"
-                                >
-                                    <div className="text-xs text-muted-foreground">
-                                        {levelGpa.level}
-                                    </div>
-                                    <div className="text-sm font-semibold tabular-nums">
-                                        {levelGpa.gpa}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </CardContent>
-                </Card>
-            ))}
-        </div>
-    );
-}
-
-function StudentStat({ label, value }: { label: string; value: string }) {
-    return (
-        <div className="border border-border bg-muted/40 px-2 py-1.5">
-            <div className="text-xs text-muted-foreground">{label}</div>
-            <div className="mt-1 text-lg font-semibold tabular-nums">
-                {value}
-            </div>
-        </div>
     );
 }
 
@@ -375,9 +314,20 @@ function CarryoverBadges({
 
 function assignedSetLabel(
     sets: DashboardStaffStudents['assignedSets'],
+    selectedSetId: string,
 ): string {
     if (sets.length === 0) {
         return 'No assigned set';
+    }
+
+    if (selectedSetId !== 'all') {
+        const selectedSet = sets.find(
+            (set) => set.entrySession.id.toString() === selectedSetId,
+        );
+
+        if (selectedSet) {
+            return studentSetText(selectedSet);
+        }
     }
 
     return sets.map((set) => studentSetText(set)).join(', ');

@@ -1716,13 +1716,24 @@ function FacultyHeadStaffPage({
                                                 />
                                             </TableCell>
                                             <TableCell className="pr-4 text-right">
-                                                <StaffHodAction
-                                                    member={member}
-                                                    currentHod={currentHodForDepartment(
-                                                        staff,
-                                                        member,
-                                                    )}
-                                                />
+                                                <div className="flex flex-wrap justify-end gap-3">
+                                                    {member.profileUrl ? (
+                                                        <ActionLink
+                                                            href={
+                                                                member.profileUrl
+                                                            }
+                                                        >
+                                                            View
+                                                        </ActionLink>
+                                                    ) : null}
+                                                    <StaffHodAction
+                                                        member={member}
+                                                        currentHod={currentHodForDepartment(
+                                                            staff,
+                                                            member,
+                                                        )}
+                                                    />
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     ))

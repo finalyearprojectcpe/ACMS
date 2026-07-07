@@ -13,6 +13,8 @@ import * as XLSX from 'xlsx';
 import {
     importHodStaff,
     section as dashboardSection,
+    showResultSheet,
+    showResultSheetApproval,
     storeImportedHodStaff,
     updateHodPassword,
 } from '@/actions/App/Http/Controllers/DashboardController';
@@ -22,17 +24,18 @@ import { CourseOfferingBrowser } from '@/components/course-offering-browser';
 import {
     AverageGpaByLevelBarChart,
     ChartCard,
-    ChartSelect,
     ResultClassificationPieChart,
-    averageGpa,
     averageGpaByLevelRows,
     classificationRowsForStudents,
-    setChartOptions,
     studentsForEntrySession,
 } from '@/components/dashboard-charts';
+import { GradeDisplay } from '@/components/grade-display';
 import { PersonCell } from '@/components/person-cell';
 import { ProfilePhotoSettingsCard } from '@/components/profile-photo-settings-card';
-import { QualifiedSemester } from '@/components/qualified-semester';
+import {
+    QualifiedSemester,
+    qualifiedSemesterLabel,
+} from '@/components/qualified-semester';
 import { RoleBadge } from '@/components/role-badge';
 import { SpreadsheetImportPreview } from '@/components/spreadsheet-import-preview';
 import type {
@@ -44,6 +47,7 @@ import {
     studentSetLevelText,
     studentSetText,
 } from '@/components/student-set-label';
+import { StudentSetPicker } from '@/components/student-set-picker';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -54,6 +58,12 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import {
+    Empty,
+    EmptyDescription,
+    EmptyHeader,
+    EmptyTitle,
+} from '@/components/ui/empty';
 import {
     Field,
     FieldError,
@@ -80,6 +90,7 @@ import {
 } from '@/components/ui/table';
 import type {
     DashboardHod,
+    DashboardResultSheet,
     DashboardHodSetAdvisor,
     DashboardHodStaff,
     DashboardHodStaffForm,
@@ -118,6 +129,10 @@ export function HodDashboard({ hod, section }: HodDashboardProps) {
         return <HodStudentResultsPage hod={hod} />;
     }
 
+    if (section === 'result-approvals') {
+        return <HodResultApprovalsPage hod={hod} />;
+    }
+
     if (section === 'settings') {
         return <HodSettingsPage hod={hod} />;
     }
@@ -126,43 +141,15 @@ export function HodDashboard({ hod, section }: HodDashboardProps) {
 }
 
 function HodHomePage({ hod }: { hod: DashboardHod }) {
-    const setOptions = useMemo(
-        () =>
-            setChartOptions(
-                hod.setAdvisors,
-                hod.department.minimumYearsToDegree,
-            ),
-        [hod.department.minimumYearsToDegree, hod.setAdvisors],
-    );
     const [gpaScope, setGpaScope] = useState('department');
     const [classificationScope, setClassificationScope] =
         useState('department');
-    const gpaOptions = useMemo(
-        () => [
-            {
-                value: 'department',
-                label: `${hod.department.abbreviation} Department`,
-            },
-            ...setOptions,
-        ],
-        [hod.department.abbreviation, setOptions],
-    );
     const gpaStudents = useMemo(
         () =>
             gpaScope === 'department'
                 ? hod.students
                 : studentsForEntrySession(hod.students, gpaScope),
         [gpaScope, hod.students],
-    );
-    const classificationOptions = useMemo(
-        () => [
-            {
-                value: 'department',
-                label: `${hod.department.abbreviation} Department`,
-            },
-            ...setOptions,
-        ],
-        [hod.department.abbreviation, setOptions],
     );
     const classificationStudents = useMemo(
         () =>
@@ -197,11 +184,15 @@ function HodHomePage({ hod }: { hod: DashboardHod }) {
                     title="GPA by Level"
                     detail="Academic performance for the selected student scope."
                     control={
-                        <ChartSelect
+                        <DepartmentSetScopePicker
                             value={gpaScope}
-                            options={gpaOptions}
-                            label="Select GPA scope"
-                            onChange={setGpaScope}
+                            onValueChange={setGpaScope}
+                            sets={hod.setAdvisors}
+                            departmentLabel={`${hod.department.abbreviation} Department`}
+                            minimumYearsToDegree={
+                                hod.department.minimumYearsToDegree
+                            }
+                            ariaLabel="Select GPA scope"
                         />
                     }
                 >
@@ -214,11 +205,15 @@ function HodHomePage({ hod }: { hod: DashboardHod }) {
                     title="Result Class Distribution"
                     detail="Student standing by CGPA classification."
                     control={
-                        <ChartSelect
+                        <DepartmentSetScopePicker
                             value={classificationScope}
-                            options={classificationOptions}
-                            label="Select result scope"
-                            onChange={setClassificationScope}
+                            onValueChange={setClassificationScope}
+                            sets={hod.setAdvisors}
+                            departmentLabel={`${hod.department.abbreviation} Department`}
+                            minimumYearsToDegree={
+                                hod.department.minimumYearsToDegree
+                            }
+                            ariaLabel="Select result scope"
                         />
                     }
                 >
@@ -245,6 +240,37 @@ function HodHomePage({ hod }: { hod: DashboardHod }) {
                 </DashboardCard>
             </div>
         </div>
+    );
+}
+
+function DepartmentSetScopePicker({
+    value,
+    onValueChange,
+    sets,
+    departmentLabel,
+    minimumYearsToDegree,
+    ariaLabel,
+}: {
+    value: string;
+    onValueChange: (value: string) => void;
+    sets: DashboardHodSetAdvisor[];
+    departmentLabel: string;
+    minimumYearsToDegree?: number | null;
+    ariaLabel: string;
+}) {
+    return (
+        <StudentSetPicker
+            value={value}
+            onValueChange={onValueChange}
+            options={sets.map((set) => ({
+                value: set.entrySession.name,
+                entrySession: set.entrySession,
+                currentLevel: set.currentLevel,
+                minimumYearsToDegree,
+            }))}
+            allOption={{ value: 'department', label: departmentLabel }}
+            ariaLabel={ariaLabel}
+        />
     );
 }
 
@@ -564,154 +590,519 @@ function HodCourseOfferingsPage({ hod }: { hod: DashboardHod }) {
 
 function HodStudentResultsPage({ hod }: { hod: DashboardHod }) {
     const minimumYearsToDegree = hod.department.minimumYearsToDegree;
-    const setOptions = useMemo(
-        () => setChartOptions(hod.setAdvisors, minimumYearsToDegree),
-        [hod.setAdvisors, minimumYearsToDegree],
-    );
-    const [gpaScope, setGpaScope] = useState('department');
-    const [classificationScope, setClassificationScope] =
-        useState('department');
-    const gpaOptions = useMemo(
-        () => [
-            {
-                value: 'department',
-                label: `${hod.department.abbreviation} Department`,
-            },
-            ...setOptions,
+    const setGroups = useMemo(
+        () =>
+            resultSheetSetGroups(
+                hod.studentResults.resultSheets,
+                hod.setAdvisors,
+                minimumYearsToDegree,
+            ),
+        [
+            hod.setAdvisors,
+            hod.studentResults.resultSheets,
+            minimumYearsToDegree,
         ],
-        [hod.department.abbreviation, setOptions],
     );
-    const classificationOptions = useMemo(
-        () => [
-            {
-                value: 'department',
-                label: `${hod.department.abbreviation} Department`,
-            },
-            ...setOptions,
-        ],
-        [hod.department.abbreviation, setOptions],
+    const [selectedSetId, setSelectedSetId] = useState(
+        setGroups[0]?.value ?? '',
     );
-    const gpaStudents = useMemo(
-        () =>
-            gpaScope === 'department'
-                ? hod.students
-                : studentsForEntrySession(hod.students, gpaScope),
-        [gpaScope, hod.students],
-    );
-    const classificationStudents = useMemo(
-        () =>
-            classificationScope === 'department'
-                ? hod.students
-                : studentsForEntrySession(hod.students, classificationScope),
-        [classificationScope, hod.students],
-    );
-    const bestStudents = useMemo(
-        () =>
-            [...hod.students]
-                .sort(
-                    (first, second) => Number(second.cgpa) - Number(first.cgpa),
-                )
-                .slice(0, 5),
-        [hod.students],
-    );
-    const lowestStudents = useMemo(
-        () =>
-            [...hod.students]
-                .sort(
-                    (first, second) => Number(first.cgpa) - Number(second.cgpa),
-                )
-                .slice(0, 5),
-        [hod.students],
-    );
-    const averageCgpa = averageGpa(hod.students.map((student) => student.cgpa));
-    const studentsWithCarryovers = hod.students.filter(
-        (student) => student.pendingCarryovers.length > 0,
-    ).length;
+    const selectedGroup =
+        setGroups.find((group) => group.value === selectedSetId) ??
+        setGroups[0] ??
+        null;
 
     return (
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">
             <PageSummary
                 title="Student Results"
-                detail="Department performance, CGPA standing, and set progress."
+                detail="Browse published results by student set."
             />
 
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <MetricBlock
-                    label="Department Students"
-                    value={hod.studentResults.studentsCount}
-                    detail={hod.department.abbreviation}
-                />
-                <MetricBlock
-                    label="Average CGPA"
-                    value={averageCgpa}
-                    detail="Across the department"
-                />
-                <MetricBlock
-                    label="With Carryovers"
-                    value={studentsWithCarryovers}
-                    detail="Need academic attention"
-                />
-                <MetricBlock
-                    label="Entry Sets"
-                    value={hod.studentResults.sets.length}
-                    detail="Tracked in this department"
-                />
-            </div>
-
-            <div className="grid gap-4 xl:grid-cols-2">
-                <ChartCard
-                    title="GPA by Level"
-                    detail="Level-by-level performance for the selected scope."
-                    control={
-                        <ChartSelect
-                            value={gpaScope}
-                            options={gpaOptions}
-                            label="Select GPA scope"
-                            onChange={setGpaScope}
+            <DashboardCard
+                title="Published Results"
+                detail={
+                    selectedGroup
+                        ? `${selectedGroup.label} · ${selectedGroup.sheets.length} ${
+                              selectedGroup.sheets.length === 1
+                                  ? 'published result sheet'
+                                  : 'published result sheets'
+                          }`
+                        : 'HODs see only results that are already public.'
+                }
+                flush
+                action={
+                    setGroups.length > 0 ? (
+                        <ResultSetCombobox
+                            groups={setGroups}
+                            value={selectedGroup?.value ?? ''}
+                            onChange={setSelectedSetId}
+                            minimumYearsToDegree={minimumYearsToDegree}
                         />
-                    }
-                >
-                    <AverageGpaByLevelBarChart
-                        rows={averageGpaByLevelRows(gpaStudents, hod.levels)}
-                    />
-                </ChartCard>
-
-                <ChartCard
-                    title="Result Class Distribution"
-                    detail="CGPA classification for the selected scope."
-                    control={
-                        <ChartSelect
-                            value={classificationScope}
-                            options={classificationOptions}
-                            label="Select result scope"
-                            onChange={setClassificationScope}
-                        />
-                    }
-                >
-                    <ResultClassificationPieChart
-                        rows={classificationRowsForStudents(
-                            classificationStudents,
-                        )}
-                    />
-                </ChartCard>
-            </div>
-
-            <div className="grid gap-4 xl:grid-cols-2">
-                <DashboardCard title="Best 5 Students">
-                    <StudentStandingTable
-                        students={bestStudents}
-                        minimumYearsToDegree={minimumYearsToDegree}
-                    />
-                </DashboardCard>
-                <DashboardCard title="Lowest 5 Students">
-                    <StudentStandingTable
-                        students={lowestStudents}
-                        minimumYearsToDegree={minimumYearsToDegree}
-                    />
-                </DashboardCard>
-            </div>
+                    ) : null
+                }
+            >
+                {selectedGroup ? (
+                    <ResultArchiveTable sheets={selectedGroup.sheets} />
+                ) : (
+                    <Empty className="border-0 px-4 py-10">
+                        <EmptyHeader>
+                            <EmptyTitle>No published results</EmptyTitle>
+                            <EmptyDescription>
+                                Published results will appear here after the HOD
+                                approves submitted result sheets.
+                            </EmptyDescription>
+                        </EmptyHeader>
+                    </Empty>
+                )}
+            </DashboardCard>
         </div>
     );
+}
+
+function HodResultApprovalsPage({ hod }: { hod: DashboardHod }) {
+    const minimumYearsToDegree = hod.department.minimumYearsToDegree;
+
+    return (
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">
+            <PageSummary
+                title="Result Approvals"
+                detail="Review result sheets submitted by course advisers."
+            />
+
+            <HodApprovalTable
+                sheets={hod.studentResults.approvalSheets}
+                setAdvisors={hod.setAdvisors}
+                minimumYearsToDegree={minimumYearsToDegree}
+            />
+        </div>
+    );
+}
+
+type ResultSheetSetGroup = {
+    value: string;
+    label: string;
+    entrySession: DashboardResultSheet['entrySession'];
+    currentLevel: DashboardResultSheet['level'] | null;
+    sheets: DashboardResultSheet[];
+};
+
+function ResultSetCombobox({
+    groups,
+    value,
+    onChange,
+    minimumYearsToDegree,
+}: {
+    groups: ResultSheetSetGroup[];
+    value: string;
+    onChange: (value: string) => void;
+    minimumYearsToDegree?: number | null;
+}) {
+    return (
+        <StudentSetPicker
+            value={value}
+            onValueChange={onChange}
+            options={groups.map((group) => ({
+                value: group.value,
+                entrySession: group.entrySession,
+                currentLevel: group.currentLevel,
+                minimumYearsToDegree,
+                meta: `${group.sheets.length} ${
+                    group.sheets.length === 1 ? 'sheet' : 'sheets'
+                }`,
+                searchText: `${group.label} ${group.entrySession.name}`,
+            }))}
+            placeholder="Select student set"
+            ariaLabel="Select student set"
+            className="w-full sm:w-96"
+        />
+    );
+}
+
+function resultSheetSetGroups(
+    sheets: DashboardResultSheet[],
+    setAdvisors: DashboardHodSetAdvisor[],
+    minimumYearsToDegree?: number | null,
+): ResultSheetSetGroup[] {
+    const currentLevelBySet = new Map(
+        setAdvisors.map((setAdvisor) => [
+            setAdvisor.entrySession.id,
+            setAdvisor.currentLevel,
+        ]),
+    );
+    const map = new Map<number, ResultSheetSetGroup>();
+
+    for (const sheet of sheets) {
+        const currentLevel = currentLevelBySet.has(sheet.entrySession.id)
+            ? (currentLevelBySet.get(sheet.entrySession.id) ?? null)
+            : sheet.level;
+
+        if (!map.has(sheet.entrySession.id)) {
+            map.set(sheet.entrySession.id, {
+                value: sheet.entrySession.id.toString(),
+                label: studentSetText({
+                    entrySession: sheet.entrySession,
+                    currentLevel,
+                    minimumYearsToDegree,
+                }),
+                entrySession: sheet.entrySession,
+                currentLevel,
+                sheets: [],
+            });
+        }
+
+        map.get(sheet.entrySession.id)?.sheets.push(sheet);
+    }
+
+    return [...map.values()]
+        .map((group) => ({
+            ...group,
+            sheets: resultSheetSort(group.sheets),
+        }))
+        .sort((first, second) =>
+            second.entrySession.name.localeCompare(first.entrySession.name),
+        );
+}
+
+function ResultArchiveTable({ sheets }: { sheets: DashboardResultSheet[] }) {
+    return (
+        <Table>
+            <TableHeader>
+                <TableRow>
+                    <TableHead className="px-4">Result Sheet</TableHead>
+                    <TableHead>Academic Session</TableHead>
+                    <TableHead>Submitted By</TableHead>
+                    <TableHead className="text-center">Students</TableHead>
+                    <TableHead className="text-center">Courses</TableHead>
+                    <TableHead className="text-center">Avg GPA</TableHead>
+                    <TableHead className="pr-4 text-right">Action</TableHead>
+                </TableRow>
+            </TableHeader>
+            <TableBody>
+                {sheets.map((sheet) => (
+                    <TableRow key={sheet.id}>
+                        <TableCell className="px-4">
+                            <div className="font-semibold">
+                                {qualifiedSemesterLabel(
+                                    sheet.level.title,
+                                    sheet.semester.name,
+                                )}
+                            </div>
+                        </TableCell>
+                        <TableCell>
+                            {sheet.academicSession.name} Session
+                        </TableCell>
+                        <TableCell>
+                            <SubmittedByCell person={sheet.submittedBy} />
+                        </TableCell>
+                        <TableCell className="text-center font-medium tabular-nums">
+                            {sheet.studentCount}
+                        </TableCell>
+                        <TableCell className="text-center font-medium tabular-nums">
+                            {sheet.courseCount}
+                        </TableCell>
+                        <TableCell className="text-center font-medium tabular-nums">
+                            {sheet.averageGpa}
+                        </TableCell>
+                        <TableCell className="pr-4 text-right">
+                            <ActionLink
+                                href={showResultSheet({
+                                    resultSheet: sheet.id,
+                                })}
+                            >
+                                View Sheet
+                            </ActionLink>
+                        </TableCell>
+                    </TableRow>
+                ))}
+            </TableBody>
+        </Table>
+    );
+}
+
+function HodApprovalTable({
+    sheets,
+    setAdvisors,
+    minimumYearsToDegree,
+}: {
+    sheets: DashboardResultSheet[];
+    setAdvisors: DashboardHodSetAdvisor[];
+    minimumYearsToDegree?: number | null;
+}) {
+    const [search, setSearch] = useState('');
+    const [setFilter, setSetFilter] = useState('all');
+    const currentLevelBySet = useMemo(
+        () =>
+            new Map(
+                setAdvisors.map((setAdvisor) => [
+                    setAdvisor.entrySession.id,
+                    setAdvisor.currentLevel,
+                ]),
+            ),
+        [setAdvisors],
+    );
+    const setOptions = useMemo(
+        () => resultSheetSetGroups(sheets, setAdvisors, minimumYearsToDegree),
+        [minimumYearsToDegree, setAdvisors, sheets],
+    );
+    const visibleSheets = useMemo(
+        () =>
+            resultSheetSort(sheets).filter((sheet) => {
+                const setLabel = resultSheetSetLabel(
+                    sheet,
+                    currentLevelBySet,
+                    minimumYearsToDegree,
+                );
+
+                return (
+                    resultSheetSearchText(sheet, setLabel).includes(
+                        search.trim().toLowerCase(),
+                    ) &&
+                    (setFilter === 'all' ||
+                        sheet.entrySession.id.toString() === setFilter)
+                );
+            }),
+        [currentLevelBySet, minimumYearsToDegree, search, setFilter, sheets],
+    );
+
+    return (
+        <DashboardCard
+            title="Submitted Results"
+            detail="Result sheets waiting for HOD review."
+            flush
+            toolbar={
+                <div className="grid gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+                    <SearchInput
+                        value={search}
+                        onChange={setSearch}
+                        placeholder="Search submitted results"
+                    />
+                    <SearchableSetFilter
+                        groups={setOptions}
+                        value={setFilter}
+                        onChange={setSetFilter}
+                        minimumYearsToDegree={minimumYearsToDegree}
+                    />
+                </div>
+            }
+        >
+            {visibleSheets.length > 0 ? (
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead className="px-4">Result Sheet</TableHead>
+                            <TableHead>Set</TableHead>
+                            <TableHead>Submitted By</TableHead>
+                            <TableHead>Submitted On</TableHead>
+                            <TableHead className="text-center">
+                                Students
+                            </TableHead>
+                            <TableHead className="text-center">
+                                Avg GPA
+                            </TableHead>
+                            <TableHead className="pr-4 text-right">
+                                Action
+                            </TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {visibleSheets.map((sheet) => (
+                            <TableRow key={sheet.id}>
+                                <TableCell className="px-4">
+                                    <div className="font-semibold">
+                                        {qualifiedSemesterLabel(
+                                            sheet.level.title,
+                                            sheet.semester.name,
+                                        )}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                        {sheet.academicSession.name} Session
+                                    </div>
+                                </TableCell>
+                                <TableCell>
+                                    <StudentSetLabel
+                                        entrySession={sheet.entrySession}
+                                        currentLevel={resultSheetCurrentLevel(
+                                            sheet,
+                                            currentLevelBySet,
+                                        )}
+                                        minimumYearsToDegree={
+                                            minimumYearsToDegree
+                                        }
+                                    />
+                                </TableCell>
+                                <TableCell>
+                                    <SubmittedByCell
+                                        person={sheet.submittedBy}
+                                    />
+                                </TableCell>
+                                <TableCell>
+                                    {sheet.submittedAt ?? (
+                                        <span className="text-muted-foreground">
+                                            Not recorded
+                                        </span>
+                                    )}
+                                </TableCell>
+                                <TableCell className="text-center font-medium tabular-nums">
+                                    {sheet.studentCount}
+                                </TableCell>
+                                <TableCell className="text-center font-medium tabular-nums">
+                                    {sheet.averageGpa}
+                                </TableCell>
+                                <TableCell className="pr-4 text-right">
+                                    <ActionLink
+                                        href={showResultSheetApproval({
+                                            resultSheet: sheet.id,
+                                        })}
+                                    >
+                                        Review
+                                    </ActionLink>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            ) : (
+                <Empty className="border-0 px-4 py-10">
+                    <EmptyHeader>
+                        <EmptyTitle>No submitted results found</EmptyTitle>
+                        <EmptyDescription>
+                            Adjust the search or set filter to find a submitted
+                            result sheet.
+                        </EmptyDescription>
+                    </EmptyHeader>
+                </Empty>
+            )}
+        </DashboardCard>
+    );
+}
+
+function SearchableSetFilter({
+    groups,
+    value,
+    onChange,
+    minimumYearsToDegree,
+}: {
+    groups: ResultSheetSetGroup[];
+    value: string;
+    onChange: (value: string) => void;
+    minimumYearsToDegree?: number | null;
+}) {
+    return (
+        <StudentSetPicker
+            value={value}
+            onValueChange={onChange}
+            options={groups.map((group) => ({
+                value: group.value,
+                entrySession: group.entrySession,
+                currentLevel: group.currentLevel,
+                minimumYearsToDegree,
+                meta: `${group.sheets.length} ${
+                    group.sheets.length === 1 ? 'sheet' : 'sheets'
+                }`,
+                searchText: `${group.label} ${group.entrySession.name}`,
+            }))}
+            allOption={{ value: 'all', label: 'All sets' }}
+            ariaLabel="Filter by student set"
+        />
+    );
+}
+
+function SubmittedByCell({
+    person,
+}: {
+    person: DashboardResultSheet['submittedBy'];
+}) {
+    if (person === null) {
+        return <span className="text-muted-foreground">Not submitted</span>;
+    }
+
+    const cell = (
+        <PersonCell
+            name={person.name}
+            secondary={person.email}
+            avatar={person.avatar}
+        />
+    );
+
+    if (person.profileUrl === null) {
+        return cell;
+    }
+
+    return (
+        <Link
+            href={person.profileUrl}
+            className="block rounded-sm transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-hidden"
+        >
+            {cell}
+        </Link>
+    );
+}
+
+function resultSheetSort(
+    sheets: DashboardResultSheet[],
+): DashboardResultSheet[] {
+    return [...sheets].sort((first, second) => {
+        const levelDiff = first.level.id - second.level.id;
+
+        if (levelDiff !== 0) {
+            return levelDiff;
+        }
+
+        const semesterDiff =
+            semesterRank(first.semester.slug) -
+            semesterRank(second.semester.slug);
+
+        if (semesterDiff !== 0) {
+            return semesterDiff;
+        }
+
+        return first.academicSession.name.localeCompare(
+            second.academicSession.name,
+        );
+    });
+}
+
+function resultSheetSetLabel(
+    sheet: DashboardResultSheet,
+    currentLevelBySet: Map<number, DashboardResultSheet['level'] | null>,
+    minimumYearsToDegree?: number | null,
+): string {
+    return studentSetText({
+        entrySession: sheet.entrySession,
+        currentLevel: resultSheetCurrentLevel(sheet, currentLevelBySet),
+        minimumYearsToDegree,
+    });
+}
+
+function resultSheetCurrentLevel(
+    sheet: DashboardResultSheet,
+    currentLevelBySet: Map<number, DashboardResultSheet['level'] | null>,
+): DashboardResultSheet['level'] | null {
+    return currentLevelBySet.has(sheet.entrySession.id)
+        ? (currentLevelBySet.get(sheet.entrySession.id) ?? null)
+        : sheet.level;
+}
+
+function semesterRank(semester: string): number {
+    return semester === 'harmattan' ? 1 : 2;
+}
+
+function resultSheetSearchText(
+    sheet: DashboardResultSheet,
+    setLabel?: string,
+): string {
+    return [
+        qualifiedSemesterLabel(sheet.level.title, sheet.semester.name),
+        sheet.academicSession.name,
+        sheet.entrySession.name,
+        setLabel,
+        sheet.statusLabel,
+        sheet.submittedBy?.name,
+        sheet.submittedBy?.email,
+    ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
 }
 
 function HodSettingsPage({ hod }: { hod: DashboardHod }) {
@@ -950,31 +1341,42 @@ export function StudentRecordDashboard({
 }) {
     return (
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                    <PersonCell
-                        name={record.student.fullName}
-                        secondary={record.student.email}
-                        avatar={record.student.avatar}
-                        size="md"
-                    />
-                    <div className="mt-2 flex flex-wrap gap-2 text-sm text-muted-foreground">
-                        <span className="font-medium text-foreground">
-                            Reg. No.
-                        </span>
-                        <CopyableValue
-                            value={record.student.registrationNumber}
-                            className="h-7"
-                            valueClassName="text-xs"
-                        />
-                    </div>
-                </div>
+            <div className="flex flex-col gap-4">
                 <ActionLink
                     href={dashboardSection({ section: 'students' })}
                     icon={<RiArrowLeftLine className="size-4" />}
+                    className="w-fit"
                 >
                     Back to Students
                 </ActionLink>
+
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                        <PersonCell
+                            name={record.student.fullName}
+                            secondary={record.student.email}
+                            avatar={record.student.avatar}
+                            size="md"
+                        />
+                        <div className="mt-2 flex flex-wrap gap-2 text-sm text-muted-foreground">
+                            <span className="font-medium text-foreground">
+                                Reg. No.
+                            </span>
+                            <CopyableValue
+                                value={record.student.registrationNumber}
+                                className="h-7"
+                                valueClassName="text-xs"
+                            />
+                        </div>
+                    </div>
+
+                    <Button variant="outline" asChild className="w-fit">
+                        <Link href={record.statementUrl}>
+                            <RiFileExcel2Line className="size-4" />
+                            Download Statement
+                        </Link>
+                    </Button>
+                </div>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -1065,6 +1467,9 @@ function StaffTable({
                                 Access Code
                             </TableHead>
                         ) : null}
+                        <TableHead className="w-20 pr-4 text-right">
+                            Action
+                        </TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1105,10 +1510,21 @@ function StaffTable({
                                         />
                                     </TableCell>
                                 ) : null}
+                                <TableCell className="pr-4 text-right">
+                                    {member.profileUrl ? (
+                                        <ActionLink href={member.profileUrl}>
+                                            View
+                                        </ActionLink>
+                                    ) : (
+                                        <span className="text-muted-foreground">
+                                            -
+                                        </span>
+                                    )}
+                                </TableCell>
                             </TableRow>
                         ))
                     ) : (
-                        <EmptyTableRow colSpan={compact ? 4 : 5}>
+                        <EmptyTableRow colSpan={compact ? 5 : 6}>
                             No staff match the current filters.
                         </EmptyTableRow>
                     )}
@@ -1272,84 +1688,6 @@ function SetAdvisorTable({
     );
 }
 
-function StudentStandingTable({
-    students,
-    minimumYearsToDegree,
-}: {
-    students: DashboardStaffStudent[];
-    minimumYearsToDegree?: number;
-}) {
-    return (
-        <Table className="text-sm">
-            <TableHeader>
-                <TableRow>
-                    <TableHead className="px-4">Student</TableHead>
-                    <TableHead>Set</TableHead>
-                    <TableHead className="w-24 text-center">CGPA</TableHead>
-                    <TableHead className="w-20 pr-4 text-right">
-                        Action
-                    </TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                {students.length > 0 ? (
-                    students.map((student) => (
-                        <TableRow
-                            key={student.id}
-                            className="odd:bg-background even:bg-muted/25"
-                        >
-                            <TableCell className="px-4">
-                                <PersonCell
-                                    name={student.fullName}
-                                    avatar={student.avatar}
-                                />
-                            </TableCell>
-                            <TableCell>
-                                <CompactStudentSet
-                                    student={student}
-                                    minimumYearsToDegree={minimumYearsToDegree}
-                                />
-                            </TableCell>
-                            <TableCell className="text-center font-semibold tabular-nums">
-                                {student.cgpa}
-                            </TableCell>
-                            <TableCell className="pr-4 text-right">
-                                <ActionLink href={student.profileUrl}>
-                                    View
-                                </ActionLink>
-                            </TableCell>
-                        </TableRow>
-                    ))
-                ) : (
-                    <EmptyTableRow colSpan={4}>
-                        No students match the current filters.
-                    </EmptyTableRow>
-                )}
-            </TableBody>
-        </Table>
-    );
-}
-
-function CompactStudentSet({
-    student,
-    minimumYearsToDegree,
-}: {
-    student: DashboardStaffStudent;
-    minimumYearsToDegree?: number;
-}) {
-    const set = studentSetText({
-        entrySession: student.entrySession,
-        currentLevel: student.currentLevel,
-        minimumYearsToDegree,
-    });
-
-    return (
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <span className="truncate font-medium">{set}</span>
-        </div>
-    );
-}
-
 function LevelGpaTable({
     rows,
 }: {
@@ -1441,7 +1779,7 @@ function StudentRecordSemesterCard({
                                     {course.score}
                                 </TableCell>
                                 <TableCell className="pr-4 text-center">
-                                    <GradeBadge grade={course.grade} />
+                                    <GradeDisplay grade={course.grade} />
                                 </TableCell>
                             </TableRow>
                         ))}
@@ -1494,15 +1832,50 @@ function PageSummary({ title, detail }: { title: string; detail: string }) {
 
 function DashboardCard({
     title,
+    detail,
+    action,
+    toolbar,
+    flush = false,
     children,
 }: {
     title: string;
+    detail?: string;
+    action?: ReactNode;
+    toolbar?: ReactNode;
+    flush?: boolean;
     children: ReactNode;
 }) {
+    const titleBlock = (
+        <div className="min-w-0">
+            <CardTitle>{title}</CardTitle>
+            {detail ? (
+                <div className="mt-1 text-sm text-muted-foreground">
+                    {detail}
+                </div>
+            ) : null}
+        </div>
+    );
+
+    if (flush) {
+        return (
+            <section className="overflow-hidden border border-border bg-background shadow-sm ring-1 ring-border/70">
+                <div className="grid gap-3 border-b border-border px-4 py-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        {titleBlock}
+                        {action}
+                    </div>
+                    {toolbar}
+                </div>
+                <div>{children}</div>
+            </section>
+        );
+    }
+
     return (
         <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
-            <CardHeader className="border-b border-border">
-                <CardTitle>{title}</CardTitle>
+            <CardHeader className="flex-col items-start justify-between gap-3 border-b border-border sm:flex-row sm:items-center">
+                {titleBlock}
+                {action}
             </CardHeader>
             <CardContent className="p-0">{children}</CardContent>
         </Card>
@@ -1611,28 +1984,17 @@ function CarryoverBadges({ courses }: { courses: string[] }) {
     );
 }
 
-function GradeBadge({ grade }: { grade: string }) {
-    const className =
-        grade === 'F'
-            ? 'border-destructive/30 bg-destructive/10 text-destructive'
-            : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-300';
-
-    return (
-        <Badge variant="outline" className={className}>
-            {grade}
-        </Badge>
-    );
-}
-
 function StatusBadge({ status }: { status: string }) {
     const className =
         status === 'Active' || status === 'Approved'
             ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-300'
-            : status === 'Awaiting review'
+            : status === 'Awaiting review' || status === 'Awaiting HOD Review'
               ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-400/30 dark:bg-blue-400/10 dark:text-blue-300'
-              : status === 'Missing'
-                ? 'border-destructive/30 bg-destructive/10 text-destructive'
-                : 'border-border bg-muted/60 text-foreground';
+              : status === 'Returned for Correction'
+                ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300'
+                : status === 'Missing'
+                  ? 'border-destructive/30 bg-destructive/10 text-destructive'
+                  : 'border-border bg-muted/60 text-foreground';
 
     return (
         <Badge variant="outline" className={className}>
