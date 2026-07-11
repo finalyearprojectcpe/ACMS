@@ -1193,6 +1193,7 @@ function FacultyHeadHodImport({
                 start_row: batch.startRow,
                 total_rows: batch.totalRows,
                 batch_size: batch.batchSize,
+                mappings: batch.mappings,
                 rows,
             },
             {
@@ -1435,6 +1436,7 @@ function FacultyHeadStaffImport({
                 start_row: batch.startRow,
                 total_rows: batch.totalRows,
                 batch_size: batch.batchSize,
+                mappings: batch.mappings,
                 rows,
             },
             {

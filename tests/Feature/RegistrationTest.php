@@ -1,5 +1,6 @@
 <?php
 
+use App\AccountStatus;
 use App\AccountType;
 use App\Models\Department;
 use App\Models\Faculty;
@@ -310,6 +311,7 @@ test('staff login is scoped to the current school', function () {
         'access_code' => 'FUTO-CODE',
         'access_code_used_at' => now(),
         'activated_at' => now(),
+        'status' => AccountStatus::Active,
     ])->save();
 
     $response = $this->post(route('login.store'), [

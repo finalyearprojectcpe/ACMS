@@ -1,5 +1,6 @@
 <?php
 
+use App\CourseCategory;
 use App\Models\AcademicSession;
 use App\Models\Course;
 use App\Models\CourseOffering;
@@ -44,10 +45,10 @@ test('course advisors see course schedules up to their assigned level', function
             ->where('semesters.0.electiveCourseCount', 0)
             ->has('semesters.0.offerings', 5)
             ->where('semesters.0.offerings.0.code', 'CPE 301')
-            ->where('semesters.0.offerings.0.courseType', 'Departmental Course')
+            ->where('semesters.0.offerings.0.category', 'departmental')
             ->where('semesters.0.offerings.0.prerequisites.0.code', 'CPE 202')
             ->where('semesters.0.offerings.4.code', 'MTH 305')
-            ->where('semesters.0.offerings.4.courseType', 'Faculty Course')
+            ->where('semesters.0.offerings.4.category', 'faculty')
         )
         ->etc());
 });
@@ -75,12 +76,7 @@ test('department heads view course offerings but cannot manage them', function (
         ->where('dashboard.staffCourseSchedules', null)
         ->where('dashboard.staffCourseOfferingForm', null)
         ->where('dashboard.hod.courseOfferings.level.slug', '300-level')
-        ->where('dashboard.hod.courseOfferings.semesters.0.offerings.0.courseType', 'Departmental Course')
-        ->where('dashboard.hod.staff', fn ($staff): bool => collect($staff)->contains(
-            fn ($member): bool => $member['email'] === 'staff4@futo.edu'
-                && $member['role'] === 'Course Adviser'
-                && $member['roleContext'] === '300L',
-        ))
+        ->where('dashboard.hod.courseOfferings.semesters.0.offerings.0.category', 'departmental')
         ->etc());
 
     $this->actingAs($hodUser)->get(route('dashboard.courses.create', [
@@ -95,7 +91,7 @@ test('department heads view course offerings but cannot manage them', function (
         'code' => 'CPE 399',
         'title' => 'Special Topics',
         'credit_units' => 2,
-        'is_mandatory' => true,
+        'category' => CourseCategory::Departmental->value,
         'prerequisite_course_ids' => [],
     ])->assertNotFound();
 
@@ -121,7 +117,7 @@ test('course advisors can create a department course offering with prerequisites
         'code' => 'CPE 309',
         'title' => 'Computer Engineering Laboratory',
         'credit_units' => 1,
-        'is_mandatory' => false,
+        'category' => CourseCategory::Elective->value,
         'prerequisite_course_ids' => [$prerequisite->id],
     ]);
 
@@ -138,7 +134,7 @@ test('course advisors can create a department course offering with prerequisites
         ->where('course_id', $course->id)
         ->firstOrFail();
 
-    expect($course->credit_units)->toBe(1)
-        ->and($offering->is_mandatory)->toBeFalse()
-        ->and($course->prerequisites()->where('code', 'CPE 301')->exists())->toBeTrue();
+    expect($offering->credit_units)->toBe(1)
+        ->and($offering->category)->toBe(CourseCategory::Elective)
+        ->and($offering->prerequisiteCourses()->where('code', 'CPE 301')->exists())->toBeTrue();
 });

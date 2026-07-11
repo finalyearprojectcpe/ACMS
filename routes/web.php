@@ -1,23 +1,45 @@
 <?php
 
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FacultyHeadTransferController;
+use App\Http\Controllers\ReceiptVerificationController;
 use App\Http\Controllers\SchoolAdminTransferController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function (): void {
     Route::get('/', [AuthenticatedSessionController::class, 'create'])->name('home');
-    Route::post('/login', [AuthenticatedSessionController::class, 'store'])->name('login.store');
+    Route::post('/login', [AuthenticatedSessionController::class, 'store'])
+        ->middleware('throttle:5,1')
+        ->name('login.store');
+    Route::get('/forgot-password', [PasswordResetController::class, 'createRequest'])
+        ->name('password.request');
+    Route::post('/forgot-password', [PasswordResetController::class, 'storeRequest'])
+        ->middleware('throttle:3,1')
+        ->name('password.email');
+    Route::get('/reset-password/{token}', [PasswordResetController::class, 'createReset'])
+        ->name('password.reset');
+    Route::post('/reset-password', [PasswordResetController::class, 'storeReset'])
+        ->middleware('throttle:5,1')
+        ->name('password.update');
 
     Route::redirect('/signup', '/signup/student')->name('signup');
     Route::get('/signup/student', [RegisteredUserController::class, 'createStudent'])->name('signup.student');
-    Route::post('/signup/student/verify', [RegisteredUserController::class, 'verifyStudent'])->name('signup.student.verify');
-    Route::post('/signup/student', [RegisteredUserController::class, 'storeStudent'])->name('signup.student.store');
+    Route::post('/signup/student/verify', [RegisteredUserController::class, 'verifyStudent'])
+        ->middleware('throttle:10,1')
+        ->name('signup.student.verify');
+    Route::post('/signup/student', [RegisteredUserController::class, 'storeStudent'])
+        ->middleware('throttle:5,1')
+        ->name('signup.student.store');
     Route::get('/signup/staff', [RegisteredUserController::class, 'createStaff'])->name('signup.staff');
-    Route::post('/signup/staff/verify', [RegisteredUserController::class, 'verifyStaff'])->name('signup.staff.verify');
-    Route::post('/signup/staff', [RegisteredUserController::class, 'storeStaff'])->name('signup.staff.store');
+    Route::post('/signup/staff/verify', [RegisteredUserController::class, 'verifyStaff'])
+        ->middleware('throttle:10,1')
+        ->name('signup.staff.verify');
+    Route::post('/signup/staff', [RegisteredUserController::class, 'storeStaff'])
+        ->middleware('throttle:5,1')
+        ->name('signup.staff.store');
     Route::get('/ownership-transfer/{token}', [SchoolAdminTransferController::class, 'create'])->name('ownership-transfer.create');
     Route::post('/ownership-transfer/{token}', [SchoolAdminTransferController::class, 'store'])->name('ownership-transfer.store');
     Route::get('/faculty-head-transfer/{token}', [FacultyHeadTransferController::class, 'create'])->name('faculty-head-transfer.create');
@@ -26,6 +48,14 @@ Route::middleware('guest')->group(function (): void {
 
 Route::post('/paystack/webhook', [DashboardController::class, 'handlePaystackWebhook'])
     ->name('paystack.webhook');
+
+Route::get('/receipts/{paystackTransactionId}/verify', [ReceiptVerificationController::class, 'show'])
+    ->whereNumber('paystackTransactionId')
+    ->name('receipts.verify');
+Route::get('/receipts/{paystackTransactionId}/download', [ReceiptVerificationController::class, 'download'])
+    ->whereNumber('paystackTransactionId')
+    ->middleware('signed:relative')
+    ->name('receipts.download');
 
 Route::middleware('auth')->group(function (): void {
     Route::get('/dashboard', [DashboardController::class, 'home'])->name('dashboard');
@@ -115,6 +145,12 @@ Route::middleware('auth')->group(function (): void {
         ->name('dashboard.department-staff.import');
     Route::post('/dashboard/department-staff/import', [DashboardController::class, 'storeImportedHodStaff'])
         ->name('dashboard.department-staff.import.store');
+    Route::get('/dashboard/student-sets/{entryAcademicSession}/course-adviser', [DashboardController::class, 'editStudentSetAdvisor'])
+        ->whereNumber('entryAcademicSession')
+        ->name('dashboard.student-sets.course-adviser.edit');
+    Route::patch('/dashboard/student-sets/{entryAcademicSession}/course-adviser', [DashboardController::class, 'updateStudentSetAdvisor'])
+        ->whereNumber('entryAcademicSession')
+        ->name('dashboard.student-sets.course-adviser.update');
     Route::redirect('/dashboard/faculty-courses', '/dashboard/sessions-courses');
     Route::post('/dashboard/sessions-courses/{academicSession}/copy-courses', [DashboardController::class, 'copyFacultyCourseOfferings'])
         ->whereNumber('academicSession')
@@ -174,6 +210,9 @@ Route::middleware('auth')->group(function (): void {
         ->name('dashboard.results.import');
     Route::post('/dashboard/results/import', [DashboardController::class, 'storeResultSheetImport'])
         ->name('dashboard.results.import.store');
+    Route::get('/dashboard/results/{resultSheet}/source-file', [DashboardController::class, 'downloadResultSheetSourceFile'])
+        ->whereNumber('resultSheet')
+        ->name('dashboard.results.source-file');
     Route::get('/dashboard/results/{resultSheet}', [DashboardController::class, 'showResultSheet'])
         ->whereNumber('resultSheet')
         ->name('dashboard.results.show');
@@ -194,10 +233,45 @@ Route::middleware('auth')->group(function (): void {
     Route::patch('/dashboard/course-registration/{courseRegistration}/return', [DashboardController::class, 'returnCourseRegistration'])
         ->whereNumber('courseRegistration')
         ->name('dashboard.course-registration.return');
+    Route::get('/dashboard/students/create', [DashboardController::class, 'createAdvisedStudent'])
+        ->name('dashboard.students.create');
+    Route::post('/dashboard/students', [DashboardController::class, 'storeAdvisedStudent'])
+        ->name('dashboard.students.store');
+    Route::get('/dashboard/students/import', [DashboardController::class, 'importAdvisedStudents'])
+        ->name('dashboard.students.import');
+    Route::post('/dashboard/students/import', [DashboardController::class, 'storeImportedAdvisedStudents'])
+        ->name('dashboard.students.import.store');
     Route::get('/dashboard/dues/create', [DashboardController::class, 'createStaffDue'])
         ->name('dashboard.dues.create');
     Route::post('/dashboard/dues', [DashboardController::class, 'storeStaffDue'])
         ->name('dashboard.dues.store');
+    Route::get('/dashboard/dues/{due}/edit', [DashboardController::class, 'editStaffDue'])
+        ->whereNumber('due')
+        ->name('dashboard.dues.edit');
+    Route::patch('/dashboard/dues/{due}', [DashboardController::class, 'updateStaffDue'])
+        ->whereNumber('due')
+        ->name('dashboard.dues.update');
+    Route::patch('/dashboard/dues/{due}/archive', [DashboardController::class, 'archiveStaffDue'])
+        ->whereNumber('due')
+        ->name('dashboard.dues.archive');
+    Route::patch('/dashboard/dues/{due}/restore', [DashboardController::class, 'restoreStaffDue'])
+        ->whereNumber('due')
+        ->name('dashboard.dues.restore');
+    Route::get('/dashboard/dues/{due}/export', [DashboardController::class, 'exportStaffDue'])
+        ->whereNumber('due')
+        ->name('dashboard.dues.export');
+    Route::get('/dashboard/dues/{due}/assignments/{studentDueAssignment}/waive', [DashboardController::class, 'createStudentDueWaiver'])
+        ->whereNumber('due')
+        ->whereNumber('studentDueAssignment')
+        ->name('dashboard.dues.assignments.waive.create');
+    Route::patch('/dashboard/dues/{due}/assignments/{studentDueAssignment}/waive', [DashboardController::class, 'waiveStudentDue'])
+        ->whereNumber('due')
+        ->whereNumber('studentDueAssignment')
+        ->name('dashboard.dues.assignments.waive');
+    Route::patch('/dashboard/dues/{due}/assignments/{studentDueAssignment}/restore', [DashboardController::class, 'restoreStudentDue'])
+        ->whereNumber('due')
+        ->whereNumber('studentDueAssignment')
+        ->name('dashboard.dues.assignments.restore');
     Route::get('/dashboard/dues/{due}', [DashboardController::class, 'showStaffDue'])
         ->whereNumber('due')
         ->name('dashboard.dues.show');
@@ -207,9 +281,15 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/dashboard/dues/payments/{duePayment}/callback', [DashboardController::class, 'handleDuePaymentCallback'])
         ->whereNumber('duePayment')
         ->name('dashboard.dues.payments.callback');
-    Route::get('/dashboard/dues/payments/{duePayment}/receipt', [DashboardController::class, 'downloadDuePaymentReceipt'])
-        ->whereNumber('duePayment')
+    Route::get('/dashboard/dues/payments/{paystackTransactionId}/receipt', [DashboardController::class, 'downloadDuePaymentReceipt'])
+        ->whereNumber('paystackTransactionId')
         ->name('dashboard.dues.payments.receipt');
+    Route::post('/dashboard/dues/payments/{paystackTransactionId}/receipt/retry', [DashboardController::class, 'retryDuePaymentReceipt'])
+        ->whereNumber('paystackTransactionId')
+        ->name('dashboard.dues.payments.receipt.retry');
+    Route::post('/dashboard/dues/payments/{paystackTransactionId}/receipt/email', [DashboardController::class, 'resendDuePaymentReceiptEmail'])
+        ->whereNumber('paystackTransactionId')
+        ->name('dashboard.dues.payments.receipt.email');
     Route::get('/dashboard/students/{registrationNumber}/statement-of-results', [DashboardController::class, 'downloadStudentStatement'])
         ->where('registrationNumber', '[^/]+')
         ->name('dashboard.students.statement');

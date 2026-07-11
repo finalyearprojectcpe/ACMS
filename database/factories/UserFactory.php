@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\AccountStatus;
 use App\AccountType;
 use App\Models\School;
 use App\Models\User;
@@ -18,6 +19,19 @@ class UserFactory extends Factory
      * The current password being used by the factory.
      */
     protected static ?string $password;
+
+    public function configure(): static
+    {
+        return $this->afterCreating(function (User $user): void {
+            if ($user->account_type !== AccountType::SchoolAdmin) {
+                return;
+            }
+
+            $user->school()
+                ->whereNull('administrator_user_id')
+                ->update(['administrator_user_id' => $user->id]);
+        });
+    }
 
     /**
      * Define the model's default state.
@@ -36,6 +50,8 @@ class UserFactory extends Factory
             'access_code' => null,
             'access_code_used_at' => null,
             'activated_at' => now(),
+            'disabled_at' => null,
+            'status' => AccountStatus::Active,
             'remember_token' => Str::random(10),
         ];
     }
@@ -86,6 +102,7 @@ class UserFactory extends Factory
             'access_code' => $accessCode,
             'access_code_used_at' => null,
             'activated_at' => null,
+            'status' => AccountStatus::Pending,
             'password' => Hash::make(Str::random(32)),
         ]);
     }

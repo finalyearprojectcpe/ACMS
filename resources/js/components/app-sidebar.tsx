@@ -76,6 +76,8 @@ export function AppSidebar({
 }) {
     const navigation = navigationFor(dashboard);
     const sidebarRoleLabel = dashboardSidebarRoleLabel(dashboard);
+    const profileSettingsSection =
+        dashboard.role === 'student' ? 'profile-settings' : 'settings';
 
     return (
         <Sidebar collapsible="icon" {...props}>
@@ -165,24 +167,31 @@ export function AppSidebar({
                         <SidebarMenuButton
                             size="lg"
                             tooltip={`${user.name} (${user.email})`}
+                            asChild
                         >
-                            <Avatar className="size-8">
-                                <AvatarImage
-                                    src={user.avatar ?? undefined}
-                                    alt={`${user.name} avatar`}
-                                />
-                                <AvatarFallback className="text-xs font-medium">
-                                    {initialsFor(user.name)}
-                                </AvatarFallback>
-                            </Avatar>
-                            <div className="flex min-w-0 flex-col gap-0.5 leading-none">
-                                <span className="truncate font-medium">
-                                    {user.name}
-                                </span>
-                                <span className="truncate text-muted-foreground">
-                                    {user.email}
-                                </span>
-                            </div>
+                            <Link
+                                href={dashboardSection({
+                                    section: profileSettingsSection,
+                                })}
+                            >
+                                <Avatar className="size-8">
+                                    <AvatarImage
+                                        src={user.avatar ?? undefined}
+                                        alt={`${user.name} avatar`}
+                                    />
+                                    <AvatarFallback className="text-xs font-medium">
+                                        {initialsFor(user.name)}
+                                    </AvatarFallback>
+                                </Avatar>
+                                <div className="flex min-w-0 flex-col gap-0.5 leading-none">
+                                    <span className="truncate font-medium">
+                                        {user.name}
+                                    </span>
+                                    <span className="truncate text-muted-foreground">
+                                        {user.email}
+                                    </span>
+                                </div>
+                            </Link>
                         </SidebarMenuButton>
                     </SidebarMenuItem>
                     <SidebarMenuItem>

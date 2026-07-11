@@ -2,7 +2,9 @@
 
 namespace App\Actions;
 
+use App\AccountStatus;
 use App\AccountType;
+use App\Models\School;
 use App\Models\SchoolAdminTransfer;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -45,6 +47,8 @@ class AcceptSchoolAdminTransferAction
                 'access_code' => null,
                 'access_code_used_at' => null,
                 'activated_at' => now(),
+                'disabled_at' => null,
+                'status' => AccountStatus::Active,
             ]);
 
             $lockedTransfer->forceFill([
@@ -62,14 +66,22 @@ class AcceptSchoolAdminTransferAction
                     'cancelled_at' => now(),
                 ]);
 
-            $previousAdmin = User::query()
-                ->whereKey($lockedTransfer->initiated_by_user_id)
+            $school = School::query()
+                ->whereKey($lockedTransfer->school_id)
                 ->lockForUpdate()
-                ->first();
+                ->firstOrFail();
+            $previousAdmins = User::query()
+                ->where('school_id', $lockedTransfer->school_id)
+                ->where('account_type', AccountType::SchoolAdmin)
+                ->whereKeyNot($recipient->id)
+                ->lockForUpdate()
+                ->get();
 
-            if ($previousAdmin instanceof User && (int) $previousAdmin->id !== (int) $recipient->id) {
+            foreach ($previousAdmins as $previousAdmin) {
                 $previousAdmin->forceFill([
                     'activated_at' => null,
+                    'disabled_at' => now(),
+                    'status' => AccountStatus::Disabled,
                     'remember_token' => Str::random(60),
                 ])->save();
 
@@ -77,6 +89,8 @@ class AcceptSchoolAdminTransferAction
                     ->where('user_id', $previousAdmin->id)
                     ->delete();
             }
+
+            $school->forceFill(['administrator_user_id' => $recipient->id])->save();
 
             return $recipient->refresh();
         });

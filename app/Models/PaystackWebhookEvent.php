@@ -12,9 +12,13 @@ use Illuminate\Database\Eloquent\Model;
     'payload_hash',
     'payload',
     'processed_at',
+    'processing_error',
 ])]
 class PaystackWebhookEvent extends Model
 {
+    /** @var list<string> */
+    protected $hidden = ['signature', 'payload'];
+
     /**
      * @return array<string, string>
      */

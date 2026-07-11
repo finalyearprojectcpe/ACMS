@@ -2,11 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\AccountStatus;
 use App\AccountType;
 use App\Actions\CreateFacultyHeadTransferAction;
 use App\Actions\CreateSchoolAdminTransferAction;
+use App\Actions\RecordResultSheetRevisionAction;
+use App\CourseCategory;
 use App\Http\Requests\AssignFacultyHodRequest;
+use App\Http\Requests\AssignStudentSetAdvisorRequest;
 use App\Http\Requests\FacultyCourseOfferingRequest;
+use App\Http\Requests\ImportAdvisedStudentsRequest;
 use App\Http\Requests\ImportFacultyHodsRequest;
 use App\Http\Requests\ImportFacultyStaffRequest;
 use App\Http\Requests\ImportHodStaffRequest;
@@ -18,6 +23,7 @@ use App\Http\Requests\SchoolDepartmentRequest;
 use App\Http\Requests\SchoolFacultyHeadRequest;
 use App\Http\Requests\SchoolFacultyRequest;
 use App\Http\Requests\StaffCourseOfferingRequest;
+use App\Http\Requests\StoreAdvisedStudentRequest;
 use App\Http\Requests\StoreCourseRegistrationRequest;
 use App\Http\Requests\StoreFacultyHeadTransferRequest;
 use App\Http\Requests\StoreFacultyStaffRequest;
@@ -30,10 +36,10 @@ use App\Http\Requests\UpdateProfilePhotoRequest;
 use App\Http\Requests\UpdateSchoolAdminPasswordRequest;
 use App\Http\Requests\UpdateStaffPasswordRequest;
 use App\Http\Requests\UpdateStudentProfileRequest;
+use App\Http\Requests\WaiveStudentDueRequest;
 use App\Models\AcademicSession;
 use App\Models\AcademicYear;
 use App\Models\AcademicYearSemester;
-use App\Models\ApprovalRequest;
 use App\Models\Course;
 use App\Models\CourseOffering;
 use App\Models\CourseRegistration;
@@ -46,24 +52,31 @@ use App\Models\Faculty;
 use App\Models\FacultyHeadTransfer;
 use App\Models\ImportBatch;
 use App\Models\PaymentAccount;
-use App\Models\PaystackWebhookEvent;
 use App\Models\ResultSheet;
 use App\Models\ResultSheetCourse;
 use App\Models\School;
 use App\Models\SchoolAdminTransfer;
 use App\Models\Semester;
 use App\Models\StaffProfile;
+use App\Models\StudentCourseResult;
 use App\Models\StudentDueAssignment;
 use App\Models\StudentProfile;
 use App\Models\StudentSemesterResult;
 use App\Models\User;
+use App\Services\AcademicContextService;
+use App\Services\AcademicPerformanceService;
 use App\Services\CloudflareEmailService;
 use App\Services\CourseRegistrationPlanner;
+use App\Services\DueAssignmentService;
 use App\Services\DuePaymentService;
-use App\Services\GpaCalculator;
+use App\Services\DueReceiptService;
+use App\Services\PaystackException;
 use App\Services\PaystackService;
+use App\Services\PaystackWebhookService;
 use App\Services\ResultSheetImporter;
+use App\StudentStatus;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -79,6 +92,13 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DashboardController extends Controller
 {
+    public function __construct(
+        private readonly AcademicContextService $academicContext,
+        private readonly AcademicPerformanceService $academicPerformance,
+        private readonly DueAssignmentService $dueAssignments,
+        private readonly DueReceiptService $dueReceipts,
+    ) {}
+
     private const array ROLE_SECTIONS = [
         'school_admin' => ['home', 'academic-sessions', 'structure', 'faculty-heads', 'settings'],
         'faculty_head' => ['home', 'departments', 'staff', 'sessions-courses', 'settings'],
@@ -106,139 +126,6 @@ class DashboardController extends Controller
         'academic-sessions' => 'Academic Sessions',
         'structure' => 'School Structure',
         'faculty-heads' => 'Faculty Heads',
-    ];
-
-    private const array RESULT_COURSES = [
-        '100-level' => [
-            'harmattan' => [
-                ['GST 101', 'Use of English I', 2],
-                ['MTH 101', 'Engineering Mathematics I', 3],
-                ['PHY 101', 'General Physics I', 3],
-                ['CHM 101', 'General Chemistry I', 3],
-                ['CPE 101', 'Introduction to Computer Engineering', 2],
-            ],
-            'rain' => [
-                ['GST 102', 'Use of English II', 2],
-                ['MTH 102', 'Engineering Mathematics II', 3],
-                ['PHY 102', 'General Physics II', 3],
-                ['CHM 102', 'General Chemistry II', 3],
-                ['CPE 102', 'Computer Workshop Practice', 2],
-            ],
-        ],
-        '200-level' => [
-            'harmattan' => [
-                ['MTH 207', 'Engineering Mathematics III', 3],
-                ['CPE 201', 'Digital Logic Design', 3],
-                ['CPE 203', 'Circuit Theory', 3],
-                ['EEE 201', 'Electrical Machines I', 2],
-                ['CSC 201', 'Computer Programming I', 3],
-            ],
-            'rain' => [
-                ['MTH 208', 'Engineering Mathematics IV', 3],
-                ['CPE 202', 'Computer Architecture Fundamentals', 3],
-                ['CPE 204', 'Signals and Systems', 3],
-                ['EEE 202', 'Electronic Devices', 3],
-                ['CSC 202', 'Data Structures', 3],
-            ],
-        ],
-        '300-level' => [
-            'harmattan' => [
-                ['CPE 301', 'Microprocessor Systems', 3],
-                ['CPE 303', 'Operating Systems', 3],
-                ['CPE 305', 'Data Structures and Algorithms', 3],
-                ['EEE 301', 'Electronic Circuit Design', 3],
-                ['MTH 305', 'Numerical Methods', 2],
-            ],
-            'rain' => [
-                ['CPE 302', 'Embedded Systems Design', 3],
-                ['CPE 304', 'Database Systems', 3],
-                ['CPE 306', 'Software Engineering', 3],
-                ['EEE 302', 'Control Systems Engineering', 3],
-                ['CPE 308', 'Computer Networks', 2],
-            ],
-        ],
-        '400-level' => [
-            'harmattan' => [
-                ['CPE 401', 'Embedded Systems Design', 3],
-                ['CPE 403', 'Computer Networks', 3],
-                ['CPE 405', 'Control Systems Engineering', 2],
-                ['CPE 407', 'Digital Signal Processing', 3],
-                ['CPE 409', 'Engineering Economics', 2],
-            ],
-            'rain' => [
-                ['CPE 402', 'Computer Communications', 3],
-                ['CPE 404', 'Database Systems', 3],
-                ['CPE 406', 'Software Project Management', 2],
-                ['CPE 408', 'Artificial Intelligence', 3],
-                ['EEE 402', 'Power Electronics', 2],
-            ],
-        ],
-        '500-level' => [
-            'harmattan' => [
-                ['CPE 501', 'Digital Systems Project', 3],
-                ['CPE 503', 'VLSI Design', 3],
-                ['CPE 505', 'Engineering Management', 2],
-                ['CPE 507', 'Advanced Computer Architecture', 3],
-                ['CPE 509', 'Final Year Project Seminar', 2],
-            ],
-            'rain' => [
-                ['CPE 502', 'Final Year Project', 6],
-                ['CPE 504', 'Distributed Systems', 3],
-                ['CPE 506', 'Network Security', 3],
-                ['CPE 508', 'Robotics and Automation', 2],
-            ],
-        ],
-    ];
-
-    private const array RESULT_SCORES = [
-        '100-level' => [
-            'harmattan' => [
-                'GST 101' => 76,
-                'MTH 101' => 68,
-                'PHY 101' => 63,
-                'CHM 101' => 59,
-                'CPE 101' => 82,
-            ],
-            'rain' => [
-                'GST 102' => 74,
-                'MTH 102' => 62,
-                'PHY 102' => 58,
-                'CHM 102' => 55,
-                'CPE 102' => 79,
-            ],
-        ],
-        '200-level' => [
-            'harmattan' => [
-                'MTH 207' => 61,
-                'CPE 201' => 73,
-                'CPE 203' => 57,
-                'EEE 201' => 48,
-                'CSC 201' => 69,
-            ],
-            'rain' => [
-                'MTH 208' => 64,
-                'CPE 202' => 71,
-                'CPE 204' => 53,
-                'EEE 202' => 46,
-                'CSC 202' => 67,
-            ],
-        ],
-        '300-level' => [
-            'harmattan' => [
-                'CPE 301' => 74,
-                'CPE 303' => 67,
-                'CPE 305' => 58,
-                'EEE 301' => 62,
-                'MTH 305' => 71,
-            ],
-            'rain' => [
-                'CPE 302' => 69,
-                'CPE 304' => 38,
-                'CPE 306' => 64,
-                'EEE 302' => 52,
-                'CPE 308' => 73,
-            ],
-        ],
     ];
 
     public function home(Request $request): InertiaResponse
@@ -351,7 +238,7 @@ class DashboardController extends Controller
                 'scope_id' => $faculty->id,
                 'status' => 'approved',
                 'file_name' => $validated['file_name'] ?: 'HODs spreadsheet',
-                'mappings' => [],
+                'mappings' => $validated['mappings'] ?? [],
                 'summary' => [
                     'submitted_rows' => $metadata['total_rows'],
                     'total_batches' => $metadata['total_batches'],
@@ -513,7 +400,7 @@ class DashboardController extends Controller
                 'scope_id' => $faculty->id,
                 'status' => 'approved',
                 'file_name' => $validated['file_name'] ?: 'Staffs spreadsheet',
-                'mappings' => [],
+                'mappings' => $validated['mappings'] ?? [],
                 'summary' => [
                     'submitted_rows' => $metadata['total_rows'],
                     'total_batches' => $metadata['total_batches'],
@@ -625,7 +512,7 @@ class DashboardController extends Controller
                 'scope_id' => $department->id,
                 'status' => 'approved',
                 'file_name' => $validated['file_name'] ?: 'Staffs spreadsheet',
-                'mappings' => [],
+                'mappings' => $validated['mappings'] ?? [],
                 'summary' => [
                     'submitted_rows' => $metadata['total_rows'],
                     'total_batches' => $metadata['total_batches'],
@@ -697,6 +584,183 @@ class DashboardController extends Controller
             metadata: $metadata,
             recordLabel: 'staff record',
             importedCount: $result['imported_count'],
+        );
+    }
+
+    public function editStudentSetAdvisor(Request $request, AcademicSession $entryAcademicSession): InertiaResponse
+    {
+        $user = $this->authorizedHodUser($request);
+        $department = $this->departmentForHod($user);
+
+        $this->ensureAcademicSessionBelongsToSchool($department->faculty->school, $entryAcademicSession);
+
+        return $this->renderDashboard($request, 'staff', null, [
+            'hodSetAdvisorForm' => $this->hodSetAdvisorFormPayload($department, $entryAcademicSession),
+        ]);
+    }
+
+    public function updateStudentSetAdvisor(
+        AssignStudentSetAdvisorRequest $request,
+        AcademicSession $entryAcademicSession,
+    ): RedirectResponse {
+        $user = $this->authorizedHodUser($request);
+        $department = $this->departmentForHod($user);
+        $hodProfile = $user->staffProfile;
+
+        abort_unless($hodProfile instanceof StaffProfile, 403);
+        $this->ensureAcademicSessionBelongsToSchool($department->faculty->school, $entryAcademicSession);
+
+        $staffProfile = $department->staffProfiles()
+            ->with('user')
+            ->whereKey($request->integer('staff_profile_id'))
+            ->firstOrFail();
+
+        if ($staffProfile->user?->activated_at === null || $staffProfile->user?->disabled_at !== null) {
+            throw ValidationException::withMessages([
+                'staff_profile_id' => 'Select an active staff account. This staff member has not completed account activation.',
+            ]);
+        }
+
+        $department->assignAdvisorToStudentSet(
+            $entryAcademicSession,
+            $staffProfile,
+            $this->currentAcademicSessionFor($department),
+            $hodProfile,
+        );
+
+        return to_route('dashboard.section', ['section' => 'staff'])
+            ->with('success', "{$staffProfile->user->name} is now the course adviser for the {$entryAcademicSession->name} Set.");
+    }
+
+    public function createAdvisedStudent(Request $request): InertiaResponse
+    {
+        $user = $this->authorizedStaffUser($request);
+        [$staffProfile, $department] = $this->staffProfileAndDepartment($user);
+
+        return $this->renderDashboard($request, 'students', null, [
+            'staffStudentForm' => $this->advisedStudentFormPayload($staffProfile, $department, 'create'),
+        ]);
+    }
+
+    public function storeAdvisedStudent(StoreAdvisedStudentRequest $request): RedirectResponse
+    {
+        $user = $this->authorizedStaffUser($request);
+        [$staffProfile, $department] = $this->staffProfileAndDepartment($user);
+        $entryAcademicSession = $this->assignedEntrySessionForStudentProvisioning(
+            $staffProfile,
+            $department,
+            $request->integer('entry_academic_session_id'),
+        );
+        $validated = $request->validated();
+
+        $studentProfile = DB::transaction(fn (): StudentProfile => $this->provisionAdvisedStudent(
+            $department,
+            $entryAcademicSession,
+            (string) $validated['registration_number'],
+            $validated['access_code'] ?? null,
+        ));
+
+        return to_route('dashboard.section', ['section' => 'students'])
+            ->with('success', "Student {$studentProfile->registration_number} added. Their access code is ready to copy from the students table.");
+    }
+
+    public function importAdvisedStudents(Request $request): InertiaResponse
+    {
+        $user = $this->authorizedStaffUser($request);
+        [$staffProfile, $department] = $this->staffProfileAndDepartment($user);
+
+        return $this->renderDashboard($request, 'students', null, [
+            'staffStudentForm' => $this->advisedStudentFormPayload($staffProfile, $department, 'import'),
+        ]);
+    }
+
+    public function storeImportedAdvisedStudents(ImportAdvisedStudentsRequest $request): RedirectResponse
+    {
+        $user = $this->authorizedStaffUser($request);
+        [$staffProfile, $department] = $this->staffProfileAndDepartment($user);
+        $entryAcademicSession = $this->assignedEntrySessionForStudentProvisioning(
+            $staffProfile,
+            $department,
+            $request->integer('entry_academic_session_id'),
+        );
+        $validated = $request->validated();
+        $rows = collect($validated['rows']);
+        $metadata = $this->importRequestMetadata($validated, $rows->count());
+
+        $importedCount = DB::transaction(function () use ($department, $entryAcademicSession, $metadata, $rows, $user, $validated): int {
+            $importBatch = ImportBatch::query()->firstOrCreate([
+                'school_id' => $department->faculty->school_id,
+                'uploaded_by_user_id' => $user->id,
+                'type' => 'advised_student_import',
+                'import_key' => $metadata['import_key'],
+            ], [
+                'scope_type' => Department::class,
+                'scope_id' => $department->id,
+                'status' => 'approved',
+                'file_name' => $validated['file_name'] ?: 'Students spreadsheet',
+                'mappings' => $validated['mappings'] ?? [],
+                'summary' => [
+                    'submitted_rows' => $metadata['total_rows'],
+                    'total_batches' => $metadata['total_batches'],
+                    'processed_batches' => 0,
+                    'imported_students' => 0,
+                ],
+                'submitted_at' => now(),
+                'approved_at' => now(),
+            ]);
+            $processedBatches = (int) data_get($importBatch->summary, 'processed_batches', 0);
+
+            foreach ($rows as $index => $row) {
+                $rowNumber = $metadata['start_row'] + $index;
+
+                if ($this->alreadyImportedRow($importBatch, $rowNumber)) {
+                    continue;
+                }
+
+                $studentProfile = $this->provisionAdvisedStudent(
+                    $department,
+                    $entryAcademicSession,
+                    (string) $row['registrationNumber'],
+                    $row['accessCode'] ?: null,
+                );
+
+                $importBatch->rows()->updateOrCreate(
+                    ['row_number' => $rowNumber],
+                    [
+                        'raw_data' => $row,
+                        'normalized_data' => [
+                            'student_profile_id' => $studentProfile->id,
+                            'entry_academic_session_id' => $entryAcademicSession->id,
+                            'registration_number' => $studentProfile->registration_number,
+                            'access_code' => $studentProfile->user->access_code,
+                        ],
+                        'errors' => [],
+                        'status' => 'imported',
+                    ],
+                );
+            }
+
+            $importedCount = $importBatch->rows()->where('status', 'imported')->count();
+
+            $importBatch->forceFill([
+                'mappings' => $validated['mappings'] ?? $importBatch->mappings,
+                'summary' => [
+                    'submitted_rows' => $metadata['total_rows'],
+                    'total_batches' => $metadata['total_batches'],
+                    'processed_batches' => max($processedBatches, $metadata['batch_number']),
+                    'imported_students' => $importedCount,
+                ],
+            ])->save();
+
+            return $importedCount;
+        });
+
+        return $this->importRedirect(
+            importRouteName: 'dashboard.students.import',
+            section: 'students',
+            metadata: $metadata,
+            recordLabel: 'student record',
+            importedCount: $importedCount,
         );
     }
 
@@ -898,6 +962,8 @@ class DashboardController extends Controller
                     'access_code' => $validated['access_code'] ?: $this->suggestAccessCode($faculty->abbreviation, 'HEAD'),
                     'access_code_used_at' => null,
                     'activated_at' => null,
+                    'disabled_at' => null,
+                    'status' => AccountStatus::Pending,
                     'email' => $validated['email'],
                 ]);
             } else {
@@ -1048,24 +1114,49 @@ class DashboardController extends Controller
         [$staffProfile, $department] = $this->staffProfileAndDepartment($user);
         $department->loadMissing('faculty');
         $validated = $request->validated();
-        $entryAcademicSession = null;
-
-        if (! empty($validated['entry_academic_session_id'])) {
-            $entryAcademicSession = AcademicSession::query()->findOrFail($validated['entry_academic_session_id']);
-
-            abort_unless($this->staffCanManageStudentSet($staffProfile, $department, $entryAcademicSession), 404);
-        }
-
         $bank = $this->paystackBankFromCode($paystack, $validated['bank_code']);
+        $currentPaymentAccount = PaymentAccount::currentFor($staffProfile, $department)
+            ?? PaymentAccount::latestFor($staffProfile, $department);
+        $description = sprintf('%s payout account for %s', $validated['label'], $user->name);
 
         try {
             $resolvedAccount = $paystack->resolveAccount($validated['account_number'], $validated['bank_code']);
-            $subaccount = $paystack->createSubaccount(
-                $validated['business_name'],
-                $validated['bank_code'],
-                $validated['account_number'],
-                sprintf('%s payout account for %s', $validated['label'], $user->name),
-            );
+
+            if (
+                $currentPaymentAccount instanceof PaymentAccount
+                && $currentPaymentAccount->provider === PaymentAccount::ProviderPaystack
+                && is_string($currentPaymentAccount->paystack_subaccount_code)
+                && $currentPaymentAccount->paystack_subaccount_code !== ''
+                && data_get($currentPaymentAccount->provider_payload, 'demo') !== true
+            ) {
+                try {
+                    $subaccount = $paystack->updateSubaccount(
+                        $currentPaymentAccount->paystack_subaccount_code,
+                        $validated['business_name'],
+                        $validated['bank_code'],
+                        $validated['account_number'],
+                        $description,
+                    );
+                } catch (PaystackException $exception) {
+                    if (! $exception->isInvalidSubaccount()) {
+                        throw $exception;
+                    }
+
+                    $subaccount = $paystack->createSubaccount(
+                        $validated['business_name'],
+                        $validated['bank_code'],
+                        $validated['account_number'],
+                        $description,
+                    );
+                }
+            } else {
+                $subaccount = $paystack->createSubaccount(
+                    $validated['business_name'],
+                    $validated['bank_code'],
+                    $validated['account_number'],
+                    $description,
+                );
+            }
         } catch (\Throwable) {
             throw ValidationException::withMessages([
                 'account_number' => 'Paystack could not confirm this account. Check the bank and account number, then try again.',
@@ -1081,28 +1172,25 @@ class DashboardController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($bank, $department, $staffProfile, $entryAcademicSession, $validated, $resolvedAccount, $subaccount, $accountName, $subaccountCode): void {
-            $existingAccounts = PaymentAccount::query()
-                ->where('department_id', $department->id)
+        DB::transaction(function () use ($bank, $currentPaymentAccount, $department, $staffProfile, $validated, $subaccount, $accountName, $subaccountCode): void {
+            PaymentAccount::query()
                 ->where('staff_profile_id', $staffProfile->id)
-                ->where('status', PaymentAccount::StatusActive);
+                ->when(
+                    $currentPaymentAccount instanceof PaymentAccount,
+                    fn ($query) => $query->whereKeyNot($currentPaymentAccount->id),
+                )
+                ->update([
+                    'status' => PaymentAccount::StatusDisabled,
+                    'active_marker' => null,
+                    'disabled_at' => now(),
+                ]);
 
-            if ($entryAcademicSession instanceof AcademicSession) {
-                $existingAccounts->where('entry_academic_session_id', $entryAcademicSession->id);
-            } else {
-                $existingAccounts->whereNull('entry_academic_session_id');
-            }
-
-            $existingAccounts->update([
-                'status' => PaymentAccount::StatusDisabled,
-                'disabled_at' => now(),
-            ]);
-
-            PaymentAccount::query()->create([
+            $paymentAccount = $currentPaymentAccount ?? new PaymentAccount;
+            $paymentAccount->forceFill([
                 'school_id' => $department->faculty?->school_id,
                 'department_id' => $department->id,
                 'staff_profile_id' => $staffProfile->id,
-                'entry_academic_session_id' => $entryAcademicSession?->id,
+                'entry_academic_session_id' => null,
                 'provider' => PaymentAccount::ProviderPaystack,
                 'label' => $validated['label'],
                 'business_name' => $validated['business_name'],
@@ -1114,16 +1202,27 @@ class DashboardController extends Controller
                 'paystack_subaccount_code' => $subaccountCode,
                 'status' => PaymentAccount::StatusActive,
                 'verified_at' => now(),
-                'activated_at' => now(),
-                'provider_payload' => [
-                    'resolved_account' => $resolvedAccount,
-                    'subaccount' => $subaccount,
-                ],
-            ]);
+                'activated_at' => $paymentAccount->activated_at ?? now(),
+                'disabled_at' => null,
+                'provider_payload' => $this->safePaystackSubaccountPayload($subaccount),
+            ])->save();
+
+            Due::query()
+                ->where('created_by_staff_profile_id', $staffProfile->id)
+                ->update(['payment_account_id' => $paymentAccount->id]);
+
+            DuePayment::query()
+                ->where('status', DuePayment::StatusInitialized)
+                ->whereHas('assignment.due', fn ($query) => $query->where('created_by_staff_profile_id', $staffProfile->id))
+                ->update([
+                    'status' => DuePayment::StatusAbandoned,
+                    'active_marker' => null,
+                    'gateway_response' => 'Checkout was replaced after the payout account changed.',
+                ]);
         });
 
         return to_route('dashboard.section', ['section' => 'payment-settings'])
-            ->with('success', 'Payout account connected. Student dues for the selected set can now settle into that account.');
+            ->with('success', 'Payout account saved. New payments for all your dues will use this account.');
     }
 
     public function createStaffPaymentAccount(Request $request): InertiaResponse
@@ -1293,7 +1392,7 @@ class DashboardController extends Controller
             $semesterModel,
             $validated['prerequisite_course_ids'] ?? [],
         );
-        $course = Course::query()->updateOrCreate(
+        $course = Course::query()->firstOrCreate(
             [
                 'school_id' => $faculty->school_id,
                 'code' => $validated['code'],
@@ -1305,16 +1404,21 @@ class DashboardController extends Controller
             ],
         );
 
-        $faculty->courseOfferings()->updateOrCreate(
+        $offering = $faculty->courseOfferings()->updateOrCreate(
             [
                 'course_id' => $course->id,
                 'academic_session_id' => $academicSession->id,
                 'academic_year_semester_id' => $academicYearSemester->id,
             ],
-            ['is_mandatory' => true],
+            [
+                'course_title' => $validated['title'],
+                'credit_units' => (int) $validated['credit_units'],
+                'category' => CourseCategory::Faculty,
+                'archived_at' => null,
+            ],
         );
 
-        $course->prerequisites()->sync($prerequisiteIds);
+        $offering->prerequisiteCourses()->sync($prerequisiteIds);
 
         return to_route('dashboard.section', [
             'section' => 'sessions-courses',
@@ -1377,7 +1481,7 @@ class DashboardController extends Controller
             $semesterModel,
             $validated['prerequisite_course_ids'] ?? [],
         );
-        $course = Course::query()->updateOrCreate(
+        $course = Course::query()->firstOrCreate(
             [
                 'school_id' => $faculty->school_id,
                 'code' => $validated['code'],
@@ -1406,10 +1510,13 @@ class DashboardController extends Controller
 
         $offering->forceFill([
             'course_id' => $course->id,
-            'is_mandatory' => true,
+            'course_title' => $validated['title'],
+            'credit_units' => (int) $validated['credit_units'],
+            'category' => CourseCategory::Faculty,
+            'archived_at' => null,
         ])->save();
 
-        $course->prerequisites()->sync($prerequisiteIds);
+        $offering->prerequisiteCourses()->sync($prerequisiteIds);
 
         return to_route('dashboard.section', [
             'section' => 'sessions-courses',
@@ -1435,12 +1542,12 @@ class DashboardController extends Controller
 
         $offering = $this->editableFacultyCourseOffering($faculty, $academicSession, $offering, $levelModel, $semesterModel);
 
-        $offering->delete();
+        $offering->forceFill(['archived_at' => now()])->save();
 
         return to_route('dashboard.section', [
             'section' => 'sessions-courses',
             'academic_session' => $academicSession->id,
-        ])->with('success', 'Faculty course removed.');
+        ])->with('success', 'Faculty course removed from this session. The course remains in the school catalog and past results are unchanged.');
     }
 
     public function createCourseOffering(Request $request, string $level, string $semester): InertiaResponse
@@ -1482,7 +1589,7 @@ class DashboardController extends Controller
             $validated['prerequisite_course_ids'] ?? [],
             $academicSession,
         );
-        $course = Course::query()->updateOrCreate(
+        $course = Course::query()->firstOrCreate(
             [
                 'school_id' => $department->faculty->school_id,
                 'code' => $validated['code'],
@@ -1494,16 +1601,21 @@ class DashboardController extends Controller
             ],
         );
 
-        $department->courseOfferings()->updateOrCreate(
+        $offering = $department->courseOfferings()->updateOrCreate(
             [
                 'course_id' => $course->id,
                 'academic_session_id' => $academicSession->id,
                 'academic_year_semester_id' => $academicYearSemester->id,
             ],
-            ['is_mandatory' => (bool) $validated['is_mandatory']],
+            [
+                'course_title' => $validated['title'],
+                'credit_units' => (int) $validated['credit_units'],
+                'category' => $validated['category'],
+                'archived_at' => null,
+            ],
         );
 
-        $course->prerequisites()->sync($prerequisiteIds);
+        $offering->prerequisiteCourses()->sync($prerequisiteIds);
 
         if ($request->query('return_to') === 'results-import') {
             return to_route('dashboard.results.import')
@@ -1571,7 +1683,7 @@ class DashboardController extends Controller
             $validated['prerequisite_course_ids'] ?? [],
             $academicSession,
         );
-        $course = Course::query()->updateOrCreate(
+        $course = Course::query()->firstOrCreate(
             [
                 'school_id' => $department->faculty->school_id,
                 'code' => $validated['code'],
@@ -1600,10 +1712,13 @@ class DashboardController extends Controller
 
         $offering->forceFill([
             'course_id' => $course->id,
-            'is_mandatory' => (bool) $validated['is_mandatory'],
+            'course_title' => $validated['title'],
+            'credit_units' => (int) $validated['credit_units'],
+            'category' => $validated['category'],
+            'archived_at' => null,
         ])->save();
 
-        $course->prerequisites()->sync($prerequisiteIds);
+        $offering->prerequisiteCourses()->sync($prerequisiteIds);
 
         return to_route('dashboard.section', [
             'section' => 'courses',
@@ -1785,12 +1900,12 @@ class DashboardController extends Controller
             'advisedSets' => $this->advisedSetsFor($user, $role),
             'department' => $this->departmentPayload($this->departmentFor($user)),
             'faculty' => $this->facultyFor($user, $role)?->only(['name', 'abbreviation']),
-            'schoolAdmin' => $this->schoolAdminPayload($user, $role),
+            'schoolAdmin' => $this->schoolAdminPayload($user, $role, $section),
             'schoolAdminAcademicSessionForm' => null,
             'schoolAdminFacultyForm' => null,
             'schoolAdminDepartmentForm' => null,
             'schoolAdminFacultyHeadForm' => null,
-            'facultyHead' => $this->facultyHeadPayload($user, $role),
+            'facultyHead' => $this->facultyHeadPayload($user, $role, $section),
             'facultyHeadHodForm' => null,
             'facultyHeadStaffForm' => null,
             'facultyHeadCourses' => $this->facultyHeadCoursesPayload($request, $user, $role, $section),
@@ -1806,11 +1921,14 @@ class DashboardController extends Controller
             'staffDues' => $this->staffDuesPayload($user, $role, $section),
             'staffDueForm' => null,
             'staffDueDetail' => null,
+            'staffDueWaiverForm' => null,
             'staffPaymentSettings' => $this->staffPaymentSettingsPayload($user, $role, $section),
             'staffPaymentAccountForm' => null,
             'staffSettings' => $this->staffSettingsPayload($user, $role, $section),
             'resultSheetDetail' => null,
-            'hod' => $this->hodPayload($request, $user, $role),
+            'hod' => $this->hodPayload($request, $user, $role, $section),
+            'hodSetAdvisorForm' => null,
+            'staffStudentForm' => null,
             'studentRecord' => null,
             'staffRecord' => null,
             'student' => $this->studentPayload($user, $role),
@@ -1828,7 +1946,10 @@ class DashboardController extends Controller
 
     private function dashboardRole(User $user): string
     {
-        if ($user->account_type === AccountType::SchoolAdmin) {
+        if (
+            $user->account_type === AccountType::SchoolAdmin
+            && (int) $user->school?->administrator_user_id === (int) $user->id
+        ) {
             return 'school_admin';
         }
 
@@ -1954,6 +2075,7 @@ class DashboardController extends Controller
 
         abort_unless($user->account_type === AccountType::SchoolAdmin, 404);
         abort_unless($user->school instanceof School, 404);
+        abort_unless((int) $user->school->administrator_user_id === (int) $user->id, 403);
 
         return $user;
     }
@@ -2102,6 +2224,35 @@ class DashboardController extends Controller
         ]);
     }
 
+    public function downloadResultSheetSourceFile(Request $request, ResultSheet $resultSheet): StreamedResponse
+    {
+        $user = $request->user();
+
+        abort_unless($user instanceof User, 403);
+
+        $role = $this->dashboardRole($user);
+
+        abort_unless(in_array($role, ['staff', 'hod'], true), 404);
+        abort_unless($this->userCanViewResultSheet($user, $role, $resultSheet), 404);
+
+        $revision = $resultSheet->revisions()
+            ->whereNotNull('source_file_path')
+            ->latest('revision_number')
+            ->firstOrFail();
+
+        abort_unless(
+            is_string($revision->source_file_disk)
+            && is_string($revision->source_file_path)
+            && Storage::disk($revision->source_file_disk)->exists($revision->source_file_path),
+            404,
+        );
+
+        return Storage::disk($revision->source_file_disk)->download(
+            $revision->source_file_path,
+            $revision->source_file_name ?: 'result-sheet.xlsx',
+        );
+    }
+
     public function showResultSheetApproval(Request $request, ResultSheet $resultSheet): InertiaResponse
     {
         $user = $this->authorizedHodUser($request);
@@ -2114,44 +2265,62 @@ class DashboardController extends Controller
         ]);
     }
 
-    public function reviewResultSheet(ResultSheetReviewRequest $request, ResultSheet $resultSheet): RedirectResponse
-    {
+    public function reviewResultSheet(
+        ResultSheetReviewRequest $request,
+        ResultSheet $resultSheet,
+        RecordResultSheetRevisionAction $recordRevision,
+    ): RedirectResponse {
         $user = $this->authorizedHodUser($request);
         $department = $this->departmentForHod($user);
 
         abort_unless((int) $resultSheet->department_id === (int) $department->id, 404);
-        abort_unless($resultSheet->status === ResultSheet::StatusSubmitted, 404);
+        $isApproval = $request->validated('action') === 'approve';
+        $correctionNote = $isApproval
+            ? null
+            : $this->resultSheetCorrectionNote(
+                $request->string('correction_reason')->toString(),
+                $request->string('correction_note')->trim()->toString(),
+            );
 
-        if ($request->validated('action') === 'approve') {
-            $resultSheet->forceFill([
-                'status' => ResultSheet::StatusApproved,
-                'reviewed_by_user_id' => $user->id,
-                'approved_at' => now(),
-                'returned_at' => null,
-                'correction_note' => null,
-            ])->save();
+        DB::transaction(function () use ($correctionNote, $isApproval, $recordRevision, $resultSheet, $user): void {
+            $lockedSheet = ResultSheet::query()
+                ->whereKey($resultSheet->id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-            return redirect()
-                ->route('dashboard.section', ['section' => 'result-approvals'])
-                ->with('success', 'Results approved. Students can now see them.');
-        }
+            abort_unless($lockedSheet->status === ResultSheet::StatusSubmitted, 404);
 
-        $correctionNote = $this->resultSheetCorrectionNote(
-            $request->string('correction_reason')->toString(),
-            $request->string('correction_note')->trim()->toString(),
-        );
-
-        $resultSheet->forceFill([
-            'status' => ResultSheet::StatusReturned,
-            'reviewed_by_user_id' => $user->id,
-            'returned_at' => now(),
-            'approved_at' => null,
-            'correction_note' => $correctionNote,
-        ])->save();
+            $lockedSheet->forceFill($isApproval
+                ? [
+                    'status' => ResultSheet::StatusApproved,
+                    'reviewed_by_user_id' => $user->id,
+                    'approved_at' => now(),
+                    'returned_at' => null,
+                    'correction_note' => null,
+                ]
+                : [
+                    'status' => ResultSheet::StatusReturned,
+                    'reviewed_by_user_id' => $user->id,
+                    'returned_at' => now(),
+                    'approved_at' => null,
+                    'correction_note' => $correctionNote,
+                ])->save();
+            $recordRevision->execute(
+                $lockedSheet,
+                $user,
+                $isApproval ? 'approved' : 'returned_for_correction',
+                note: $correctionNote,
+            );
+        });
 
         return redirect()
             ->route('dashboard.section', ['section' => 'result-approvals'])
-            ->with('success', 'Results returned to the course adviser for correction.');
+            ->with(
+                'success',
+                $isApproval
+                    ? 'Results approved. Students can now see them.'
+                    : 'Results returned to the course adviser for correction.',
+            );
     }
 
     public function storeCourseRegistration(StoreCourseRegistrationRequest $request, CourseRegistrationPlanner $planner): RedirectResponse
@@ -2170,9 +2339,19 @@ class DashboardController extends Controller
         ));
         $selectedUnits = (int) $selectedItems->sum('units');
 
-        if ($selectedUnits > 24) {
+        $maximumCourseUnits = (int) $department->maximum_course_units_per_semester;
+
+        if ($selectedUnits > $maximumCourseUnits) {
             throw ValidationException::withMessages([
-                'items' => 'Selected courses cannot be more than 24 units for this semester.',
+                'items' => "Selected courses cannot be more than {$maximumCourseUnits} units for this semester.",
+            ]);
+        }
+
+        $courseAdvisor = $this->courseAdvisorForStudent($studentProfile, $department);
+
+        if ($validated['action'] === 'submit' && ! $courseAdvisor instanceof StaffProfile) {
+            throw ValidationException::withMessages([
+                'items' => 'This set has no course adviser yet. Ask the HOD to assign one before submitting your registration.',
             ]);
         }
 
@@ -2188,7 +2367,7 @@ class DashboardController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($academicSession, $academicYearSemester, $department, $registration, $selectedItems, $studentProfile, $validated): void {
+        DB::transaction(function () use ($academicSession, $academicYearSemester, $courseAdvisor, $department, $registration, $selectedItems, $studentProfile, $validated): void {
             $isSubmit = $validated['action'] === 'submit';
 
             $registration->forceFill([
@@ -2197,7 +2376,7 @@ class DashboardController extends Controller
                 'student_profile_id' => $studentProfile->id,
                 'academic_session_id' => $academicSession->id,
                 'academic_year_semester_id' => $academicYearSemester->id,
-                'reviewer_staff_profile_id' => $this->courseAdvisorForStudent($studentProfile, $department)?->id,
+                'reviewer_staff_profile_id' => $courseAdvisor?->id,
                 'status' => $isSubmit ? CourseRegistration::StatusSubmitted : CourseRegistration::StatusDraft,
                 'feedback_note' => $isSubmit ? null : $registration->feedback_note,
                 'submitted_at' => $isSubmit ? now() : null,
@@ -2237,13 +2416,41 @@ class DashboardController extends Controller
         ]);
     }
 
-    public function approveCourseRegistration(Request $request, CourseRegistration $courseRegistration): RedirectResponse
-    {
+    public function approveCourseRegistration(
+        Request $request,
+        CourseRegistration $courseRegistration,
+        CourseRegistrationPlanner $planner,
+    ): RedirectResponse {
         $user = $this->authorizedStaffUser($request);
         [$staffProfile, $department] = $this->staffProfileAndDepartment($user);
 
         abort_unless($this->staffCanReviewCourseRegistration($staffProfile, $department, $courseRegistration), 404);
         abort_unless($courseRegistration->status === CourseRegistration::StatusSubmitted, 404);
+
+        $courseRegistration->loadMissing(['studentProfile', 'academicSession', 'academicYearSemester', 'items']);
+        $plan = $planner->plan(
+            $courseRegistration->studentProfile,
+            $department,
+            $courseRegistration->academicSession,
+            $courseRegistration->academicYearSemester,
+        );
+        $selectedOptions = $planner->selectedOptionsFromPayload(
+            $plan,
+            $courseRegistration->items
+                ->map(fn (CourseRegistrationItem $item): array => [
+                    'course_offering_id' => (int) $item->course_offering_id,
+                    'source' => $item->source,
+                ])
+                ->all(),
+            true,
+        );
+        $selectedUnits = (int) collect($selectedOptions)->sum('units');
+
+        if ($selectedUnits > (int) $department->maximum_course_units_per_semester) {
+            throw ValidationException::withMessages([
+                'registration' => 'This registration is above the department course-unit limit. Return it to the student for correction.',
+            ]);
+        }
 
         $courseRegistration->forceFill([
             'status' => CourseRegistration::StatusApproved,
@@ -2287,6 +2494,19 @@ class DashboardController extends Controller
         ]);
     }
 
+    public function editStaffDue(Request $request, Due $due): InertiaResponse
+    {
+        $user = $this->authorizedStaffUser($request);
+        [$staffProfile, $department] = $this->staffProfileAndDepartment($user);
+
+        $this->ensureStaffCanManageDue($staffProfile, $department, $due);
+        abort_if($due->status === Due::StatusArchived, 404);
+
+        return $this->renderDashboard($request, 'dues', null, [
+            'staffDueForm' => $this->staffDueFormPayload($staffProfile, $department, $due),
+        ]);
+    }
+
     public function storeStaffDue(StoreStaffDueRequest $request): RedirectResponse
     {
         $user = $this->authorizedStaffUser($request);
@@ -2298,7 +2518,7 @@ class DashboardController extends Controller
 
         $academicSession = $this->requiredCurrentAcademicSession($department);
         $isPublishing = $validated['action'] === 'publish';
-        $paymentAccount = $this->activePaymentAccountForStaffSet($staffProfile, $department, $entryAcademicSession);
+        $paymentAccount = $this->currentPaymentAccountForStaff($staffProfile, $department);
 
         if ($isPublishing && ! $paymentAccount instanceof PaymentAccount) {
             throw ValidationException::withMessages([
@@ -2324,7 +2544,7 @@ class DashboardController extends Controller
             ]);
 
             if ($isPublishing) {
-                $this->publishDueAssignments($due);
+                $this->dueAssignments->syncForDue($due);
             }
 
             return $due;
@@ -2332,6 +2552,64 @@ class DashboardController extends Controller
 
         return to_route('dashboard.dues.show', ['due' => $due])
             ->with('success', $isPublishing ? 'Due published for the selected set.' : 'Due draft saved.');
+    }
+
+    public function updateStaffDue(StoreStaffDueRequest $request, Due $due): RedirectResponse
+    {
+        $user = $this->authorizedStaffUser($request);
+        [$staffProfile, $department] = $this->staffProfileAndDepartment($user);
+
+        $this->ensureStaffCanManageDue($staffProfile, $department, $due);
+        abort_if($due->status === Due::StatusArchived, 404);
+
+        $validated = $request->validated();
+        $entryAcademicSession = AcademicSession::query()->findOrFail($validated['entry_academic_session_id']);
+
+        abort_unless($this->staffCanManageStudentSet($staffProfile, $department, $entryAcademicSession), 404);
+
+        $amountKobo = (int) $validated['amount_naira'] * 100;
+        $wasPublished = $due->status === Due::StatusPublished;
+
+        if ($wasPublished && (int) $due->entry_academic_session_id !== (int) $entryAcademicSession->id) {
+            throw ValidationException::withMessages([
+                'entry_academic_session_id' => 'The student set cannot change after a due is published. Create a separate due for another set.',
+            ]);
+        }
+
+        $isPublishing = ! $wasPublished && $validated['action'] === 'publish';
+        $paymentAccount = $this->currentPaymentAccountForStaff($staffProfile, $department);
+
+        if ($isPublishing && ! $paymentAccount instanceof PaymentAccount) {
+            throw ValidationException::withMessages([
+                'payment_account' => 'Set up a Paystack payout account before publishing dues for this student set.',
+            ]);
+        }
+
+        DB::transaction(function () use ($amountKobo, $due, $entryAcademicSession, $isPublishing, $paymentAccount, $validated, $wasPublished): void {
+            $amountChanged = (int) $due->amount_kobo !== $amountKobo;
+
+            $due->forceFill([
+                'entry_academic_session_id' => $entryAcademicSession->id,
+                'payment_account_id' => $paymentAccount?->id,
+                'title' => $validated['title'],
+                'description' => $validated['description'] ?? null,
+                'amount_kobo' => $amountKobo,
+                'due_on' => $validated['due_on'] ?? null,
+                'status' => $wasPublished || $isPublishing ? Due::StatusPublished : Due::StatusDraft,
+                'published_at' => $wasPublished
+                    ? $due->published_at
+                    : ($isPublishing ? now() : null),
+            ])->save();
+
+            if ($isPublishing) {
+                $this->dueAssignments->syncForDue($due);
+            } elseif ($wasPublished && $amountChanged) {
+                $this->dueAssignments->updateAmount($due, $amountKobo);
+            }
+        });
+
+        return to_route('dashboard.dues.show', ['due' => $due])
+            ->with('success', $isPublishing ? 'Due published for the selected set.' : 'Due details updated. Pending students now see the current amount.');
     }
 
     public function showStaffDue(Request $request, Due $due): InertiaResponse
@@ -2346,34 +2624,171 @@ class DashboardController extends Controller
         ]);
     }
 
+    public function archiveStaffDue(Request $request, Due $due): RedirectResponse
+    {
+        $user = $this->authorizedStaffUser($request);
+        [$staffProfile, $department] = $this->staffProfileAndDepartment($user);
+
+        $this->ensureStaffCanManageDue($staffProfile, $department, $due);
+        $this->dueAssignments->archive($due);
+
+        return to_route('dashboard.dues.show', ['due' => $due])
+            ->with('success', 'Due archived. Students can no longer start new payments for it.');
+    }
+
+    public function restoreStaffDue(Request $request, Due $due): RedirectResponse
+    {
+        $user = $this->authorizedStaffUser($request);
+        [$staffProfile, $department] = $this->staffProfileAndDepartment($user);
+
+        $this->ensureStaffCanManageDue($staffProfile, $department, $due);
+        abort_unless($due->status === Due::StatusArchived, 404);
+
+        $paymentAccount = $this->currentPaymentAccountForStaff($staffProfile, $department);
+
+        if (! $paymentAccount instanceof PaymentAccount) {
+            throw ValidationException::withMessages([
+                'payment_account' => 'Connect an active Paystack payout account before restoring this due.',
+            ]);
+        }
+
+        DB::transaction(function () use ($due, $paymentAccount): void {
+            $due->forceFill([
+                'payment_account_id' => $paymentAccount->id,
+                'status' => Due::StatusPublished,
+                'archived_at' => null,
+                'published_at' => $due->published_at ?? now(),
+            ])->save();
+
+            $this->dueAssignments->syncForDue($due);
+        });
+
+        return to_route('dashboard.dues.show', ['due' => $due])
+            ->with('success', 'Due restored. Pending students can pay it again.');
+    }
+
+    public function createStudentDueWaiver(
+        Request $request,
+        Due $due,
+        StudentDueAssignment $studentDueAssignment,
+    ): InertiaResponse {
+        $user = $this->authorizedStaffUser($request);
+        [$staffProfile, $department] = $this->staffProfileAndDepartment($user);
+
+        $this->ensureStaffCanManageDueAssignment($staffProfile, $department, $due, $studentDueAssignment);
+        abort_unless($studentDueAssignment->status === StudentDueAssignment::StatusPending, 404);
+
+        return $this->renderDashboard($request, 'dues', null, [
+            'staffDueWaiverForm' => $this->staffDueWaiverFormPayload($due, $studentDueAssignment),
+        ]);
+    }
+
+    public function waiveStudentDue(
+        WaiveStudentDueRequest $request,
+        Due $due,
+        StudentDueAssignment $studentDueAssignment,
+    ): RedirectResponse {
+        $user = $this->authorizedStaffUser($request);
+        [$staffProfile, $department] = $this->staffProfileAndDepartment($user);
+
+        $this->ensureStaffCanManageDueAssignment($staffProfile, $department, $due, $studentDueAssignment);
+        $this->dueAssignments->waive(
+            $studentDueAssignment,
+            $user,
+            $request->string('reason')->trim()->toString() ?: null,
+        );
+
+        return to_route('dashboard.dues.show', ['due' => $due])
+            ->with('success', 'Payment requirement waived for this student.');
+    }
+
+    public function restoreStudentDue(
+        Request $request,
+        Due $due,
+        StudentDueAssignment $studentDueAssignment,
+    ): RedirectResponse {
+        $user = $this->authorizedStaffUser($request);
+        [$staffProfile, $department] = $this->staffProfileAndDepartment($user);
+
+        $this->ensureStaffCanManageDueAssignment($staffProfile, $department, $due, $studentDueAssignment);
+        abort_unless($due->status === Due::StatusPublished, 404);
+        $this->dueAssignments->restore($studentDueAssignment);
+
+        return to_route('dashboard.dues.show', ['due' => $due])
+            ->with('success', 'Payment requirement restored for this student.');
+    }
+
+    public function exportStaffDue(Request $request, Due $due): StreamedResponse
+    {
+        $user = $this->authorizedStaffUser($request);
+        [$staffProfile, $department] = $this->staffProfileAndDepartment($user);
+
+        $this->ensureStaffCanManageDue($staffProfile, $department, $due);
+        $due->loadMissing([
+            'assignments.studentProfile.user',
+            'assignments.latestPayment',
+        ]);
+        $fileName = 'due-payments-'.Str::slug($due->title).'.csv';
+
+        return response()->streamDownload(function () use ($due): void {
+            $output = fopen('php://output', 'w');
+
+            if ($output === false) {
+                return;
+            }
+
+            fputcsv($output, ['Student', 'Registration Number', 'Status', 'Amount (NGN)', 'Paid At', 'Receipt Number', 'Payment Reference']);
+
+            $due->assignments
+                ->sortBy(fn (StudentDueAssignment $assignment): string => $assignment->studentProfile->user->name)
+                ->each(function (StudentDueAssignment $assignment) use ($output): void {
+                    fputcsv($output, [
+                        $assignment->studentProfile->user->name,
+                        $assignment->studentProfile->registration_number,
+                        Str::headline($assignment->status),
+                        number_format($assignment->amount_kobo / 100, 2, '.', ''),
+                        $assignment->paid_at?->toIso8601String(),
+                        $assignment->latestPayment?->receipt_number,
+                        $assignment->latestPayment?->reference,
+                    ]);
+                });
+
+            fclose($output);
+        }, $fileName, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
     public function startDuePayment(
         Request $request,
         StudentDueAssignment $studentDueAssignment,
         DuePaymentService $duePaymentService,
-    ): RedirectResponse {
+    ): RedirectResponse|\Symfony\Component\HttpFoundation\Response {
         $user = $request->user();
 
         abort_unless($user instanceof User, 403);
         abort_unless($this->dashboardRole($user) === 'student', 404);
         abort_unless((int) $studentDueAssignment->student_profile_id === (int) $user->studentProfile?->id, 404);
 
-        $studentDueAssignment->loadMissing('due.paymentAccount');
+        $studentDueAssignment->loadMissing('due');
         abort_unless($studentDueAssignment->due?->status === Due::StatusPublished, 404);
-        abort_unless($studentDueAssignment->due?->paymentAccount?->isActive(), 404);
 
-        $payment = $duePaymentService->startPayment(
-            $studentDueAssignment,
-            fn (DuePayment $payment): string => route('dashboard.dues.payments.callback', [
-                'duePayment' => $payment,
-            ]),
-        );
+        try {
+            $payment = $duePaymentService->startPayment(
+                $studentDueAssignment,
+                fn (DuePayment $payment): string => route('dashboard.dues.payments.callback', [
+                    'duePayment' => $payment,
+                ]),
+            );
+        } catch (ConnectionException|\RuntimeException) {
+            return to_route('dashboard.section', ['section' => 'dues'])
+                ->with('error', 'Payment is temporarily unavailable for this due. Contact your course adviser.');
+        }
 
         if ($payment->status === DuePayment::StatusSuccess) {
             return to_route('dashboard.section', ['section' => 'dues'])
                 ->with('success', 'This due has already been paid.');
         }
 
-        return redirect()->away((string) $payment->authorization_url);
+        return Inertia::location((string) $payment->authorization_url);
     }
 
     public function handleDuePaymentCallback(
@@ -2404,80 +2819,86 @@ class DashboardController extends Controller
         }
 
         return to_route('dashboard.section', ['section' => 'dues'])
-            ->with('success', 'Payment received. Your receipt is ready.');
+            ->with('success', 'Payment received. Your receipt is being prepared and will be emailed to you.');
     }
 
-    public function downloadDuePaymentReceipt(Request $request, DuePayment $duePayment): StreamedResponse
-    {
+    public function downloadDuePaymentReceipt(
+        Request $request,
+        string $paystackTransactionId,
+        DueReceiptService $receipts,
+    ): RedirectResponse|StreamedResponse {
         $user = $request->user();
+        $duePayment = DuePayment::query()
+            ->where('paystack_transaction_id', $paystackTransactionId)
+            ->firstOrFail();
 
         abort_unless($user instanceof User, 403);
         abort_unless($this->userCanViewDuePayment($user, $duePayment), 404);
-        abort_unless($duePayment->status === DuePayment::StatusSuccess, 404);
+        abort_unless(in_array($duePayment->status, [DuePayment::StatusSuccess, DuePayment::StatusReversed], true), 404);
 
-        $duePayment->loadMissing(['assignment.due', 'studentProfile.user']);
-        $fileName = 'receipt-'.$duePayment->reference.'.txt';
-        $lines = $this->duePaymentReceiptLines($duePayment);
+        if (
+            $duePayment->receipt_status !== DuePayment::ReceiptStatusReady
+            || ! is_string($duePayment->receipt_disk)
+            || ! is_string($duePayment->receipt_path)
+            || ! Storage::disk($duePayment->receipt_disk)->exists($duePayment->receipt_path)
+        ) {
+            $receipts->queue($duePayment, force: true);
 
-        return response()->streamDownload(function () use ($lines): void {
-            echo implode(PHP_EOL, $lines);
-        }, $fileName, [
-            'Content-Type' => 'text/plain; charset=UTF-8',
-        ]);
+            return back()->with('success', 'Your receipt is being prepared. This page will update when it is ready.');
+        }
+
+        return Storage::disk($duePayment->receipt_disk)->download(
+            $duePayment->receipt_path,
+            'receipt-'.$duePayment->receipt_number.'.pdf',
+            ['Content-Type' => 'application/pdf'],
+        );
+    }
+
+    public function retryDuePaymentReceipt(
+        Request $request,
+        string $paystackTransactionId,
+        DueReceiptService $receipts,
+    ): RedirectResponse {
+        $user = $request->user();
+        $duePayment = DuePayment::query()->where('paystack_transaction_id', $paystackTransactionId)->firstOrFail();
+
+        abort_unless($user instanceof User && $this->userCanViewDuePayment($user, $duePayment), 404);
+        $receipts->queue($duePayment, force: true);
+
+        return back()->with('success', 'Receipt generation restarted. This page will update when it is ready.');
+    }
+
+    public function resendDuePaymentReceiptEmail(
+        Request $request,
+        string $paystackTransactionId,
+        DueReceiptService $receipts,
+    ): RedirectResponse {
+        $user = $request->user();
+        $duePayment = DuePayment::query()->where('paystack_transaction_id', $paystackTransactionId)->firstOrFail();
+
+        abort_unless($user instanceof User && $this->userCanViewDuePayment($user, $duePayment), 404);
+        abort_unless($duePayment->receipt_status === DuePayment::ReceiptStatusReady, 404);
+        $delivery = $receipts->queueEmail($duePayment);
+
+        return back()->with(
+            $delivery instanceof EmailDelivery ? 'success' : 'error',
+            $delivery instanceof EmailDelivery
+                ? 'Receipt email queued.'
+                : 'Add an email address to your profile before sending the receipt.',
+        );
     }
 
     public function handlePaystackWebhook(
         Request $request,
-        PaystackService $paystack,
-        DuePaymentService $duePaymentService,
+        PaystackWebhookService $webhookService,
     ): Response {
-        $rawPayload = $request->getContent();
-        $signature = $request->header('x-paystack-signature');
-
-        if (! $paystack->validSignature($rawPayload, $signature)) {
-            return response('', 401);
-        }
-
-        $payload = json_decode($rawPayload, true);
-
-        if (! is_array($payload)) {
-            return response()->noContent();
-        }
-
-        $eventName = (string) Arr::get($payload, 'event', '');
-        $reference = Arr::get($payload, 'data.reference');
-        $webhookEvent = PaystackWebhookEvent::query()->firstOrCreate(
-            ['payload_hash' => hash('sha256', $rawPayload)],
-            [
-                'event' => $eventName,
-                'reference' => is_string($reference) ? $reference : null,
-                'signature' => $signature,
-                'payload' => $payload,
-            ],
-        );
-
-        if ($webhookEvent->processed_at !== null) {
-            return response()->noContent();
-        }
-
-        if (in_array($eventName, ['charge.success', 'transaction.successful'], true) && is_string($reference)) {
-            $payment = DuePayment::query()->where('reference', $reference)->first();
-
-            if ($payment instanceof DuePayment) {
-                try {
-                    $duePaymentService->verifyPayment($payment);
-                } catch (\Throwable) {
-                    return response()->noContent();
-                }
-            }
-        }
-
-        $webhookEvent->forceFill(['processed_at' => now()])->save();
-
-        return response()->noContent();
+        return response('', $webhookService->process(
+            $request->getContent(),
+            $request->header('x-paystack-signature'),
+        ));
     }
 
-    private function schoolAdminPayload(User $user, string $role): ?array
+    private function schoolAdminPayload(User $user, string $role, string $section): ?array
     {
         if ($role !== 'school_admin') {
             return null;
@@ -2487,46 +2908,46 @@ class DashboardController extends Controller
 
         abort_unless($school instanceof School, 404);
 
-        $faculties = Faculty::query()
-            ->with([
-                'headStaffProfile.user',
-                'headStaffProfile.department',
-                'departments.hodStaffProfile.user',
-            ])
-            ->withCount('departments')
-            ->where('school_id', $school->id)
-            ->orderBy('name')
-            ->get();
-        $departments = Department::query()
-            ->whereHas('faculty', fn ($query) => $query->where('school_id', $school->id))
-            ->get();
-        $academicSessions = $this->academicSessionsForSchool($school);
-        $currentSession = $this->currentAcademicSessionForSchool($school);
-        $nextSession = $school->academicSessions()
-            ->whereDate('starts_on', '>', today())
-            ->orderBy('starts_on')
-            ->first();
-        $pendingFacultyHeadAccessCodes = User::query()
-            ->with('staffProfile.headedFaculty')
-            ->where('school_id', $school->id)
-            ->where('account_type', AccountType::Staff)
-            ->whereNull('activated_at')
-            ->whereNotNull('access_code')
-            ->whereHas('staffProfile.headedFaculty')
-            ->orderBy('name')
-            ->get();
-        $pendingOwnershipTransfer = SchoolAdminTransfer::query()
-            ->where('school_id', $school->id)
-            ->where('status', 'pending')
-            ->where('expires_at', '>', now())
-            ->latest()
-            ->first();
+        $needsFaculties = in_array($section, ['home', 'structure', 'faculty-heads'], true);
+        $includeDepartments = $section === 'structure';
+        $faculties = $needsFaculties
+            ? Faculty::query()
+                ->with([
+                    'headStaffProfile.user',
+                    'headStaffProfile.department',
+                    ...($includeDepartments ? ['departments.hodStaffProfile.user'] : []),
+                ])
+                ->withCount('departments')
+                ->where('school_id', $school->id)
+                ->orderBy('name')
+                ->get()
+            : new EloquentCollection;
+        $academicSessions = in_array($section, ['home', 'academic-sessions'], true)
+            ? $this->academicSessionsForSchool($school)
+            : new EloquentCollection;
+        $currentSession = $section === 'home'
+            ? $this->currentAcademicSessionForSchool($school)
+            : null;
+        $nextSession = $section === 'home'
+            ? $school->academicSessions()
+                ->whereDate('starts_on', '>', today())
+                ->orderBy('starts_on')
+                ->first()
+            : null;
+        $pendingOwnershipTransfer = $section === 'settings'
+            ? SchoolAdminTransfer::query()
+                ->where('school_id', $school->id)
+                ->where('status', 'pending')
+                ->where('expires_at', '>', now())
+                ->latest()
+                ->first()
+            : null;
 
         return [
             'school' => $school->only(['name', 'abbreviation', 'slug']),
             'metrics' => [
                 'faculties' => $faculties->count(),
-                'departments' => $departments->count(),
+                'departments' => (int) $faculties->sum('departments_count'),
                 'academicSessions' => $academicSessions->count(),
                 'facultyHeadCoverage' => $faculties->whereNotNull('head_staff_profile_id')->count().'/'.$faculties->count(),
             ],
@@ -2537,11 +2958,7 @@ class DashboardController extends Controller
                 ->values()
                 ->all(),
             'faculties' => $faculties
-                ->map(fn (Faculty $faculty): array => $this->schoolAdminFacultyPayload($faculty))
-                ->values()
-                ->all(),
-            'pendingAccessCodes' => $pendingFacultyHeadAccessCodes
-                ->map(fn (User $staffUser): array => $this->pendingAccessCodePayload($staffUser))
+                ->map(fn (Faculty $faculty): array => $this->schoolAdminFacultyPayload($faculty, $includeDepartments))
                 ->values()
                 ->all(),
             'settings' => [
@@ -2568,7 +2985,7 @@ class DashboardController extends Controller
         ];
     }
 
-    private function schoolAdminFacultyPayload(Faculty $faculty): array
+    private function schoolAdminFacultyPayload(Faculty $faculty, bool $includeDepartments): array
     {
         $headProfile = $faculty->headStaffProfile;
 
@@ -2586,21 +3003,23 @@ class DashboardController extends Controller
                 'accessCode' => $headProfile->user->access_code,
                 'activatedAt' => $headProfile->user->activated_at?->toDateString(),
             ],
-            'departments' => $faculty->departments
-                ->sortBy('name')
-                ->map(fn (Department $department): array => [
-                    'id' => (int) $department->id,
-                    'name' => $department->name,
-                    'abbreviation' => $department->abbreviation,
-                    'minimumYearsToDegree' => (int) $department->minimum_years_to_degree,
-                    'hod' => $department->hodStaffProfile?->user === null ? null : [
-                        'name' => $department->hodStaffProfile->user->name,
-                        'email' => $department->hodStaffProfile->user->email,
-                        'avatar' => $department->hodStaffProfile->user->profilePhotoUrl(),
-                    ],
-                ])
-                ->values()
-                ->all(),
+            'departments' => $includeDepartments
+                ? $faculty->departments
+                    ->sortBy('name')
+                    ->map(fn (Department $department): array => [
+                        'id' => (int) $department->id,
+                        'name' => $department->name,
+                        'abbreviation' => $department->abbreviation,
+                        'minimumYearsToDegree' => (int) $department->minimum_years_to_degree,
+                        'hod' => $department->hodStaffProfile?->user === null ? null : [
+                            'name' => $department->hodStaffProfile->user->name,
+                            'email' => $department->hodStaffProfile->user->email,
+                            'avatar' => $department->hodStaffProfile->user->profilePhotoUrl(),
+                        ],
+                    ])
+                    ->values()
+                    ->all()
+                : [],
         ];
     }
 
@@ -2715,43 +3134,58 @@ class DashboardController extends Controller
      *     pendingTasks: array<int, array{id: string, title: string, detail: string, status: string}>
      * }|null
      */
-    private function facultyHeadPayload(User $user, string $role): ?array
+    private function facultyHeadPayload(User $user, string $role, string $section): ?array
     {
         if ($role !== 'faculty_head') {
             return null;
         }
 
         $faculty = $this->facultyForFacultyHead($user);
-        $departments = Department::query()
-            ->with('hodStaffProfile.user')
-            ->withCount(['staffProfiles', 'studentProfiles'])
-            ->where('faculty_id', $faculty->id)
-            ->orderBy('name')
-            ->get();
-        $pendingAccessCodeUsers = $this->pendingFacultyStaffAccessCodes($faculty);
-        $staff = $this->facultyHeadStaffPayload($faculty);
-        $facultyStudents = StudentProfile::query()
-            ->with(['currentLevel', 'entryAcademicSession', 'user', 'department'])
-            ->whereIn('department_id', $departments->pluck('id'))
-            ->get()
-            ->sortBy(fn (StudentProfile $studentProfile): string => sprintf(
-                '%02d-%s',
-                $studentProfile->current_academic_year_id,
-                $studentProfile->user->name,
-            ))
-            ->values();
-        $levels = AcademicYear::query()
-            ->where('id', '<=', max(1, (int) $departments->max('minimum_years_to_degree')))
-            ->orderBy('id')
-            ->get();
-        $currentAcademicSession = $this->currentAcademicSessionForFaculty($faculty);
+        $needsDepartments = in_array($section, ['home', 'departments'], true);
+        $departments = $needsDepartments
+            ? Department::query()
+                ->with('hodStaffProfile.user')
+                ->withCount(['staffProfiles', 'studentProfiles'])
+                ->where('faculty_id', $faculty->id)
+                ->orderBy('name')
+                ->get()
+            : new EloquentCollection;
+        $pendingAccessCodeUsers = $section === 'home'
+            ? $this->pendingFacultyStaffAccessCodes($faculty)
+            : new EloquentCollection;
+        $staff = in_array($section, ['home', 'staff'], true)
+            ? $this->facultyHeadStaffPayload($faculty)
+            : [];
+        $facultyStudents = $section === 'home'
+            ? StudentProfile::query()
+                ->with(['currentLevel', 'entryAcademicSession', 'user', 'department'])
+                ->whereIn('department_id', $departments->pluck('id'))
+                ->get()
+                ->sortBy(fn (StudentProfile $studentProfile): string => sprintf(
+                    '%02d-%s',
+                    $studentProfile->current_academic_year_id,
+                    $studentProfile->user->name,
+                ))
+                ->values()
+            : collect();
+        $levels = $section === 'home'
+            ? AcademicYear::query()
+                ->where('year_number', '<=', max(1, (int) $departments->max('minimum_years_to_degree')))
+                ->orderBy('year_number')
+                ->get()
+            : new EloquentCollection;
+        $currentAcademicSession = $section === 'home'
+            ? $this->currentAcademicSessionForFaculty($faculty)
+            : null;
         $departmentsWithoutHod = $departments->whereNull('hod_staff_profile_id')->count();
-        $pendingFacultyHeadTransfer = FacultyHeadTransfer::query()
-            ->where('faculty_id', $faculty->id)
-            ->where('status', 'pending')
-            ->where('expires_at', '>', now())
-            ->latest()
-            ->first();
+        $pendingFacultyHeadTransfer = $section === 'settings'
+            ? FacultyHeadTransfer::query()
+                ->where('faculty_id', $faculty->id)
+                ->where('status', 'pending')
+                ->where('expires_at', '>', now())
+                ->latest()
+                ->first()
+            : null;
 
         return [
             'metrics' => [
@@ -2772,24 +3206,18 @@ class DashboardController extends Controller
                 ->values()
                 ->all(),
             'staff' => $staff,
-            'students' => $facultyStudents
-                ->map(function (StudentProfile $studentProfile): array {
-                    $department = $studentProfile->department;
-
-                    return [
-                        ...$this->staffStudentPayload($studentProfile, $department),
-                        'department' => $this->departmentPayload($department),
-                    ];
-                })
-                ->values()
-                ->all(),
+            'students' => $this->facultyHeadStudentPayloads($facultyStudents)->all(),
             'levels' => $levels
                 ->map(fn (AcademicYear $level): array => $this->levelPayload($level))
                 ->values()
                 ->all(),
-            'pendingTasks' => $this->facultyPendingTasks($faculty, $departments, $pendingAccessCodeUsers),
+            'pendingTasks' => $section === 'home'
+                ? $this->facultyPendingTasks($faculty, $departments, $pendingAccessCodeUsers)
+                : [],
             'courseSetupSession' => $currentAcademicSession === null ? null : $this->academicSessionPayload($currentAcademicSession),
-            'courseSetup' => $this->facultyCourseSetupSummary($faculty, $currentAcademicSession),
+            'courseSetup' => $section === 'home'
+                ? $this->facultyCourseSetupSummary($faculty, $currentAcademicSession)
+                : [],
             'settings' => [
                 'faculty' => [
                     'name' => $faculty->name,
@@ -2930,11 +3358,12 @@ class DashboardController extends Controller
         }
 
         return CourseOffering::query()
-            ->with(['course.prerequisites'])
+            ->with(['course', 'prerequisiteCourses'])
             ->where('owner_type', Faculty::class)
             ->where('owner_id', $faculty->id)
             ->where('academic_session_id', $academicSession->id)
             ->where('academic_year_semester_id', $academicYearSemester->id)
+            ->whereNull('archived_at')
             ->get()
             ->sortBy(fn (CourseOffering $offering): string => $offering->course->code)
             ->values();
@@ -2949,10 +3378,9 @@ class DashboardController extends Controller
             'id' => (int) $offering->id,
             'courseId' => (int) $offering->course_id,
             'code' => $offering->course->code,
-            'title' => $offering->course->title,
-            'units' => (int) $offering->course->credit_units,
-            'departmentsCount' => $faculty->departments()->count(),
-            'prerequisites' => $this->coursePrerequisitePayload($offering->course),
+            'title' => $offering->course_title,
+            'units' => (int) $offering->credit_units,
+            'prerequisites' => $this->coursePrerequisitePayload($offering),
         ];
     }
 
@@ -3271,36 +3699,7 @@ class DashboardController extends Controller
                 ];
             });
 
-        ApprovalRequest::query()
-            ->with('requesterUser')
-            ->where('school_id', $faculty->school_id)
-            ->where('status', 'pending')
-            ->latest()
-            ->limit(3)
-            ->get()
-            ->each(function (ApprovalRequest $approvalRequest) use (&$tasks): void {
-                $tasks[] = [
-                    'id' => 'pending-request-'.$approvalRequest->id,
-                    'title' => $this->approvalTaskTitle($approvalRequest->type),
-                    'detail' => $approvalRequest->notes
-                        ?? $approvalRequest->requesterUser?->name
-                        ?? 'Pending review',
-                    'status' => 'Pending',
-                ];
-            });
-
         return array_slice($tasks, 0, 6);
-    }
-
-    private function approvalTaskTitle(string $type): string
-    {
-        return match ($type) {
-            'staff_access_code_import' => 'Review staff upload',
-            'course_catalog_update' => 'Review course catalog update',
-            'student_profile_corrections' => 'Review profile corrections',
-            'hod_import_review' => 'Review HOD upload',
-            default => 'Review pending request',
-        };
     }
 
     private function facultyStaffProfile(Faculty $faculty, int $staffProfileId): StaffProfile
@@ -3400,6 +3799,8 @@ class DashboardController extends Controller
                 'access_code' => $accessCode !== '' ? $accessCode : $this->generateAccessCode($faculty, $department),
                 'access_code_used_at' => null,
                 'activated_at' => null,
+                'disabled_at' => null,
+                'status' => AccountStatus::Pending,
             ]);
         } else {
             $updates = [];
@@ -3589,6 +3990,136 @@ class DashboardController extends Controller
         ];
     }
 
+    private function hodSetAdvisorFormPayload(Department $department, AcademicSession $entryAcademicSession): array
+    {
+        $assignment = $department->studentSetAdvisorAssignments()
+            ->where('entry_academic_session_id', $entryAcademicSession->id)
+            ->where('active_marker', 1)
+            ->first();
+        $currentLevel = $this->academicYearForEntrySession($department, $entryAcademicSession);
+
+        return [
+            'set' => [
+                'entrySession' => $this->academicSessionPayload($entryAcademicSession),
+                'currentLevel' => $currentLevel instanceof AcademicYear ? $this->levelPayload($currentLevel) : null,
+                'minimumYearsToDegree' => (int) $department->minimum_years_to_degree,
+                'isGraduated' => $this->academicContext->setHasGraduated($department, $entryAcademicSession),
+            ],
+            'currentStaffProfileId' => $assignment?->staff_profile_id,
+            'staff' => $department->staffProfiles()
+                ->with('user')
+                ->get()
+                ->sortBy(fn (StaffProfile $profile): string => $profile->user?->name ?? '')
+                ->map(fn (StaffProfile $profile): array => [
+                    'id' => (int) $profile->id,
+                    'name' => $profile->user?->name ?? 'Staff account',
+                    'email' => $profile->user?->email,
+                    'avatar' => $profile->user?->profilePhotoUrl(),
+                    'unavailableReason' => match (true) {
+                        $profile->user?->disabled_at !== null => 'Account disabled',
+                        $profile->user?->activated_at === null => 'Account activation pending',
+                        default => null,
+                    },
+                ])
+                ->values()
+                ->all(),
+        ];
+    }
+
+    /**
+     * @return array{
+     *     mode: string,
+     *     department: array{name: string, abbreviation: string, minimumYearsToDegree: int},
+     *     assignedSets: array<int, array<string, mixed>>,
+     *     suggestedAccessCode: string
+     * }
+     */
+    private function advisedStudentFormPayload(
+        StaffProfile $staffProfile,
+        Department $department,
+        string $mode,
+    ): array {
+        return [
+            'mode' => $mode,
+            'department' => $this->departmentPayload($department),
+            'assignedSets' => $this->assignedEntrySessionsForStaff($staffProfile, $department)
+                ->map(fn (AcademicSession $academicSession): array => $this->studentSetContextPayload($department, $academicSession))
+                ->values()
+                ->all(),
+            'suggestedAccessCode' => $this->suggestAccessCode($department->abbreviation, 'STUDENT'),
+        ];
+    }
+
+    private function assignedEntrySessionForStudentProvisioning(
+        StaffProfile $staffProfile,
+        Department $department,
+        int $entryAcademicSessionId,
+    ): AcademicSession {
+        $entryAcademicSession = $this->assignedEntrySessionsForStaff($staffProfile, $department)
+            ->firstWhere('id', $entryAcademicSessionId);
+
+        if (! $entryAcademicSession instanceof AcademicSession) {
+            throw ValidationException::withMessages([
+                'entry_academic_session_id' => 'Choose a student set currently assigned to you.',
+            ]);
+        }
+
+        return $entryAcademicSession;
+    }
+
+    private function provisionAdvisedStudent(
+        Department $department,
+        AcademicSession $entryAcademicSession,
+        string $registrationNumber,
+        ?string $preferredAccessCode,
+    ): StudentProfile {
+        $department->loadMissing('faculty');
+        $schoolId = $department->faculty?->school_id;
+
+        abort_unless(is_int($schoolId), 404);
+
+        if (StudentProfile::query()
+            ->where('school_id', $schoolId)
+            ->where('registration_number', $registrationNumber)
+            ->exists()) {
+            throw ValidationException::withMessages([
+                'registration_number' => 'A student with this registration number already exists in this school.',
+            ]);
+        }
+
+        $accessCode = trim((string) $preferredAccessCode) !== ''
+            ? Str::upper(trim((string) $preferredAccessCode))
+            : $this->suggestAccessCode($department->abbreviation, 'STUDENT');
+        $currentAcademicYear = $this->academicContext->academicYearForSet($department, $entryAcademicSession);
+        $studentStatus = $this->academicContext->setHasGraduated($department, $entryAcademicSession)
+            ? StudentStatus::Graduated
+            : StudentStatus::Active;
+        $studentUser = User::query()->create([
+            'school_id' => $schoolId,
+            'account_type' => AccountType::Student,
+            'name' => $registrationNumber,
+            'email' => null,
+            'password' => Str::random(40),
+            'access_code' => $accessCode,
+            'access_code_used_at' => null,
+            'activated_at' => null,
+            'disabled_at' => null,
+            'status' => AccountStatus::Pending,
+        ]);
+
+        $studentProfile = $studentUser->studentProfile()->create([
+            'school_id' => $schoolId,
+            'department_id' => $department->id,
+            'entry_academic_session_id' => $entryAcademicSession->id,
+            'current_academic_year_id' => $currentAcademicYear?->id,
+            'registration_number' => $registrationNumber,
+            'status' => $studentStatus,
+        ]);
+        $this->dueAssignments->syncForStudent($studentProfile);
+
+        return $studentProfile->load('user');
+    }
+
     private function generateAccessCode(Faculty $faculty, ?Department $department = null): string
     {
         $parts = [
@@ -3686,6 +4217,8 @@ class DashboardController extends Controller
                 'access_code' => $accessCode !== '' ? $accessCode : $this->generateAccessCode($faculty, $department),
                 'access_code_used_at' => null,
                 'activated_at' => null,
+                'disabled_at' => null,
+                'status' => AccountStatus::Pending,
             ]);
         } else {
             $updates = ['name' => $name];
@@ -3747,6 +4280,8 @@ class DashboardController extends Controller
                 'access_code' => $accessCode !== '' ? $accessCode : $this->generateAccessCode($faculty, $department),
                 'access_code_used_at' => null,
                 'activated_at' => null,
+                'disabled_at' => null,
+                'status' => AccountStatus::Pending,
             ]);
         } else {
             $updates = ['name' => $name];
@@ -3824,12 +4359,12 @@ class DashboardController extends Controller
 
         if ($role === 'staff' && $user->staffProfile !== null) {
             $setLevels = $this->levelsForAssignedStudentSets($user->staffProfile, $department);
-            $highestLevelId = $setLevels->max('id');
+            $highestYearNumber = $setLevels->max('year_number');
 
-            if ($highestLevelId !== null) {
+            if ($highestYearNumber !== null) {
                 return AcademicYear::query()
-                    ->where('id', '<=', $highestLevelId)
-                    ->orderBy('id')
+                    ->where('year_number', '<=', $highestYearNumber)
+                    ->orderBy('year_number')
                     ->get()
                     ->map(fn (AcademicYear $level): array => $this->levelPayload($level))
                     ->values()
@@ -3866,7 +4401,7 @@ class DashboardController extends Controller
     private function facultyCourseLevelModels(Faculty $faculty): EloquentCollection
     {
         $minimumYears = (int) $faculty->departments()->max('minimum_years_to_degree');
-        $minimumAcademicYearIds = $minimumYears > 0 ? range(1, $minimumYears) : [];
+        $minimumAcademicYearNumbers = $minimumYears > 0 ? range(1, $minimumYears) : [];
         $offeringAcademicYearIds = CourseOffering::query()
             ->with('academicYearSemester')
             ->where('owner_type', Faculty::class)
@@ -3874,18 +4409,16 @@ class DashboardController extends Controller
             ->get()
             ->pluck('academicYearSemester.academic_year_id')
             ->filter();
-        $academicYearIds = collect($minimumAcademicYearIds)
-            ->merge($offeringAcademicYearIds)
-            ->unique()
-            ->values();
-
-        if ($academicYearIds->isEmpty()) {
+        if ($minimumAcademicYearNumbers === [] && $offeringAcademicYearIds->isEmpty()) {
             return AcademicYear::query()->whereRaw('1 = 0')->get();
         }
 
         return AcademicYear::query()
-            ->whereIn('id', $academicYearIds)
-            ->orderBy('id')
+            ->where(function ($query) use ($minimumAcademicYearNumbers, $offeringAcademicYearIds): void {
+                $query->whereIn('year_number', $minimumAcademicYearNumbers)
+                    ->orWhereIn('id', $offeringAcademicYearIds);
+            })
+            ->orderBy('year_number')
             ->get();
     }
 
@@ -3929,7 +4462,7 @@ class DashboardController extends Controller
         Semester $semester,
         ?CourseOffering $offering = null,
     ): array {
-        $offering?->loadMissing('course.prerequisites');
+        $offering?->loadMissing(['course', 'prerequisiteCourses']);
 
         return [
             'mode' => $offering === null ? 'create' : 'edit',
@@ -3939,9 +4472,9 @@ class DashboardController extends Controller
             'offering' => $offering === null ? null : [
                 'id' => (int) $offering->id,
                 'code' => $offering->course->code,
-                'title' => $offering->course->title,
-                'creditUnits' => (int) $offering->course->credit_units,
-                'prerequisiteCourseIds' => $offering->course->prerequisites
+                'title' => $offering->course_title,
+                'creditUnits' => (int) $offering->credit_units,
+                'prerequisiteCourseIds' => $offering->prerequisiteCourses
                     ->pluck('id')
                     ->map(fn (int $id): int => $id)
                     ->values()
@@ -3961,21 +4494,11 @@ class DashboardController extends Controller
             ->where('owner_type', Faculty::class)
             ->where('owner_id', $faculty->id)
             ->where('academic_session_id', $academicSession->id)
-            ->where(function ($query) use ($level, $semester): void {
-                $query->whereHas('academicYearSemester', function ($query) use ($level, $semester): void {
-                    $query
-                        ->where('academic_year_id', '<', $level->id)
-                        ->orWhere(function ($query) use ($level, $semester): void {
-                            $query
-                                ->where('academic_year_id', $level->id)
-                                ->whereHas('semester', fn ($query) => $query->where('sort_order', '<', $semester->sort_order));
-                        });
-                });
-            })
+            ->whereIn('academic_year_semester_id', $this->eligiblePrerequisiteAcademicYearSemesterIds($level, $semester))
             ->get()
             ->sortBy(fn (CourseOffering $offering): string => sprintf(
                 '%02d-%02d-%s',
-                $offering->academicYearSemester?->academic_year_id ?? 0,
+                $offering->academicYearSemester?->academicYear?->year_number ?? 0,
                 $offering->academicYearSemester?->semester?->sort_order ?? 0,
                 $offering->course->code,
             ))
@@ -4019,15 +4542,19 @@ class DashboardController extends Controller
      */
     private function studentLevelsFor(User $user): array
     {
-        $currentLevel = $user->studentProfile?->currentLevel;
+        $studentProfile = $user->studentProfile;
+        $department = $studentProfile?->department;
+        $currentLevel = $studentProfile instanceof StudentProfile
+            ? $this->academicContext->academicYearForStudent($studentProfile)
+            : null;
 
         if ($currentLevel === null) {
             return [];
         }
 
         return AcademicYear::query()
-            ->where('id', '<=', $currentLevel->id)
-            ->orderBy('id')
+            ->where('year_number', '<=', $currentLevel->year_number)
+            ->orderBy('year_number')
             ->get()
             ->map(fn (AcademicYear $level): array => $this->levelPayload($level))
             ->values()
@@ -4045,11 +4572,14 @@ class DashboardController extends Controller
             return null;
         }
 
+        $department = $studentProfile->department;
+        $currentLevel = $department instanceof Department
+            ? $this->academicContext->academicYearForStudent($studentProfile)
+            : null;
+
         return [
             'registrationNumber' => $studentProfile->registration_number,
-            'currentLevel' => $studentProfile->currentLevel === null
-                ? null
-                : $this->levelPayload($studentProfile->currentLevel),
+            'currentLevel' => $currentLevel === null ? null : $this->levelPayload($currentLevel),
         ];
     }
 
@@ -4059,7 +4589,7 @@ class DashboardController extends Controller
      *     email: string,
      *     avatar: string|null,
      *     registrationNumber: string,
-     *     cgpa: string,
+     *     cgpa: string|null,
      *     faculty: array{name: string, abbreviation: string}|null,
      *     department: array{name: string, abbreviation: string}|null,
      *     currentLevel: array{id: int, title: string, slug: string}|null,
@@ -4087,7 +4617,7 @@ class DashboardController extends Controller
             'email' => $user->email,
             'avatar' => $user->profilePhotoUrl(),
             'registrationNumber' => $studentProfile->registration_number,
-            'cgpa' => '4.32',
+            'cgpa' => $this->academicPerformance->summary($studentProfile)['cgpa'],
             'faculty' => $department?->faculty?->only(['name', 'abbreviation']),
             'department' => $department?->only(['name', 'abbreviation']),
             'currentLevel' => $currentLevel === null ? null : $this->levelPayload($currentLevel),
@@ -4098,46 +4628,40 @@ class DashboardController extends Controller
     private function studentRecordPayload(StudentProfile $studentProfile, Department $department): array
     {
         $studentProfile->loadMissing(['user', 'currentLevel', 'entryAcademicSession']);
-        $currentLevel = $studentProfile->currentLevel;
-        $levels = $currentLevel === null
-            ? collect()
-            : AcademicYear::query()
-                ->where('id', '<=', $currentLevel->id)
-                ->orderBy('id')
-                ->get();
-        $semesters = Semester::query()
-            ->whereIn('slug', ['harmattan', 'rain'])
-            ->orderBy('sort_order')
-            ->get();
-        $semesterResults = $levels
-            ->flatMap(fn (AcademicYear $level): Collection => $semesters
-                ->map(function (Semester $semester) use ($department, $level, $studentProfile): array {
-                    $result = $this->studentResultSemesterForProfile($department, $level, $semester, $studentProfile);
-
-                    return [
-                        'id' => $level->slug.'-'.$semester->slug,
-                        'level' => $this->levelPayload($level),
-                        'semester' => $this->semesterPayload($semester),
-                        'gpa' => $result['gpa'],
-                        'totalUnits' => $result['totalUnits'],
-                        'courses' => $result['courses'],
-                    ];
-                }))
-            ->values();
-        $levelGpas = $levels
-            ->map(function (AcademicYear $level) use ($department, $studentProfile): array {
-                $courses = $this->studentLevelResultCourses($department, $level, $studentProfile);
+        $semesterResults = $this->academicPerformance
+            ->approvedSemesterResults($studentProfile)
+            ->filter(fn (StudentSemesterResult $result): bool => (int) $result->resultSheet?->department_id === (int) $department->id)
+            ->map(function (StudentSemesterResult $result): array {
+                $sheet = $result->resultSheet;
+                $level = $sheet->academicYearSemester->academicYear;
+                $semester = $sheet->academicYearSemester->semester;
 
                 return [
-                    'level' => $this->shortLevelName($level),
-                    'gpa' => $this->gpaFor($courses),
+                    'id' => $level->slug.'-'.$semester->slug,
+                    'level' => $this->levelPayload($level),
+                    'semester' => $this->semesterPayload($semester),
+                    'gpa' => number_format((float) $result->gpa, 2, '.', ''),
+                    'totalUnits' => (int) $result->total_units,
+                    'courses' => $result->courseResults
+                        ->sortBy('resultSheetCourse.sort_order')
+                        ->map(fn (StudentCourseResult $courseResult): array => [
+                            'code' => $courseResult->resultSheetCourse->course_code,
+                            'title' => $courseResult->resultSheetCourse->course_title,
+                            'units' => (int) $courseResult->resultSheetCourse->credit_units,
+                            'grade' => $courseResult->grade,
+                        ])
+                        ->values()
+                        ->all(),
                 ];
             })
             ->values();
-        $allCourses = $semesterResults
-            ->flatMap(fn (array $semesterResult): array => $semesterResult['courses'])
-            ->values()
-            ->all();
+        $levelGpas = $this->academicPerformance
+            ->gpaByAcademicYear($studentProfile, (int) $department->minimum_years_to_degree)
+            ->map(fn (array $row): array => [
+                'level' => $this->shortLevelName($row['level']),
+                'gpa' => $row['gpa'],
+            ]);
+        $summary = $this->academicPerformance->summary($studentProfile);
 
         return [
             'student' => $this->staffStudentPayload($studentProfile, $department),
@@ -4150,7 +4674,7 @@ class DashboardController extends Controller
                 ? null
                 : $this->academicSessionPayload($studentProfile->entryAcademicSession),
             'courseAdvisor' => $this->courseAdvisorNameForStudent($studentProfile, $department, 'Not assigned'),
-            'cgpa' => $this->gpaFor($allCourses),
+            'cgpa' => $summary['cgpa'],
             'levelGpas' => $levelGpas->all(),
             'semesters' => $semesterResults->all(),
         ];
@@ -4282,25 +4806,46 @@ class DashboardController extends Controller
             return null;
         }
 
+        $studentProfile->loadMissing(['department.faculty.school', 'entryAcademicSession']);
         $department = $studentProfile->department;
-        $currentLevel = $studentProfile->currentLevel;
-        $semester = Semester::query()->where('slug', 'harmattan')->first();
-        $session = $this->currentAcademicSessionFor($department)?->name ?? '2025/2026';
-        $courses = $currentLevel === null || $semester === null
-            ? []
-            : collect($this->studentResultCourses($department, $currentLevel, $semester))
-                ->map(fn (array $course): array => [
-                    ...$course,
-                    'type' => $this->courseType($course['code']),
-                ])
-                ->values()
-                ->all();
+        $school = $department?->faculty?->school;
+        $academicSession = $school instanceof School ? $this->academicContext->currentSession($school) : null;
+        $currentLevel = $department instanceof Department
+            ? $this->academicContext->academicYearForStudent($studentProfile, $academicSession)
+            : null;
+        $semesterInstance = $academicSession instanceof AcademicSession
+            ? $this->academicContext->currentSemesterInstance($academicSession)
+            : null;
+        $academicYearSemester = $currentLevel instanceof AcademicYear && $semesterInstance?->semester instanceof Semester
+            ? $this->resolveAcademicYearSemester($currentLevel, $semesterInstance->semester)
+            : null;
+        $registration = $academicSession instanceof AcademicSession && $academicYearSemester instanceof AcademicYearSemester
+            ? CourseRegistration::query()
+                ->with('items')
+                ->where('student_profile_id', $studentProfile->id)
+                ->where('academic_session_id', $academicSession->id)
+                ->where('academic_year_semester_id', $academicYearSemester->id)
+                ->first()
+            : null;
+        $courses = $registration?->items
+            ->sortBy('course_code')
+            ->map(fn (CourseRegistrationItem $item): array => [
+                'code' => $item->course_code,
+                'title' => $item->course_title,
+                'units' => (int) $item->credit_units,
+                'type' => $item->category,
+            ])
+            ->values()
+            ->all() ?? [];
         $gpaProgress = $department === null
             ? []
-            : collect($this->staffStudentPayload($studentProfile, $department)['levelGpas'])
+            : $this->academicPerformance->gpaByAcademicYear(
+                $studentProfile,
+                (int) $department->minimum_years_to_degree,
+            )
                 ->map(fn (array $row): array => [
-                    'level' => $row['level'],
-                    'average' => (float) $row['gpa'],
+                    'level' => $this->shortLevelName($row['level']),
+                    'average' => $row['gpa'] === null ? null : (float) $row['gpa'],
                 ])
                 ->values()
                 ->all();
@@ -4312,19 +4857,23 @@ class DashboardController extends Controller
                 ->all();
 
         return [
-            'cgpa' => '4.32',
-            'currentSemester' => [
-                'name' => $semester?->name ?? 'Harmattan',
-                'level' => $currentLevel?->name ?? 'Current Level',
-                'session' => $session,
-            ],
+            'cgpa' => $this->academicPerformance->summary($studentProfile)['cgpa'],
+            'currentSemester' => $academicSession instanceof AcademicSession
+                && $currentLevel instanceof AcademicYear
+                && $semesterInstance?->semester instanceof Semester
+                    ? [
+                        'name' => $semesterInstance->semester->name,
+                        'level' => $currentLevel->name,
+                        'session' => $academicSession->name,
+                    ]
+                    : null,
             'courseAdvisor' => $this->courseAdvisorNameForStudent($studentProfile, $department, 'Not assigned'),
             'totalCourseUnits' => (int) collect($courses)->sum('units'),
             'levels' => $levels,
             'gpaProgress' => $gpaProgress,
             'courses' => $courses,
             'pendingDues' => $this->studentPendingDues($studentProfile),
-            'resits' => $this->studentResits($currentLevel),
+            'resits' => $this->studentCarryovers($studentProfile),
         ];
     }
 
@@ -4346,7 +4895,7 @@ class DashboardController extends Controller
         }
 
         $assignments = StudentDueAssignment::query()
-            ->with(['due', 'latestPayment'])
+            ->with(['due', 'payments', 'latestPayment.receiptEmailDelivery'])
             ->where('student_profile_id', $studentProfile->id)
             ->whereHas('due', fn ($query) => $query->where('status', Due::StatusPublished))
             ->latest()
@@ -4359,8 +4908,22 @@ class DashboardController extends Controller
             ->where('status', StudentDueAssignment::StatusPaid)
             ->sortByDesc(fn (StudentDueAssignment $assignment): int => $assignment->paid_at?->getTimestamp() ?? 0)
             ->values();
+        $paymentAccountsByStaffId = PaymentAccount::query()
+            ->whereIn(
+                'staff_profile_id',
+                $pendingAssignments->pluck('due.created_by_staff_profile_id')->filter()->unique(),
+            )
+            ->latest('updated_at')
+            ->latest('id')
+            ->get()
+            ->filter(fn (PaymentAccount $paymentAccount): bool => $paymentAccount->isActive())
+            ->unique('staff_profile_id')
+            ->keyBy('staff_profile_id');
         $pending = $pendingAssignments
-            ->map(fn (StudentDueAssignment $assignment): array => $this->studentPendingDuePayload($assignment))
+            ->map(fn (StudentDueAssignment $assignment): array => $this->studentPendingDuePayload(
+                $assignment,
+                $paymentAccountsByStaffId->get($assignment->due->created_by_staff_profile_id),
+            ))
             ->all();
         $paid = $paidAssignments
             ->map(fn (StudentDueAssignment $assignment): array => $this->studentPaidDuePayload($assignment))
@@ -4376,11 +4939,21 @@ class DashboardController extends Controller
     }
 
     /**
-     * @return array{id: int, name: string, description: string|null, amount: string, dueDate: string|null, paymentUrl: string}
+     * @return array{id: int, name: string, description: string|null, amount: string, dueDate: string|null, paymentUrl: string|null, paymentUnavailableReason: string|null}
      */
-    private function studentPendingDuePayload(StudentDueAssignment $assignment): array
-    {
+    private function studentPendingDuePayload(
+        StudentDueAssignment $assignment,
+        ?PaymentAccount $paymentAccount,
+    ): array {
         $due = $assignment->due;
+        $canPay = $paymentAccount?->isActive() === true;
+        $hasOpenCheckout = $canPay && $assignment->payments->contains(
+            fn (DuePayment $payment): bool => $payment->status === DuePayment::StatusInitialized
+                && is_string($payment->authorization_url)
+                && $payment->authorization_url !== ''
+                && $payment->created_at?->isAfter(now()->subMinutes(30)) === true
+                && data_get($payment->provider_payload, 'payout_account.subaccount_code') === $paymentAccount?->paystack_subaccount_code,
+        );
 
         return [
             'id' => (int) $assignment->id,
@@ -4388,29 +4961,37 @@ class DashboardController extends Controller
             'description' => $due->description,
             'amount' => $this->formatKoboAmount((int) $assignment->amount_kobo),
             'dueDate' => $due->due_on?->toFormattedDateString(),
-            'paymentUrl' => route('dashboard.dues.payments.store', [
-                'studentDueAssignment' => $assignment,
-            ]),
+            'paymentUrl' => $canPay
+                ? route('dashboard.dues.payments.store', [
+                    'studentDueAssignment' => $assignment,
+                ])
+                : null,
+            'paymentActionLabel' => $hasOpenCheckout ? 'Continue payment' : 'Pay now',
+            'paymentUnavailableReason' => $canPay
+                ? null
+                : 'Ask your course adviser to reconnect the payout account.',
         ];
     }
 
     /**
-     * @return array{id: int, name: string, description: string|null, amount: string, paidAt: string, receiptUrl: string}
+     * @return array<string, mixed>
      */
     private function studentPaidDuePayload(StudentDueAssignment $assignment): array
     {
         $due = $assignment->due;
         $payment = $assignment->latestPayment;
 
+        if ($payment instanceof DuePayment && $payment->receipt_status === null && $payment->paystack_transaction_id !== null) {
+            $payment = $this->dueReceipts->queue($payment);
+        }
+
         return [
             'id' => (int) $assignment->id,
             'name' => $due->title,
             'description' => $due->description,
-            'amount' => $this->formatKoboAmount((int) $assignment->amount_kobo),
+            'amount' => $this->formatKoboAmount((int) ($payment?->amount_kobo ?? $assignment->amount_kobo)),
             'paidAt' => $assignment->paid_at?->toFormattedDateString() ?? 'Paid',
-            'receiptUrl' => $payment instanceof DuePayment
-                ? route('dashboard.dues.payments.receipt', ['duePayment' => $payment])
-                : '#',
+            ...$this->duePaymentReceiptPayload($payment),
         ];
     }
 
@@ -4447,7 +5028,9 @@ class DashboardController extends Controller
                 ->map(fn (AcademicSession $academicSession): array => $this->studentSetContextPayload($department, $academicSession))
                 ->values()
                 ->all(),
-            'metrics' => $this->staffDueMetricsPayload($dues),
+            'metrics' => $this->staffDueMetricsPayload(
+                $dues->where('status', Due::StatusPublished)->values(),
+            ),
             'dues' => $dues
                 ->map(fn (Due $due): array => $this->staffDueSummaryPayload($due))
                 ->values()
@@ -4495,10 +5078,6 @@ class DashboardController extends Controller
                 ->map(fn (PaymentAccount $paymentAccount): array => $this->paymentAccountPayload($paymentAccount, $department))
                 ->values()
                 ->all(),
-            'assignedSets' => $this->assignedEntrySessionsForStaff($staffProfile, $department)
-                ->map(fn (AcademicSession $academicSession): array => $this->studentSetContextPayload($department, $academicSession))
-                ->values()
-                ->all(),
             'bankOptions' => $bankOptions['options'],
             'bankOptionsError' => $bankOptions['error'],
             'dashboardUrl' => $this->paystackDashboardUrl(),
@@ -4534,12 +5113,16 @@ class DashboardController extends Controller
         ];
     }
 
-    private function staffDueFormPayload(StaffProfile $staffProfile, Department $department): array
-    {
+    private function staffDueFormPayload(
+        StaffProfile $staffProfile,
+        Department $department,
+        ?Due $due = null,
+    ): array {
         $assignedSets = $this->assignedEntrySessionsForStaff($staffProfile, $department);
         $paymentAccounts = $this->staffPaymentAccounts($staffProfile, $department);
 
         return [
+            'mode' => $due instanceof Due ? 'edit' : 'create',
             'assignedSets' => $assignedSets
                 ->map(fn (AcademicSession $academicSession): array => $this->studentSetContextPayload($department, $academicSession))
                 ->values()
@@ -4550,8 +5133,38 @@ class DashboardController extends Controller
                 ->all(),
             'paymentSettingsUrl' => route('dashboard.section', ['section' => 'payment-settings']),
             'defaults' => [
-                'entryAcademicSessionId' => $assignedSets->first()?->id,
-                'dueOn' => now()->addMonth()->toDateString(),
+                'entryAcademicSessionId' => $due?->entry_academic_session_id ?? $assignedSets->first()?->id,
+                'title' => $due?->title ?? '',
+                'description' => $due?->description ?? '',
+                'amountNaira' => $due instanceof Due ? (string) ((int) $due->amount_kobo / 100) : '',
+                'dueOn' => $due?->due_on?->toDateString() ?? now()->addMonth()->toDateString(),
+            ],
+            'due' => $due instanceof Due
+                ? [
+                    'id' => (int) $due->id,
+                    'status' => $this->dueStatusLabel($due->status),
+                    'canChangeSet' => $due->status === Due::StatusDraft,
+                    'canChangeAmount' => $due->status !== Due::StatusArchived,
+                ]
+                : null,
+        ];
+    }
+
+    private function staffDueWaiverFormPayload(Due $due, StudentDueAssignment $assignment): array
+    {
+        $assignment->loadMissing('studentProfile.user');
+
+        return [
+            'due' => [
+                'id' => (int) $due->id,
+                'title' => $due->title,
+                'amount' => $this->formatKoboAmount((int) $assignment->amount_kobo),
+            ],
+            'assignment' => [
+                'id' => (int) $assignment->id,
+                'studentName' => $assignment->studentProfile->user->name,
+                'studentAvatar' => $assignment->studentProfile->user->profilePhotoUrl(),
+                'registrationNumber' => $assignment->studentProfile->registration_number,
             ],
         ];
     }
@@ -4562,7 +5175,7 @@ class DashboardController extends Controller
             'entryAcademicSession',
             'paymentAccount',
             'assignments.studentProfile.user',
-            'assignments.latestPayment',
+            'assignments.latestPayment.receiptEmailDelivery',
         ]);
         $assignments = $due->assignments->sortBy(fn (StudentDueAssignment $assignment): string => $assignment->studentProfile->user->name)->values();
 
@@ -4595,12 +5208,16 @@ class DashboardController extends Controller
 
     private function staffDueSummaryPayload(Due $due): array
     {
-        $due->loadMissing(['department.faculty.school', 'entryAcademicSession', 'paymentAccount', 'assignments']);
+        $due->loadMissing(['department.faculty.school', 'entryAcademicSession', 'createdByStaffProfile', 'assignments']);
         $assignments = $due->assignments;
         $paid = $assignments->where('status', StudentDueAssignment::StatusPaid);
         $pending = $assignments->where('status', StudentDueAssignment::StatusPending);
+        $waived = $assignments->where('status', StudentDueAssignment::StatusWaived);
         $currentLevel = $this->academicYearForEntrySession($due->department, $due->entryAcademicSession);
         $setLabel = $due->entryAcademicSession->name.' Set';
+        $paymentAccount = $due->createdByStaffProfile instanceof StaffProfile
+            ? $this->currentPaymentAccountForStaff($due->createdByStaffProfile, $due->department)
+            : null;
 
         if ($currentLevel instanceof AcademicYear && (int) $currentLevel->id <= (int) $due->department->minimum_years_to_degree) {
             $setLabel .= ' · '.$this->shortLevelName($currentLevel);
@@ -4618,10 +5235,11 @@ class DashboardController extends Controller
             'dueDate' => $due->due_on?->toFormattedDateString(),
             'paidCount' => $paid->count(),
             'pendingCount' => $pending->count(),
+            'waivedCount' => $waived->count(),
             'collectedAmount' => $this->formatKoboAmount((int) $paid->sum('amount_kobo')),
             'outstandingAmount' => $this->formatKoboAmount((int) $pending->sum('amount_kobo')),
-            'paymentAccount' => $due->paymentAccount instanceof PaymentAccount
-                ? $this->paymentAccountPayload($due->paymentAccount, $due->department)
+            'paymentAccount' => $paymentAccount instanceof PaymentAccount
+                ? $this->paymentAccountPayload($paymentAccount, $due->department)
                 : null,
             'detailUrl' => route('dashboard.dues.show', ['due' => $due]),
         ];
@@ -4632,30 +5250,15 @@ class DashboardController extends Controller
      */
     private function staffPaymentAccounts(StaffProfile $staffProfile, Department $department): Collection
     {
-        return PaymentAccount::query()
-            ->with('entryAcademicSession')
-            ->where('department_id', $department->id)
-            ->where('staff_profile_id', $staffProfile->id)
-            ->latest()
-            ->get();
+        $paymentAccount = $this->currentPaymentAccountForStaff($staffProfile, $department);
+
+        return $paymentAccount instanceof PaymentAccount
+            ? collect([$paymentAccount])
+            : collect();
     }
 
     private function paymentAccountPayload(PaymentAccount $paymentAccount, Department $department): array
     {
-        $paymentAccount->loadMissing('entryAcademicSession');
-        $setLabel = 'All assigned sets';
-
-        if ($paymentAccount->entryAcademicSession instanceof AcademicSession) {
-            $currentLevel = $this->academicYearForEntrySession($department, $paymentAccount->entryAcademicSession);
-            $setLabel = $paymentAccount->entryAcademicSession->name.' Set';
-
-            if ($currentLevel instanceof AcademicYear && (int) $currentLevel->id <= (int) $department->minimum_years_to_degree) {
-                $setLabel .= ' · '.$this->shortLevelName($currentLevel);
-            } elseif ($currentLevel instanceof AcademicYear) {
-                $setLabel .= ' · Graduated';
-            }
-        }
-
         return [
             'id' => (int) $paymentAccount->id,
             'label' => $paymentAccount->label,
@@ -4664,8 +5267,8 @@ class DashboardController extends Controller
             'accountName' => $paymentAccount->account_name,
             'accountNumber' => $paymentAccount->account_number,
             'status' => $this->paymentAccountStatusLabel($paymentAccount->status),
-            'set' => $setLabel,
-            'entryAcademicSessionId' => $paymentAccount->entry_academic_session_id,
+            'set' => 'All student dues',
+            'entryAcademicSessionId' => null,
             'verifiedAt' => $paymentAccount->verified_at?->toFormattedDateString(),
         ];
     }
@@ -4697,6 +5300,26 @@ class DashboardController extends Controller
         }
 
         return $bank;
+    }
+
+    /**
+     * @param  array<string, mixed>  $subaccount
+     * @return array<string, mixed>
+     */
+    private function safePaystackSubaccountPayload(array $subaccount): array
+    {
+        return Arr::only($subaccount, [
+            'id',
+            'subaccount_code',
+            'domain',
+            'integration',
+            'managed_by_integration',
+            'active',
+            'is_verified',
+            'currency',
+            'createdAt',
+            'updatedAt',
+        ]);
     }
 
     /**
@@ -4740,16 +5363,61 @@ class DashboardController extends Controller
         $studentProfile = $assignment->studentProfile;
         $payment = $assignment->latestPayment;
 
+        if ($payment instanceof DuePayment && $payment->receipt_status === null && $payment->paystack_transaction_id !== null) {
+            $payment = $this->dueReceipts->queue($payment);
+        }
+
         return [
             'id' => (int) $assignment->id,
             'studentName' => $studentProfile->user->name,
             'studentAvatar' => $studentProfile->user->profilePhotoUrl(),
             'registrationNumber' => $studentProfile->registration_number,
             'amount' => $this->formatKoboAmount((int) $assignment->amount_kobo),
-            'status' => $assignment->status === StudentDueAssignment::StatusPaid ? 'Paid' : 'Pending',
+            'status' => match ($assignment->status) {
+                StudentDueAssignment::StatusPaid => 'Paid',
+                StudentDueAssignment::StatusWaived => 'Waived',
+                default => 'Pending',
+            },
             'paidAt' => $assignment->paid_at?->toFormattedDateString(),
-            'receiptUrl' => $payment instanceof DuePayment && $payment->status === DuePayment::StatusSuccess
-                ? route('dashboard.dues.payments.receipt', ['duePayment' => $payment])
+            'waiverReason' => $assignment->waiver_reason,
+            ...$this->duePaymentReceiptPayload($payment),
+        ];
+    }
+
+    /**
+     * @return array{receiptStatus: string|null, receiptUrl: string|null, receiptRetryUrl: string|null, receiptEmailStatus: string|null, receiptEmailRetryUrl: string|null}
+     */
+    private function duePaymentReceiptPayload(?DuePayment $payment): array
+    {
+        if (! $payment instanceof DuePayment || $payment->paystack_transaction_id === null) {
+            return [
+                'receiptStatus' => null,
+                'receiptUrl' => null,
+                'receiptRetryUrl' => null,
+                'receiptEmailStatus' => null,
+                'receiptEmailRetryUrl' => null,
+            ];
+        }
+
+        $emailStatus = $payment->receiptEmailDelivery?->status;
+
+        return [
+            'receiptStatus' => $payment->receipt_status,
+            'receiptUrl' => $payment->receipt_status === DuePayment::ReceiptStatusReady
+                ? route('dashboard.dues.payments.receipt', [
+                    'paystackTransactionId' => $payment->paystack_transaction_id,
+                ])
+                : null,
+            'receiptRetryUrl' => $payment->receipt_status === DuePayment::ReceiptStatusFailed
+                ? route('dashboard.dues.payments.receipt.retry', [
+                    'paystackTransactionId' => $payment->paystack_transaction_id,
+                ])
+                : null,
+            'receiptEmailStatus' => $emailStatus,
+            'receiptEmailRetryUrl' => in_array($emailStatus, ['failed', 'skipped'], true)
+                ? route('dashboard.dues.payments.receipt.email', [
+                    'paystackTransactionId' => $payment->paystack_transaction_id,
+                ])
                 : null,
         ];
     }
@@ -4827,14 +5495,11 @@ class DashboardController extends Controller
             })
             ->values()
             ->all();
-        $summary = app(GpaCalculator::class)->cumulativeGpa(
-            $studentResults
-                ->map(fn (StudentSemesterResult $result): array => [
-                    'total_units' => (int) $result->total_units,
-                    'total_grade_points' => (int) $result->total_grade_points,
-                ])
-                ->all(),
-        );
+        $totalUnits = (int) $studentResults->sum('total_units');
+        $totalGradePoints = (int) $studentResults->sum('total_grade_points');
+        $summary = $totalUnits > 0
+            ? number_format($totalGradePoints / $totalUnits, 2, '.', '')
+            : null;
         $courses = collect($semesterResults)->flatMap(fn (array $semester): array => $semester['courses']);
 
         if ($semesterResults === []) {
@@ -4846,7 +5511,7 @@ class DashboardController extends Controller
                 ->map(fn (Semester $semester): array => [
                     'name' => $semester->name,
                     'slug' => $semester->slug,
-                    'gpa' => '0.00',
+                    'gpa' => null,
                     'totalUnits' => 0,
                     'courses' => [],
                 ])
@@ -4856,8 +5521,8 @@ class DashboardController extends Controller
 
         return [
             'level' => $this->levelPayload($level),
-            'averageGpa' => number_format($summary, 2),
-            'totalUnits' => (int) $studentResults->sum('total_units'),
+            'averageGpa' => $summary,
+            'totalUnits' => $totalUnits,
             'failedCourses' => $courses->where('grade', 'F')->count(),
             'totalCourses' => $courses->count(),
             'semesters' => $semesterResults,
@@ -4904,7 +5569,7 @@ class DashboardController extends Controller
                 'level' => $academicYearSemester->academicYear->name,
                 'session' => $academicSession->name,
             ],
-            'maximumCourseUnits' => 24,
+            'maximumCourseUnits' => (int) $department->maximum_course_units_per_semester,
             'advisorName' => $this->courseAdvisorNameForStudent($studentProfile, $department),
             'reviewStatus' => $this->courseRegistrationStatusLabel($registration?->status ?? CourseRegistration::StatusDraft),
             'feedbackNote' => $registration?->feedback_note,
@@ -4970,15 +5635,26 @@ class DashboardController extends Controller
      */
     private function currentCourseRegistrationContext(StudentProfile $studentProfile): array
     {
+        $studentProfile->loadMissing(['department.faculty.school', 'entryAcademicSession']);
         $department = $studentProfile->department;
-        $currentLevel = $studentProfile->currentLevel;
-        $currentSemester = Semester::query()->where('slug', 'harmattan')->first();
 
-        abort_unless($department instanceof Department && $currentLevel instanceof AcademicYear && $currentSemester instanceof Semester, 404);
+        abort_unless($department instanceof Department, 404);
 
         $academicSession = $this->currentAcademicSessionFor($department);
+        $currentLevel = $this->academicContext->academicYearForSet(
+            $department,
+            $studentProfile->entryAcademicSession,
+            $academicSession,
+        );
+        $currentSemester = $academicSession instanceof AcademicSession
+            ? $this->academicContext->currentSemesterInstance($academicSession)?->semester
+            : null;
 
-        abort_unless($academicSession instanceof AcademicSession, 404);
+        if (! $academicSession instanceof AcademicSession || ! $currentLevel instanceof AcademicYear || ! $currentSemester instanceof Semester) {
+            throw ValidationException::withMessages([
+                'registration' => 'Course registration is not open because the current academic semester has not been configured.',
+            ]);
+        }
 
         return [
             $department,
@@ -5166,8 +5842,7 @@ class DashboardController extends Controller
      *             code: string,
      *             title: string,
      *             units: int,
-     *             isMandatory: bool,
-     *             courseType: string,
+     *             category: string,
      *             prerequisites: array<int, array{id: int, code: string, title: string}>,
      *             canEdit: bool
      *         }>
@@ -5235,8 +5910,7 @@ class DashboardController extends Controller
      *         code: string,
      *         title: string,
      *         units: int,
-     *         isMandatory: bool,
-     *         courseType: string,
+     *         category: string,
      *         prerequisites: array<int, array{id: int, code: string, title: string}>,
      *         canEdit: bool
      *     }>
@@ -5249,16 +5923,16 @@ class DashboardController extends Controller
         Semester $semester,
     ): array {
         $offerings = $this->courseOfferingsForDepartment($department, $level, $semester, $academicSession);
-        $courseTypeCounts = $this->courseTypeCounts($department, $offerings);
+        $courseCategoryCounts = $this->courseCategoryCounts($offerings);
 
         return [
             'id' => $level->slug.'-'.$semester->slug,
             'name' => $semester->name,
             'slug' => $semester->slug,
-            'totalUnits' => (int) $offerings->sum(fn (CourseOffering $offering): int => (int) $offering->course->credit_units),
-            'facultyCourseCount' => $courseTypeCounts['Faculty Course'],
-            'departmentalCourseCount' => $courseTypeCounts['Departmental Course'],
-            'electiveCourseCount' => $courseTypeCounts['Elective Course'],
+            'totalUnits' => (int) $offerings->sum(fn (CourseOffering $offering): int => (int) $offering->credit_units),
+            'facultyCourseCount' => $courseCategoryCounts['Faculty Course'],
+            'departmentalCourseCount' => $courseCategoryCounts['Departmental Course'],
+            'electiveCourseCount' => $courseCategoryCounts['Elective Course'],
             'offerings' => $offerings
                 ->map(fn (CourseOffering $offering): array => $this->staffCourseOfferingPayload($department, $offering))
                 ->values()
@@ -5283,9 +5957,10 @@ class DashboardController extends Controller
         }
 
         return CourseOffering::query()
-            ->with(['course.prerequisites', 'academicYearSemester.academicYear', 'academicYearSemester.semester'])
+            ->with(['course', 'prerequisiteCourses', 'academicYearSemester.academicYear', 'academicYearSemester.semester'])
             ->where('academic_session_id', $academicSession->id)
             ->where('academic_year_semester_id', $academicYearSemester->id)
+            ->whereNull('archived_at')
             ->where(function ($query) use ($department): void {
                 $this->whereOfferingOwner($query, $department);
             })
@@ -5301,8 +5976,7 @@ class DashboardController extends Controller
      *     code: string,
      *     title: string,
      *     units: int,
-     *     isMandatory: bool,
-     *     courseType: string,
+     *     category: string,
      *     prerequisites: array<int, array{id: int, code: string, title: string}>,
      *     canEdit: bool
      * }
@@ -5316,11 +5990,10 @@ class DashboardController extends Controller
             'id' => (int) $offering->id,
             'courseId' => (int) $offering->course_id,
             'code' => $offering->course->code,
-            'title' => $offering->course->title,
-            'units' => (int) $offering->course->credit_units,
-            'isMandatory' => (bool) $offering->is_mandatory,
-            'courseType' => $this->courseTypeForOffering($department, $offering),
-            'prerequisites' => $this->coursePrerequisitePayload($offering->course),
+            'title' => $offering->course_title,
+            'units' => (int) $offering->credit_units,
+            'category' => $offering->category->value,
+            'prerequisites' => $this->coursePrerequisitePayload($offering),
             'canEdit' => $isDepartmentOwned,
         ];
     }
@@ -5329,10 +6002,10 @@ class DashboardController extends Controller
      * @param  Collection<int, CourseOffering>  $offerings
      * @return array{'Faculty Course': int, 'Departmental Course': int, 'Elective Course': int}
      */
-    private function courseTypeCounts(Department $department, Collection $offerings): array
+    private function courseCategoryCounts(Collection $offerings): array
     {
         $counts = $offerings
-            ->map(fn (CourseOffering $offering): string => $this->courseTypeForOffering($department, $offering))
+            ->map(fn (CourseOffering $offering): string => $offering->category->label())
             ->countBy();
 
         return [
@@ -5342,25 +6015,13 @@ class DashboardController extends Controller
         ];
     }
 
-    private function courseTypeForOffering(Department $department, CourseOffering $offering): string
-    {
-        $isDepartmentOwned = $offering->owner_type === Department::class
-            && (int) $offering->owner_id === (int) $department->id;
-
-        if (! $isDepartmentOwned) {
-            return 'Faculty Course';
-        }
-
-        return $offering->is_mandatory ? 'Departmental Course' : 'Elective Course';
-    }
-
     /**
      * @return array{
      *     mode: string,
      *     academicSession: array{id: int, name: string, startsOn: string, endsOn: string, status: string},
      *     level: array{id: int, title: string, slug: string},
      *     semester: array{id: int, name: string, slug: string},
-     *     offering: array{id: int, code: string, title: string, creditUnits: int, isMandatory: bool, prerequisiteCourseIds: array<int, int>}|null,
+     *     offering: array{id: int, code: string, title: string, creditUnits: int, category: string, prerequisiteCourseIds: array<int, int>}|null,
      *     prefill: array{code: string, title: string, creditUnits: int}|null,
      *     returnTo: string|null,
      *     prerequisiteOptions: array<int, array{id: int, code: string, title: string, units: int, level: string, semester: string}>
@@ -5373,7 +6034,7 @@ class DashboardController extends Controller
         ?CourseOffering $offering = null,
         ?AcademicSession $academicSession = null,
     ): array {
-        $offering?->loadMissing('course.prerequisites');
+        $offering?->loadMissing(['course', 'prerequisiteCourses']);
         $academicSession ??= $this->requiredCurrentAcademicSession($department);
         $prefillCode = request()->string('code')->trim()->upper()->toString();
         $prefill = [
@@ -5390,10 +6051,10 @@ class DashboardController extends Controller
             'offering' => $offering === null ? null : [
                 'id' => (int) $offering->id,
                 'code' => $offering->course->code,
-                'title' => $offering->course->title,
-                'creditUnits' => (int) $offering->course->credit_units,
-                'isMandatory' => (bool) $offering->is_mandatory,
-                'prerequisiteCourseIds' => $offering->course->prerequisites
+                'title' => $offering->course_title,
+                'creditUnits' => (int) $offering->credit_units,
+                'category' => $offering->category->value,
+                'prerequisiteCourseIds' => $offering->prerequisiteCourses
                     ->pluck('id')
                     ->map(fn (int $id): int => $id)
                     ->values()
@@ -5427,21 +6088,11 @@ class DashboardController extends Controller
             ->where(function ($query) use ($department): void {
                 $this->whereOfferingOwner($query, $department);
             })
-            ->where(function ($query) use ($level, $semester): void {
-                $query->whereHas('academicYearSemester', function ($query) use ($level, $semester): void {
-                    $query
-                        ->where('academic_year_id', '<', $level->id)
-                        ->orWhere(function ($query) use ($level, $semester): void {
-                            $query
-                                ->where('academic_year_id', $level->id)
-                                ->whereHas('semester', fn ($query) => $query->where('sort_order', '<', $semester->sort_order));
-                        });
-                });
-            })
+            ->whereIn('academic_year_semester_id', $this->eligiblePrerequisiteAcademicYearSemesterIds($level, $semester))
             ->get()
             ->sortBy(fn (CourseOffering $offering): string => sprintf(
                 '%02d-%02d-%s',
-                $offering->academicYearSemester?->academic_year_id ?? 0,
+                $offering->academicYearSemester?->academicYear?->year_number ?? 0,
                 $offering->academicYearSemester?->semester?->sort_order ?? 0,
                 $offering->course->code,
             ))
@@ -5501,6 +6152,25 @@ class DashboardController extends Controller
             ->where('academic_year_id', $academicYear->id)
             ->where('semester_id', $semester->id)
             ->firstOrFail();
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function eligiblePrerequisiteAcademicYearSemesterIds(AcademicYear $level, Semester $semester): array
+    {
+        return AcademicYearSemester::query()
+            ->with(['academicYear', 'semester'])
+            ->get()
+            ->filter(fn (AcademicYearSemester $yearSemester): bool => $yearSemester->academicYear->year_number < $level->year_number
+                || (
+                    $yearSemester->academicYear->year_number === $level->year_number
+                    && $yearSemester->semester->sort_order < $semester->sort_order
+                ))
+            ->pluck('id')
+            ->map(fn (int $id): int => $id)
+            ->values()
+            ->all();
     }
 
     /**
@@ -5629,8 +6299,15 @@ class DashboardController extends Controller
                     'academic_session_id' => $academicSession->id,
                     'academic_year_semester_id' => $sourceOffering->academic_year_semester_id,
                 ],
-                ['is_mandatory' => $sourceOffering->is_mandatory],
+                [
+                    'course_title' => $sourceOffering->course_title,
+                    'credit_units' => $sourceOffering->credit_units,
+                    'category' => $sourceOffering->category,
+                    'archived_at' => null,
+                ],
             );
+
+            $offering->prerequisiteCourses()->sync($sourceOffering->prerequisiteCourses()->pluck('courses.id'));
 
             if ($offering->wasRecentlyCreated) {
                 $copied++;
@@ -5645,29 +6322,22 @@ class DashboardController extends Controller
 
     private function currentAcademicSessionFor(?Department $department): ?AcademicSession
     {
-        return $department?->faculty?->school?->academicSessions()
-            ->whereDate('starts_on', '<=', today())
-            ->whereDate('ends_on', '>=', today())
-            ->latest('starts_on')
-            ->first();
+        $department?->loadMissing('faculty.school');
+        $school = $department?->faculty?->school;
+
+        return $school instanceof School ? $this->academicContext->currentSession($school) : null;
     }
 
     private function currentAcademicSessionForFaculty(Faculty $faculty): ?AcademicSession
     {
-        return $faculty->school?->academicSessions()
-            ->whereDate('starts_on', '<=', today())
-            ->whereDate('ends_on', '>=', today())
-            ->latest('starts_on')
-            ->first();
+        $faculty->loadMissing('school');
+
+        return $faculty->school instanceof School ? $this->academicContext->currentSession($faculty->school) : null;
     }
 
     private function currentAcademicSessionForSchool(School $school): ?AcademicSession
     {
-        return $school->academicSessions()
-            ->whereDate('starts_on', '<=', today())
-            ->whereDate('ends_on', '>=', today())
-            ->latest('starts_on')
-            ->first();
+        return $this->academicContext->currentSession($school);
     }
 
     private function requiredCurrentAcademicSession(Department $department): AcademicSession
@@ -5695,23 +6365,11 @@ class DashboardController extends Controller
             ->exists();
     }
 
-    private function activePaymentAccountForStaffSet(
+    private function currentPaymentAccountForStaff(
         StaffProfile $staffProfile,
         Department $department,
-        AcademicSession $entryAcademicSession,
     ): ?PaymentAccount {
-        return PaymentAccount::query()
-            ->where('department_id', $department->id)
-            ->where('staff_profile_id', $staffProfile->id)
-            ->where('status', PaymentAccount::StatusActive)
-            ->where(function ($query) use ($entryAcademicSession): void {
-                $query
-                    ->where('entry_academic_session_id', $entryAcademicSession->id)
-                    ->orWhereNull('entry_academic_session_id');
-            })
-            ->get()
-            ->sortByDesc(fn (PaymentAccount $paymentAccount): int => $paymentAccount->entry_academic_session_id === null ? 0 : 1)
-            ->first();
+        return PaymentAccount::currentFor($staffProfile, $department);
     }
 
     private function ensureStaffCanManageDue(StaffProfile $staffProfile, Department $department, Due $due): void
@@ -5720,25 +6378,14 @@ class DashboardController extends Controller
         abort_unless($this->staffCanManageStudentSet($staffProfile, $department, $due->entryAcademicSession), 404);
     }
 
-    private function publishDueAssignments(Due $due): void
-    {
-        $students = StudentProfile::query()
-            ->where('department_id', $due->department_id)
-            ->where('entry_academic_session_id', $due->entry_academic_session_id)
-            ->get(['id']);
-
-        foreach ($students as $studentProfile) {
-            StudentDueAssignment::query()->firstOrCreate(
-                [
-                    'due_id' => $due->id,
-                    'student_profile_id' => $studentProfile->id,
-                ],
-                [
-                    'amount_kobo' => $due->amount_kobo,
-                    'status' => StudentDueAssignment::StatusPending,
-                ],
-            );
-        }
+    private function ensureStaffCanManageDueAssignment(
+        StaffProfile $staffProfile,
+        Department $department,
+        Due $due,
+        StudentDueAssignment $assignment,
+    ): void {
+        $this->ensureStaffCanManageDue($staffProfile, $department, $due);
+        abort_unless((int) $assignment->due_id === (int) $due->id, 404);
     }
 
     private function userCanViewDuePayment(User $user, DuePayment $duePayment): bool
@@ -5769,27 +6416,6 @@ class DashboardController extends Controller
         }
 
         return false;
-    }
-
-    /**
-     * @return array<int, string>
-     */
-    private function duePaymentReceiptLines(DuePayment $duePayment): array
-    {
-        $due = $duePayment->assignment->due;
-        $studentProfile = $duePayment->studentProfile;
-
-        return [
-            'GradeManager Payment Receipt',
-            'Receipt Number: '.($duePayment->receipt_number ?? 'Pending'),
-            'Reference: '.$duePayment->reference,
-            'Student: '.($studentProfile->user?->name ?? 'Student'),
-            'Registration Number: '.$studentProfile->registration_number,
-            'Due: '.$due->title,
-            'Amount: '.$this->formatKoboAmount((int) $duePayment->amount_kobo),
-            'Paid At: '.$duePayment->paid_at?->toDayDateTimeString(),
-            'Gateway Response: '.($duePayment->gateway_response ?? 'Successful'),
-        ];
     }
 
     private function courseOfferingAcademicSession(Request $request, Department $department): AcademicSession
@@ -5851,7 +6477,7 @@ class DashboardController extends Controller
         AcademicYear $level,
         Semester $semester,
     ): CourseOffering {
-        $offering->loadMissing('course.prerequisites');
+        $offering->loadMissing(['course', 'prerequisiteCourses']);
         $academicYearSemester = $this->resolveAcademicYearSemester($level, $semester);
 
         abort_unless(
@@ -5872,7 +6498,7 @@ class DashboardController extends Controller
         AcademicYear $level,
         Semester $semester,
     ): CourseOffering {
-        $offering->loadMissing('course.prerequisites');
+        $offering->loadMissing(['course', 'prerequisiteCourses']);
         $academicYearSemester = $this->resolveAcademicYearSemester($level, $semester);
 
         abort_unless(
@@ -5892,7 +6518,7 @@ class DashboardController extends Controller
         AcademicYear $level,
         Semester $semester,
     ): CourseOffering {
-        $offering->loadMissing('course.prerequisites');
+        $offering->loadMissing(['course', 'prerequisiteCourses']);
         $academicSession = $this->currentAcademicSessionFor($department);
         $academicYearSemester = $this->resolveAcademicYearSemester($level, $semester);
 
@@ -5942,9 +6568,9 @@ class DashboardController extends Controller
     /**
      * @return array<int, array{id: int, code: string, title: string}>
      */
-    private function coursePrerequisitePayload(Course $course): array
+    private function coursePrerequisitePayload(CourseOffering $offering): array
     {
-        return $course->prerequisites
+        return $offering->prerequisiteCourses
             ->sortBy('code')
             ->map(fn (Course $prerequisite): array => [
                 'id' => (int) $prerequisite->id,
@@ -5967,369 +6593,6 @@ class DashboardController extends Controller
         ];
     }
 
-    /**
-     * @return array<int, array{id: string, name: string, level: string, session: string, isEditable: bool, totalUnits: int, courses: array<int, array{code: string, title: string, units: int, type: string, status: string}>}>
-     */
-    private function studentHistoricalCourseScheduleSemesters(
-        ?Department $department,
-        AcademicYear $currentLevel,
-        string $currentSession,
-    ): array {
-        $semesters = Semester::query()
-            ->whereIn('slug', ['harmattan', 'rain'])
-            ->orderByDesc('sort_order')
-            ->get()
-            ->values();
-
-        return AcademicYear::query()
-            ->where('id', '<', $currentLevel->id)
-            ->orderByDesc('id')
-            ->get()
-            ->flatMap(function (AcademicYear $level) use ($department, $semesters, $currentLevel, $currentSession): array {
-                return $semesters
-                    ->map(function (Semester $semester) use ($department, $level, $currentLevel, $currentSession): array {
-                        $courses = $this->studentScheduleCourses($department, $level, $semester, 'Passed');
-                        $courses = collect($courses)
-                            ->map(function (array $course) use ($level, $semester): array {
-                                $grade = $this->gradeForScore($this->scoreFor($level, $semester, $course['code']));
-
-                                return [
-                                    ...$course,
-                                    'status' => $grade === 'F' ? 'Failed' : 'Passed',
-                                ];
-                            })
-                            ->values()
-                            ->all();
-
-                        return [
-                            'id' => $level->slug.'-'.$semester->slug,
-                            'name' => $semester->name.' Semester',
-                            'level' => $level->name,
-                            'session' => $this->sessionForLevel($currentSession, (int) $currentLevel->id, (int) $level->id),
-                            'isEditable' => false,
-                            'totalUnits' => (int) collect($courses)->sum('units'),
-                            'courses' => $courses,
-                        ];
-                    })
-                    ->all();
-            })
-            ->values()
-            ->all();
-    }
-
-    /**
-     * @return array<int, array{code: string, title: string, units: int, type: string, status: string}>
-     */
-    private function studentScheduleCourses(?Department $department, AcademicYear $level, Semester $semester, string $status): array
-    {
-        return collect($this->studentResultCourses($department, $level, $semester))
-            ->map(fn (array $course): array => [
-                ...$course,
-                'type' => $this->courseType($course['code']),
-                'status' => $status,
-            ])
-            ->values()
-            ->all();
-    }
-
-    /**
-     * @param  array<int, array{code: string, title: string, units: int, type: string, status: string}>  $currentCourses
-     * @return array<int, array{code: string, title: string, units: int, type: string}>
-     */
-    private function studentCourseScheduleOptions(array $currentCourses, AcademicYear $currentLevel): array
-    {
-        return collect($currentCourses)
-            ->map(fn (array $course): array => [
-                'code' => $course['code'],
-                'title' => $course['title'],
-                'units' => $course['units'],
-                'type' => $course['type'],
-            ])
-            ->merge($this->extraCourseOptionsFor($currentLevel))
-            ->unique('code')
-            ->values()
-            ->all();
-    }
-
-    /**
-     * @return array<int, array{code: string, title: string, units: int, type: string}>
-     */
-    private function extraCourseOptionsFor(AcademicYear $level): array
-    {
-        return match ($level->slug) {
-            '300-level' => [
-                ['code' => 'GST 301', 'title' => 'Entrepreneurship Studies I', 'units' => 2, 'type' => 'General'],
-                ['code' => 'CPE 307', 'title' => 'Computer Hardware Laboratory', 'units' => 1, 'type' => 'Core'],
-                ['code' => 'CPE 204', 'title' => 'Signals and Systems', 'units' => 3, 'type' => 'Carryover'],
-            ],
-            '400-level' => [
-                ['code' => 'CPE 411', 'title' => 'Computer Engineering Design Studio', 'units' => 2, 'type' => 'Core'],
-                ['code' => 'CPE 304', 'title' => 'Database Systems', 'units' => 3, 'type' => 'Carryover'],
-            ],
-            '500-level' => [
-                ['code' => 'CPE 511', 'title' => 'Distributed Systems', 'units' => 2, 'type' => 'Elective'],
-                ['code' => 'CPE 403', 'title' => 'Computer Networks', 'units' => 3, 'type' => 'Carryover'],
-            ],
-            default => [
-                ['code' => 'GST 103', 'title' => 'Nigerian Peoples and Culture', 'units' => 2, 'type' => 'General'],
-            ],
-        };
-    }
-
-    private function courseType(string $courseCode): string
-    {
-        if (str_starts_with($courseCode, 'CPE')) {
-            return 'Departmental Course';
-        }
-
-        if (str_starts_with($courseCode, 'GST')) {
-            return 'Faculty Course';
-        }
-
-        return 'Faculty Course';
-    }
-
-    private function courseAdvisorNameForStudent(
-        StudentProfile $studentProfile,
-        ?Department $department = null,
-        string $fallback = 'Department Course Adviser',
-    ): string {
-        $department ??= $studentProfile->department;
-        $entryAcademicSession = $studentProfile->entryAcademicSession;
-
-        if ($department === null || $entryAcademicSession === null) {
-            return $fallback;
-        }
-
-        return $this->courseAdvisorNameForSet($department, $entryAcademicSession, $fallback);
-    }
-
-    private function courseAdvisorNameForSet(
-        ?Department $department,
-        ?AcademicSession $entryAcademicSession,
-        string $fallback = 'Department Course Adviser',
-    ): string {
-        if ($department === null || $entryAcademicSession === null) {
-            return $fallback;
-        }
-
-        $assignment = $department->studentSetAdvisorAssignments()
-            ->with('staffProfile.user')
-            ->where('entry_academic_session_id', $entryAcademicSession->id)
-            ->where('active_marker', 1)
-            ->first();
-
-        return $assignment?->staffProfile?->user?->name ?? $fallback;
-    }
-
-    private function sessionForLevel(string $currentSession, int $currentLevelId, int $levelId): string
-    {
-        $offset = $currentLevelId - $levelId;
-
-        if (preg_match('/^(?<start>\d{4})\/(?<end>\d{4})$/', $currentSession, $matches) !== 1) {
-            $startYear = 2025 - $offset;
-
-            return $startYear.'/'.($startYear + 1);
-        }
-
-        $startYear = (int) $matches['start'] - $offset;
-
-        return $startYear.'/'.($startYear + 1);
-    }
-
-    /**
-     * @return array{name: string, slug: string, gpa: string, totalUnits: int, courses: array<int, array{code: string, title: string, units: int, score: int, grade: string}>}
-     */
-    private function studentResultSemester(?Department $department, AcademicYear $level, Semester $semester): array
-    {
-        $courses = collect($this->studentResultCourses($department, $level, $semester))
-            ->map(function (array $course) use ($level, $semester): array {
-                $score = $this->scoreFor($level, $semester, $course['code']);
-
-                return [
-                    ...$course,
-                    'score' => $score,
-                    'grade' => $this->gradeForScore($score),
-                ];
-            })
-            ->values()
-            ->all();
-
-        return [
-            'name' => $semester->name,
-            'slug' => $semester->slug,
-            'gpa' => $this->gpaFor($courses),
-            'totalUnits' => (int) collect($courses)->sum('units'),
-            'courses' => $courses,
-        ];
-    }
-
-    /**
-     * @return array{name: string, slug: string, gpa: string, totalUnits: int, courses: array<int, array{code: string, title: string, units: int, score: int, grade: string}>}
-     */
-    private function studentResultSemesterForProfile(
-        ?Department $department,
-        AcademicYear $level,
-        Semester $semester,
-        ?StudentProfile $studentProfile,
-    ): array {
-        $semesterResult = $this->studentResultSemester($department, $level, $semester);
-
-        if (! $studentProfile instanceof StudentProfile) {
-            return $semesterResult;
-        }
-
-        $courses = collect($semesterResult['courses'])
-            ->map(function (array $course) use ($studentProfile, $level, $semester): array {
-                $score = $this->studentScoreFor($studentProfile, $level, $semester, $course['code'], $course['score']);
-
-                return [
-                    ...$course,
-                    'score' => $score,
-                    'grade' => $this->gradeForScore($score),
-                ];
-            })
-            ->values()
-            ->all();
-
-        return [
-            ...$semesterResult,
-            'gpa' => $this->gpaFor($courses),
-            'totalUnits' => (int) collect($courses)->sum('units'),
-            'courses' => $courses,
-        ];
-    }
-
-    /**
-     * @return array<int, array{code: string, title: string, units: int}>
-     */
-    private function studentResultCourses(?Department $department, AcademicYear $level, Semester $semester): array
-    {
-        if ($department === null) {
-            return $this->fallbackResultCourses($level, $semester);
-        }
-
-        $academicSession = $this->currentAcademicSessionFor($department);
-        $academicYearSemester = $this->resolveAcademicYearSemester($level, $semester);
-        $faculty = $department->faculty;
-
-        if ($academicSession === null) {
-            return $this->fallbackResultCourses($level, $semester);
-        }
-
-        $offerings = CourseOffering::query()
-            ->with('course')
-            ->where('academic_session_id', $academicSession->id)
-            ->where('academic_year_semester_id', $academicYearSemester->id)
-            ->where(function ($query) use ($department, $faculty): void {
-                $query->where(function ($query) use ($department): void {
-                    $query
-                        ->where('owner_type', Department::class)
-                        ->where('owner_id', $department->id);
-                });
-
-                if ($faculty !== null) {
-                    $query->orWhere(function ($query) use ($faculty): void {
-                        $query
-                            ->where('owner_type', Faculty::class)
-                            ->where('owner_id', $faculty->id);
-                    });
-                }
-            })
-            ->get()
-            ->sortBy(fn (CourseOffering $offering): string => $offering->course->code)
-            ->values();
-
-        if ($offerings->isEmpty()) {
-            return $this->fallbackResultCourses($level, $semester);
-        }
-
-        return $offerings
-            ->map(fn (CourseOffering $offering): array => [
-                'code' => $offering->course->code,
-                'title' => $offering->course->title,
-                'units' => (int) $offering->course->credit_units,
-            ])
-            ->all();
-    }
-
-    /**
-     * @return array<int, array{code: string, title: string, units: int}>
-     */
-    private function fallbackResultCourses(AcademicYear $level, Semester $semester): array
-    {
-        return collect(self::RESULT_COURSES[$level->slug][$semester->slug] ?? [])
-            ->map(fn (array $course): array => [
-                'code' => $course[0],
-                'title' => $course[1],
-                'units' => $course[2],
-            ])
-            ->all();
-    }
-
-    private function scoreFor(AcademicYear $level, Semester $semester, string $courseCode): int
-    {
-        return self::RESULT_SCORES[$level->slug][$semester->slug][$courseCode]
-            ?? 50 + (abs(crc32($level->slug.$semester->slug.$courseCode)) % 35);
-    }
-
-    private function studentScoreFor(
-        StudentProfile $studentProfile,
-        AcademicYear $level,
-        Semester $semester,
-        string $courseCode,
-        int $baseScore,
-    ): int {
-        $variance = (abs(crc32($studentProfile->registration_number.$level->slug.$semester->slug.$courseCode)) % 21) - 10;
-
-        return max(32, min(91, $baseScore + $variance));
-    }
-
-    private function gradeForScore(int $score): string
-    {
-        return match (true) {
-            $score >= 70 => 'A',
-            $score >= 60 => 'B',
-            $score >= 50 => 'C',
-            $score >= 45 => 'D',
-            $score >= 40 => 'E',
-            default => 'F',
-        };
-    }
-
-    private function gradePoint(string $grade): int
-    {
-        return match ($grade) {
-            'A' => 5,
-            'B' => 4,
-            'C' => 3,
-            'D' => 2,
-            'E' => 1,
-            default => 0,
-        };
-    }
-
-    /**
-     * @param  array<int, array{units: int, grade: string}>  $courses
-     */
-    private function gpaFor(array $courses): string
-    {
-        $totalUnits = (int) collect($courses)->sum('units');
-
-        if ($totalUnits === 0) {
-            return '0.00';
-        }
-
-        $weightedPoints = collect($courses)->sum(
-            fn (array $course): int => $course['units'] * $this->gradePoint($course['grade']),
-        );
-
-        return number_format($weightedPoints / $totalUnits, 2);
-    }
-
-    /**
-     * @return array<int, array{title: string, context: string, amount: string, dueDate: string}>
-     */
     private function studentPendingDues(StudentProfile $studentProfile): array
     {
         return StudentDueAssignment::query()
@@ -6501,11 +6764,20 @@ class DashboardController extends Controller
 
     private function resultSheetDetailPayload(ResultSheet $sheet, string $role, string $mode): array
     {
+        $sourceRevision = $sheet->revisions()
+            ->whereNotNull('source_file_path')
+            ->latest('revision_number')
+            ->first();
+
         return [
             'sheet' => $this->resultSheetPayload($sheet),
             'mode' => $mode,
             'canReview' => $role === 'hod' && $mode === 'review' && $sheet->status === ResultSheet::StatusSubmitted,
             'canEdit' => $role === 'staff' && $sheet->canBeEditedByAdvisor(),
+            'revisionNumber' => (int) $sheet->current_revision_number,
+            'sourceFileUrl' => $sourceRevision === null
+                ? null
+                : route('dashboard.results.source-file', ['resultSheet' => $sheet]),
             'returnSection' => $role === 'hod'
                 ? ($mode === 'review' ? 'result-approvals' : 'student-results')
                 : 'result-management',
@@ -6655,7 +6927,9 @@ class DashboardController extends Controller
      *         pendingCarryovers: array<int, string>,
      *         levelGpas: array<int, array{level: string, gpa: string}>,
      *         cgpa: string,
-     *         profileUrl: string
+     *         profileUrl: string,
+     *         accountStatus: string,
+     *         accessCode: string|null
      *     }>
      * }|null
      */
@@ -6687,49 +6961,116 @@ class DashboardController extends Controller
                 ->values()
                 ->all(),
             'totalStudents' => $students->count(),
-            'students' => $students
-                ->map(fn (StudentProfile $studentProfile): array => $this->staffStudentPayload($studentProfile, $department))
-                ->values()
-                ->all(),
+            'students' => $this->staffStudentPayloads($students, $department)->all(),
         ];
     }
 
     /**
+     * @param  Collection<int, StudentProfile>  $studentProfiles
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function staffStudentPayloads(Collection $studentProfiles, Department $department): Collection
+    {
+        $performance = $this->academicPerformance->tableSummariesFor(
+            $studentProfiles,
+            (int) $department->minimum_years_to_degree,
+        );
+
+        return $studentProfiles
+            ->map(fn (StudentProfile $studentProfile): array => $this->staffStudentPayload(
+                $studentProfile,
+                $department,
+                $performance->get($studentProfile->id),
+            ))
+            ->values();
+    }
+
+    /**
+     * @param  Collection<int, StudentProfile>  $studentProfiles
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function facultyHeadStudentPayloads(Collection $studentProfiles): Collection
+    {
+        $payloadsByStudentId = $studentProfiles
+            ->groupBy('department_id')
+            ->reduce(function (Collection $payloads, Collection $profiles): Collection {
+                $firstProfile = $profiles->first();
+                $department = $firstProfile instanceof StudentProfile
+                    ? $firstProfile->department
+                    : null;
+
+                if (! $department instanceof Department) {
+                    return $payloads;
+                }
+
+                return $payloads->union(
+                    $this->staffStudentPayloads($profiles, $department)->keyBy('id'),
+                );
+            }, collect());
+
+        return $studentProfiles
+            ->map(function (StudentProfile $studentProfile) use ($payloadsByStudentId): array {
+                $payload = $payloadsByStudentId->get($studentProfile->id);
+
+                if (! is_array($payload)) {
+                    $payload = $this->staffStudentPayload($studentProfile, $studentProfile->department);
+                }
+
+                return [
+                    ...$payload,
+                    'department' => $this->departmentPayload($studentProfile->department),
+                ];
+            })
+            ->values();
+    }
+
+    /**
+     * @param  array{cgpa: string|null, levelGpas: array<int, array{level: AcademicYear, gpa: string|null}>, pendingCarryovers: array<int, string>}|null  $performance
      * @return array{
      *     id: int,
      *     fullName: string,
-     *     email: string,
+     *     email: string|null,
      *     registrationNumber: string,
      *     avatar: string|null,
      *     currentLevel: array{id: int, title: string, slug: string}|null,
      *     entrySession: array{id: int, name: string, startsOn: string, endsOn: string, status: string}|null,
      *     advisorName: string,
      *     pendingCarryovers: array<int, string>,
-     *     levelGpas: array<int, array{level: string, gpa: string}>,
-     *     cgpa: string,
-     *     profileUrl: string
+     *     levelGpas: array<int, array{level: string, gpa: string|null}>,
+     *     cgpa: string|null,
+     *     profileUrl: string,
+     *     accountStatus: string,
+     *     accessCode: string|null
      * }
      */
-    private function staffStudentPayload(StudentProfile $studentProfile, Department $department): array
-    {
-        $currentLevel = $studentProfile->currentLevel;
-        $levels = $currentLevel === null
-            ? collect()
-            : AcademicYear::query()
-                ->where('id', '<=', $currentLevel->id)
-                ->orderBy('id')
-                ->get();
-        $levelResults = $levels
-            ->map(fn (AcademicYear $level): array => [
-                'level' => $this->shortLevelName($level),
-                'courses' => $this->studentLevelResultCourses($department, $level, $studentProfile),
-            ])
-            ->values()
-            ->all();
-        $levelGpas = collect($levelResults)
-            ->map(fn (array $levelResult): array => [
-                'level' => $levelResult['level'],
-                'gpa' => $this->gpaFor($levelResult['courses']),
+    private function staffStudentPayload(
+        StudentProfile $studentProfile,
+        Department $department,
+        ?array $performance = null,
+    ): array {
+        $studentProfile->loadMissing(['currentLevel', 'entryAcademicSession', 'user']);
+        $currentLevel = $this->academicContext->academicYearForStudent($studentProfile);
+        $performance ??= [
+            'cgpa' => $this->academicPerformance->summary($studentProfile)['cgpa'],
+            'levelGpas' => $this->academicPerformance
+                ->gpaByAcademicYear(
+                    $studentProfile,
+                    $currentLevel?->year_number ?? (int) $department->minimum_years_to_degree,
+                )
+                ->map(fn (array $row): array => [
+                    'level' => $row['level'],
+                    'gpa' => $row['gpa'],
+                ])
+                ->all(),
+            'pendingCarryovers' => collect($this->studentCarryovers($studentProfile))
+                ->pluck('code')
+                ->values()
+                ->all(),
+        ];
+        $levelGpas = collect($performance['levelGpas'])
+            ->map(fn (array $row): array => [
+                'level' => $this->shortLevelName($row['level']),
+                'gpa' => $row['gpa'],
             ])
             ->all();
 
@@ -6744,37 +7085,22 @@ class DashboardController extends Controller
                 ? null
                 : $this->academicSessionPayload($studentProfile->entryAcademicSession),
             'advisorName' => $this->courseAdvisorNameForStudent($studentProfile, $department, 'Not assigned'),
-            'pendingCarryovers' => collect($this->studentResits($currentLevel))
-                ->pluck('code')
-                ->values()
-                ->all(),
+            'pendingCarryovers' => $performance['pendingCarryovers'],
             'levelGpas' => $levelGpas,
-            'cgpa' => $this->gpaFor(
-                collect($levelResults)
-                    ->flatMap(fn (array $levelResult): array => $levelResult['courses'])
-                    ->values()
-                    ->all(),
-            ),
+            'cgpa' => $performance['cgpa'],
             'profileUrl' => route('dashboard.students.show', [
                 'registrationNumber' => $studentProfile->registration_number,
             ]),
+            'accountStatus' => match (true) {
+                $studentProfile->user->disabled_at !== null => 'Disabled',
+                $studentProfile->user->activated_at === null => 'Pending activation',
+                default => 'Active',
+            },
+            'accessCode' => $studentProfile->user->activated_at === null
+                && $studentProfile->user->access_code_used_at === null
+                    ? $studentProfile->user->access_code
+                    : null,
         ];
-    }
-
-    /**
-     * @return array<int, array{code: string, title: string, units: int, score: int, grade: string}>
-     */
-    private function studentLevelResultCourses(Department $department, AcademicYear $level, ?StudentProfile $studentProfile = null): array
-    {
-        $semesters = Semester::query()
-            ->whereIn('slug', ['harmattan', 'rain'])
-            ->orderBy('sort_order')
-            ->get();
-
-        return $semesters
-            ->flatMap(fn (Semester $semester): array => $this->studentResultSemesterForProfile($department, $level, $semester, $studentProfile)['courses'])
-            ->values()
-            ->all();
     }
 
     private function shortLevelName(AcademicYear $level): string
@@ -6786,7 +7112,7 @@ class DashboardController extends Controller
         return str_replace(' Level', 'L', $level->name);
     }
 
-    private function hodPayload(Request $request, User $user, string $role): ?array
+    private function hodPayload(Request $request, User $user, string $role, string $section): ?array
     {
         if ($role !== 'hod') {
             return null;
@@ -6800,40 +7126,67 @@ class DashboardController extends Controller
         }
 
         $department->loadMissing('faculty');
-        $levels = $department->visibleAcademicYears();
-        $academicSessions = $this->academicSessionsForDepartment($department);
-        $selectedAcademicSession = $this->selectedDepartmentAcademicSession($request, $department, $academicSessions);
-        $selectedLevel = $this->selectedHodAcademicYear($request, $levels);
-        $students = $department->studentProfiles()
-            ->with(['currentLevel', 'entryAcademicSession', 'user'])
-            ->get()
-            ->sortBy(fn (StudentProfile $studentProfile): string => sprintf(
-                '%02d-%s',
-                $studentProfile->current_academic_year_id,
-                $studentProfile->user->name,
-            ))
-            ->values();
-        $staff = StaffProfile::query()
-            ->with([
-                'user',
-                'studentSetAdvisorAssignments.entryAcademicSession',
-                'headedDepartment',
-                'headedFaculty',
-            ])
-            ->where('department_id', $department->id)
-            ->whereHas('user', fn ($query) => $query
-                ->where('school_id', $department->faculty?->school_id)
-                ->where('account_type', AccountType::Staff))
-            ->get()
-            ->sortBy(fn (StaffProfile $profile): string => $profile->user?->name ?? '')
-            ->values();
-        $setAdvisors = $this->hodSetAdvisorPayload($department, $students);
-        $resultSubmissions = $this->hodResultSubmissionPayload($department, $levels);
-        $departmentResultSheets = ResultSheet::query()
-            ->with($this->resultSheetPayloadRelations())
-            ->where('department_id', $department->id)
-            ->latest('updated_at')
-            ->get();
+        $needsLevels = in_array($section, ['home', 'courses'], true);
+        $needsStudentRecords = in_array($section, ['home', 'students'], true);
+        $needsSetAdvisors = in_array($section, ['home', 'students', 'student-results', 'result-approvals'], true);
+        $needsStaff = in_array($section, ['home', 'staff'], true);
+        $needsResults = in_array($section, ['student-results', 'result-approvals'], true);
+        $levels = $needsLevels ? $department->visibleAcademicYears() : new EloquentCollection;
+        $academicSessions = $section === 'courses'
+            ? $this->academicSessionsForDepartment($department)
+            : new EloquentCollection;
+        $selectedAcademicSession = $section === 'courses'
+            ? $this->selectedDepartmentAcademicSession($request, $department, $academicSessions)
+            : null;
+        $selectedLevel = $section === 'courses'
+            ? $this->selectedHodAcademicYear($request, $levels)
+            : null;
+        $students = ($needsStudentRecords || $needsSetAdvisors)
+            ? $department->studentProfiles()
+                ->with($needsStudentRecords
+                    ? ['currentLevel', 'entryAcademicSession', 'user']
+                    : ['entryAcademicSession'])
+                ->get()
+                ->when(
+                    $needsStudentRecords,
+                    fn (EloquentCollection $profiles): EloquentCollection => $profiles
+                        ->sortBy(fn (StudentProfile $studentProfile): string => sprintf(
+                            '%02d-%s',
+                            $studentProfile->current_academic_year_id,
+                            $studentProfile->user->name,
+                        ))
+                        ->values(),
+                )
+            : new EloquentCollection;
+        $staff = $needsStaff
+            ? StaffProfile::query()
+                ->with([
+                    'user',
+                    'studentSetAdvisorAssignments.entryAcademicSession',
+                    'headedDepartment',
+                    'headedFaculty',
+                ])
+                ->where('department_id', $department->id)
+                ->whereHas('user', fn ($query) => $query
+                    ->where('school_id', $department->faculty?->school_id)
+                    ->where('account_type', AccountType::Staff))
+                ->get()
+                ->sortBy(fn (StaffProfile $profile): string => $profile->user?->name ?? '')
+                ->values()
+            : new EloquentCollection;
+        $setAdvisors = $needsSetAdvisors
+            ? $this->hodSetAdvisorPayload($department, $students)
+            : [];
+        $departmentResultSheets = $needsResults
+            ? ResultSheet::query()
+                ->with($this->resultSheetPayloadRelations())
+                ->where('department_id', $department->id)
+                ->latest('updated_at')
+                ->get()
+            : new EloquentCollection;
+        $studentPayloads = $needsStudentRecords
+            ? $this->staffStudentPayloads($students, $department)
+            : collect();
 
         return [
             'department' => [
@@ -6843,40 +7196,38 @@ class DashboardController extends Controller
             ],
             'faculty' => $department->faculty?->only(['name', 'abbreviation']),
             'metrics' => [
-                'students' => $students->count(),
+                'students' => $section === 'home' ? $students->count() : 0,
                 'activeStaff' => $staff->filter(fn (StaffProfile $profile): bool => $profile->user?->activated_at !== null)->count(),
                 'pendingSignups' => $staff->filter(fn (StaffProfile $profile): bool => $profile->user?->activated_at === null)->count(),
-                'setsWithoutAdvisors' => collect($setAdvisors)->whereNull('advisor')->count(),
-                'resultsAwaitingReview' => $departmentResultSheets
-                    ->where('status', ResultSheet::StatusSubmitted)
-                    ->count(),
-                'missingResults' => collect($resultSubmissions)->where('status', 'Missing')->count(),
-                'studentsWithCarryovers' => $students
-                    ->filter(fn (StudentProfile $studentProfile): bool => $studentProfile->currentLevel !== null
-                        && $this->studentResits($studentProfile->currentLevel) !== [])
-                    ->count(),
+                'setsWithoutAdvisors' => $section === 'home'
+                    ? collect($setAdvisors)->whereNull('advisor')->count()
+                    : 0,
+                'studentsWithCarryovers' => $section === 'home' ? $studentPayloads
+                    ->filter(fn (array $student): bool => $student['pendingCarryovers'] !== [])
+                    ->count() : 0,
             ],
             'staff' => $staff
                 ->map(fn (StaffProfile $profile): array => $this->hodStaffPayload($profile, $department))
                 ->values()
                 ->all(),
-            'students' => $students
-                ->map(fn (StudentProfile $studentProfile): array => $this->staffStudentPayload($studentProfile, $department))
-                ->values()
-                ->all(),
+            'students' => $needsStudentRecords
+                ? $studentPayloads->all()
+                : [],
             'levels' => $levels
                 ->map(fn (AcademicYear $level): array => $this->levelPayload($level))
                 ->values()
                 ->all(),
             'setAdvisors' => $setAdvisors,
-            'resultSubmissions' => $resultSubmissions,
-            'carryoverSummaries' => $this->staffCarryoverSummaries($students),
             'academicSessions' => $academicSessions
                 ->map(fn (AcademicSession $academicSession): array => $this->academicSessionPayload($academicSession))
                 ->values()
                 ->all(),
-            'courseOfferings' => $this->hodCourseOfferingsPayload($department, $selectedAcademicSession, $selectedLevel),
-            'studentResults' => $this->hodStudentResultsPayload($department, $students, $resultSubmissions, $departmentResultSheets),
+            'courseOfferings' => $section === 'courses'
+                ? $this->hodCourseOfferingsPayload($department, $selectedAcademicSession, $selectedLevel)
+                : ['academicSession' => null, 'level' => null, 'semesters' => []],
+            'studentResults' => $needsResults
+                ? $this->hodStudentResultsPayload($departmentResultSheets)
+                : ['resultSheets' => [], 'approvalSheets' => []],
             'settings' => [
                 'hod' => [
                     'name' => $user->name,
@@ -7021,7 +7372,7 @@ class DashboardController extends Controller
 
                 return $this->studentSetLevelLabel(
                     $department,
-                    $this->academicYearForEntrySession($department, $assignment->entryAcademicSession),
+                    $assignment->entryAcademicSession,
                 );
             })
             ->unique()
@@ -7038,14 +7389,16 @@ class DashboardController extends Controller
         return $levels->first().' +'.($levels->count() - 1);
     }
 
-    private function studentSetLevelLabel(Department $department, ?AcademicYear $level): string
+    private function studentSetLevelLabel(Department $department, AcademicSession $entryAcademicSession): string
     {
-        if (! $level instanceof AcademicYear) {
-            return 'Level not set';
+        $level = $this->academicYearForEntrySession($department, $entryAcademicSession);
+
+        if ($this->academicContext->setHasGraduated($department, $entryAcademicSession)) {
+            return 'Graduated';
         }
 
-        if ((int) $level->id > (int) $department->minimum_years_to_degree) {
-            return 'Graduated';
+        if (! $level instanceof AcademicYear) {
+            return 'Level not set';
         }
 
         return $this->shortLevelName($level);
@@ -7135,14 +7488,14 @@ class DashboardController extends Controller
 
         $currentLevel = $this->academicYearForEntrySession($department, $entryAcademicSession);
 
-        if (! $currentLevel instanceof AcademicYear || (int) $currentLevel->id > (int) $department->minimum_years_to_degree) {
+        if (! $currentLevel instanceof AcademicYear) {
             return $visibleLevels;
         }
 
         return AcademicYear::query()
             ->whereIn('id', $visibleLevels->pluck('id'))
-            ->where('id', '<=', $currentLevel->id)
-            ->orderBy('id')
+            ->where('year_number', '<=', $currentLevel->year_number)
+            ->orderBy('year_number')
             ->get();
     }
 
@@ -7181,43 +7534,9 @@ class DashboardController extends Controller
         ?AcademicSession $entryAcademicSession,
         ?AcademicYear $level,
     ): ?AcademicSession {
-        if (! $entryAcademicSession instanceof AcademicSession || ! $level instanceof AcademicYear) {
-            return $this->currentAcademicSessionFor($department)
-                ?? $this->academicSessionsForDepartment($department)->first();
-        }
-
-        $department->loadMissing('faculty.school');
-        $school = $department->faculty?->school;
-
-        if ($school === null) {
-            return $this->currentAcademicSessionFor($department);
-        }
-
-        $sessions = $school->academicSessions()
-            ->oldest('starts_on')
-            ->get()
-            ->values();
-
-        if ($sessions->isEmpty()) {
-            return null;
-        }
-
-        $entryIndex = $sessions->search(fn (AcademicSession $academicSession): bool => (int) $academicSession->id === (int) $entryAcademicSession->id);
-
-        if ($entryIndex === false) {
-            return $this->currentAcademicSessionFor($department)
-                ?? $sessions->last();
-        }
-
-        $targetIndex = (int) $entryIndex + max((int) $level->id - 1, 0);
-        $academicSession = $sessions->get($targetIndex);
-
-        if ($academicSession instanceof AcademicSession) {
-            return $academicSession;
-        }
-
-        return $this->currentAcademicSessionFor($department)
-            ?? $sessions->last();
+        return $entryAcademicSession instanceof AcademicSession && $level instanceof AcademicYear
+            ? $this->academicContext->sessionForSetYear($department, $entryAcademicSession, $level)
+            : null;
     }
 
     private function hodCourseOfferingsPayload(
@@ -7249,16 +7568,16 @@ class DashboardController extends Controller
         Semester $semester,
     ): array {
         $offerings = $this->courseOfferingsForDepartment($department, $level, $semester, $academicSession);
-        $courseTypeCounts = $this->courseTypeCounts($department, $offerings);
+        $courseCategoryCounts = $this->courseCategoryCounts($offerings);
 
         return [
             'id' => $level->slug.'-'.$semester->slug,
             'name' => $semester->name,
             'slug' => $semester->slug,
             'totalUnits' => (int) $offerings->sum(fn (CourseOffering $offering): int => (int) $offering->course->credit_units),
-            'facultyCourseCount' => $courseTypeCounts['Faculty Course'],
-            'departmentalCourseCount' => $courseTypeCounts['Departmental Course'],
-            'electiveCourseCount' => $courseTypeCounts['Elective Course'],
+            'facultyCourseCount' => $courseCategoryCounts['Faculty Course'],
+            'departmentalCourseCount' => $courseCategoryCounts['Departmental Course'],
+            'electiveCourseCount' => $courseCategoryCounts['Elective Course'],
             'offerings' => $offerings
                 ->map(fn (CourseOffering $offering): array => $this->staffCourseOfferingPayload($department, $offering))
                 ->values()
@@ -7267,40 +7586,11 @@ class DashboardController extends Controller
     }
 
     /**
-     * @param  Collection<int, StudentProfile>  $students
-     * @param  array<int, array{id: string, level: string, semester: string, course: string, status: string, submittedAt: string}>  $resultSubmissions
      * @param  EloquentCollection<int, ResultSheet>  $resultSheets
      */
-    private function hodStudentResultsPayload(
-        Department $department,
-        Collection $students,
-        array $resultSubmissions,
-        EloquentCollection $resultSheets,
-    ): array {
-        $studentsWithCgpa = $students
-            ->map(fn (StudentProfile $studentProfile): array => $this->staffStudentPayload($studentProfile, $department))
-            ->values();
-        $averageCgpa = $studentsWithCgpa->isEmpty()
-            ? '0.00'
-            : number_format($studentsWithCgpa->average(fn (array $student): float => (float) $student['cgpa']), 2);
-
+    private function hodStudentResultsPayload(EloquentCollection $resultSheets): array
+    {
         return [
-            'averageCgpa' => $averageCgpa,
-            'studentsCount' => $studentsWithCgpa->count(),
-            'carryoverStudents' => $studentsWithCgpa
-                ->filter(fn (array $student): bool => $student['pendingCarryovers'] !== [])
-                ->count(),
-            'pendingSubmissions' => $resultSheets
-                ->where('status', ResultSheet::StatusSubmitted)
-                ->count(),
-            'sets' => $students
-                ->pluck('entryAcademicSession')
-                ->filter()
-                ->unique('id')
-                ->sortByDesc('starts_on')
-                ->map(fn (AcademicSession $academicSession): array => $this->academicSessionPayload($academicSession))
-                ->values()
-                ->all(),
             'resultSheets' => $resultSheets
                 ->where('status', ResultSheet::StatusApproved)
                 ->map(fn (ResultSheet $sheet): array => $this->resultSheetPayload($sheet))
@@ -7357,42 +7647,6 @@ class DashboardController extends Controller
     }
 
     /**
-     * @param  EloquentCollection<int, AcademicYear>  $levels
-     * @return array<int, array{id: string, level: string, semester: string, course: string, status: string, submittedAt: string}>
-     */
-    private function hodResultSubmissionPayload(Department $department, EloquentCollection $levels): array
-    {
-        $semesters = Semester::query()
-            ->whereIn('slug', ['harmattan', 'rain'])
-            ->orderBy('sort_order')
-            ->get();
-        $statusCycle = ['Awaiting review', 'Approved', 'Missing', 'Approved'];
-        $rows = [];
-        $index = 0;
-
-        foreach ($levels as $level) {
-            foreach ($semesters as $semester) {
-                foreach ($this->courseOfferingsForDepartment($department, $level, $semester)->take(2) as $offering) {
-                    $status = $statusCycle[$index % count($statusCycle)];
-
-                    $rows[] = [
-                        'id' => $level->slug.'-'.$semester->slug.'-'.$offering->id,
-                        'level' => $level->name,
-                        'semester' => $semester->name,
-                        'course' => $offering->course->code.' '.$offering->course->title,
-                        'status' => $status,
-                        'submittedAt' => $status === 'Missing' ? '-' : now()->subDays($index + 1)->format('M j, Y'),
-                    ];
-
-                    $index++;
-                }
-            }
-        }
-
-        return array_slice($rows, 0, 8);
-    }
-
-    /**
      * @return array{
      *     assignedSets: array<int, array{entrySession: array{id: int, name: string, startsOn: string, endsOn: string, status: string}, currentLevel: array{id: int, title: string, slug: string}|null, advisorName: string|null}>,
      *     totalStudents: int,
@@ -7418,6 +7672,7 @@ class DashboardController extends Controller
 
         $assignedSets = $this->assignedEntrySessionsForStaff($staffProfile, $department);
         $students = $this->assignedStudentsForStaff($staffProfile, $department);
+        $studentPayloads = $this->staffStudentPayloads($students, $department);
         $carryoverSummaries = $this->staffCarryoverSummaries($students);
 
         return [
@@ -7429,15 +7684,11 @@ class DashboardController extends Controller
                 ->map(fn (AcademicYear $level): array => $this->levelPayload($level))
                 ->values()
                 ->all(),
-            'students' => $students
-                ->map(fn (StudentProfile $studentProfile): array => $this->staffStudentPayload($studentProfile, $department))
-                ->values()
-                ->all(),
+            'students' => $studentPayloads->all(),
             'totalStudents' => $students->count(),
             'maximumCourseUnits' => 24,
-            'studentsWithCarryovers' => $students
-                ->filter(fn ($studentProfile): bool => $studentProfile->currentLevel !== null
-                    && $this->studentResits($studentProfile->currentLevel) !== [])
+            'studentsWithCarryovers' => $studentPayloads
+                ->filter(fn (array $student): bool => $student['pendingCarryovers'] !== [])
                 ->count(),
             'pendingDuesByStudent' => $this->staffPendingDuesByStudent($students),
             'recentPayments' => $this->staffRecentPayments($students),
@@ -7522,12 +7773,12 @@ class DashboardController extends Controller
 
         return AcademicYear::query()
             ->whereIn('id', $levelIds)
-            ->orderBy('id')
+            ->orderBy('year_number')
             ->get();
     }
 
     /**
-     * @return array{entrySession: array{id: int, name: string, startsOn: string, endsOn: string, status: string}, currentLevel: array{id: int, title: string, slug: string}|null, advisorName: string|null, minimumYearsToDegree: int}
+     * @return array{entrySession: array{id: int, name: string, startsOn: string, endsOn: string, status: string}, currentLevel: array{id: int, title: string, slug: string}|null, advisorName: string|null, minimumYearsToDegree: int, isGraduated: bool}
      */
     private function studentSetContextPayload(Department $department, AcademicSession $entryAcademicSession): array
     {
@@ -7538,33 +7789,46 @@ class DashboardController extends Controller
             'currentLevel' => $currentLevel === null ? null : $this->levelPayload($currentLevel),
             'advisorName' => $this->courseAdvisorNameForSet($department, $entryAcademicSession, 'Not assigned'),
             'minimumYearsToDegree' => (int) $department->minimum_years_to_degree,
+            'isGraduated' => $this->academicContext->setHasGraduated($department, $entryAcademicSession),
         ];
+    }
+
+    private function courseAdvisorNameForStudent(
+        StudentProfile $studentProfile,
+        ?Department $department = null,
+        string $fallback = 'Department Course Adviser',
+    ): string {
+        $department ??= $studentProfile->department;
+        $entryAcademicSession = $studentProfile->entryAcademicSession;
+
+        if ($department === null || $entryAcademicSession === null) {
+            return $fallback;
+        }
+
+        return $this->courseAdvisorNameForSet($department, $entryAcademicSession, $fallback);
+    }
+
+    private function courseAdvisorNameForSet(
+        ?Department $department,
+        ?AcademicSession $entryAcademicSession,
+        string $fallback = 'Department Course Adviser',
+    ): string {
+        if ($department === null || $entryAcademicSession === null) {
+            return $fallback;
+        }
+
+        $assignment = $department->studentSetAdvisorAssignments()
+            ->with('staffProfile.user')
+            ->where('entry_academic_session_id', $entryAcademicSession->id)
+            ->where('active_marker', 1)
+            ->first();
+
+        return $assignment?->staffProfile?->user?->name ?? $fallback;
     }
 
     private function academicYearForEntrySession(Department $department, AcademicSession $entryAcademicSession): ?AcademicYear
     {
-        $currentAcademicSession = $this->currentAcademicSessionFor($department);
-
-        if ($currentAcademicSession === null) {
-            return null;
-        }
-
-        $sessions = $department->faculty?->school?->academicSessions()
-            ->oldest('starts_on')
-            ->get();
-
-        if ($sessions === null || $sessions->isEmpty()) {
-            return null;
-        }
-
-        $entryIndex = $sessions->search(fn (AcademicSession $academicSession): bool => (int) $academicSession->id === (int) $entryAcademicSession->id);
-        $currentIndex = $sessions->search(fn (AcademicSession $academicSession): bool => (int) $academicSession->id === (int) $currentAcademicSession->id);
-
-        if ($entryIndex === false || $currentIndex === false || $currentIndex < $entryIndex) {
-            return null;
-        }
-
-        return AcademicYear::query()->find((int) $currentIndex - (int) $entryIndex + 1);
+        return $this->academicContext->academicYearForSet($department, $entryAcademicSession);
     }
 
     /**
@@ -7670,7 +7934,7 @@ class DashboardController extends Controller
         $summaries = [];
 
         foreach ($students as $studentProfile) {
-            foreach ($this->studentResits($studentProfile->currentLevel) as $resit) {
+            foreach ($this->studentCarryovers($studentProfile) as $resit) {
                 $code = $resit['code'];
 
                 $summaries[$code] ??= [
@@ -7692,39 +7956,24 @@ class DashboardController extends Controller
     /**
      * @return array<int, array{code: string, title: string, units: int, originalSemester: string, resitWindow: string, status: string}>
      */
-    private function studentResits(?AcademicYear $level): array
+    private function studentCarryovers(StudentProfile $studentProfile): array
     {
-        if ($level === null || (int) $level->id <= 1) {
-            return [];
-        }
-
-        $resits = [
-            [
-                'code' => 'MTH 201',
-                'title' => 'Engineering Mathematics III',
-                'units' => 3,
-                'originalSemester' => '200 Level, Harmattan',
-                'resitWindow' => 'Rain 2025/2026',
-                'status' => 'Adviser review',
-            ],
-        ];
-
-        if ((int) $level->id >= 4) {
-            $resits[] = [
-                'code' => 'CPE 302',
-                'title' => 'Electronic Circuit Design',
-                'units' => 3,
-                'originalSemester' => '300 Level, Rain',
-                'resitWindow' => 'Harmattan 2026/2027',
-                'status' => 'Due next session',
-            ];
-        }
-
-        return $resits;
+        return $this->academicPerformance
+            ->carryovers($studentProfile)
+            ->map(fn (array $carryover): array => [
+                'code' => $carryover['code'],
+                'title' => $carryover['title'],
+                'units' => $carryover['units'],
+                'originalSemester' => $carryover['originalSemester'],
+                'resitWindow' => 'Available when this course is offered again',
+                'status' => 'Pending',
+            ])
+            ->values()
+            ->all();
     }
 
     /**
-     * @return array{id: int, title: string, slug: string}
+     * @return array{id: int, title: string, slug: string, yearNumber: int}
      */
     private function levelPayload(AcademicYear $level): array
     {
@@ -7732,6 +7981,7 @@ class DashboardController extends Controller
             'id' => $level->id,
             'title' => $level->name,
             'slug' => $level->slug,
+            'yearNumber' => (int) $level->year_number,
         ];
     }
 }

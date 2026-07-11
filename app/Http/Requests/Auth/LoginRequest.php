@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\AccountStatus;
 use App\Models\School;
 use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -63,7 +64,11 @@ class LoginRequest extends FormRequest
             return;
         }
 
-        if ($user->activated_at === null) {
+        if (
+            $user->activated_at === null
+            || $user->disabled_at !== null
+            || $user->status !== AccountStatus::Active
+        ) {
             Auth::guard('web')->logout();
 
             $this->throwFailedAuthenticationException();

@@ -11,13 +11,14 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Stores Paystack subaccounts that receive student due payments for staff advisers.
+        // Stores the one current Paystack payout account used for all dues managed by each staff adviser.
         Schema::create('payment_accounts', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('school_id')->constrained()->cascadeOnDelete();
             $table->foreignId('department_id')->constrained()->cascadeOnDelete();
             $table->foreignId('staff_profile_id')->constrained()->cascadeOnDelete();
             $table->foreignId('entry_academic_session_id')->nullable()->constrained('academic_sessions')->nullOnDelete();
+            $table->string('scope_key');
             $table->string('provider')->default('paystack');
             $table->string('label');
             $table->string('business_name');
@@ -28,6 +29,7 @@ return new class extends Migration
             $table->string('account_name');
             $table->string('paystack_subaccount_code')->nullable()->unique();
             $table->string('status')->default('draft');
+            $table->unsignedTinyInteger('active_marker')->nullable();
             $table->timestamp('verified_at')->nullable();
             $table->timestamp('activated_at')->nullable();
             $table->timestamp('disabled_at')->nullable();
@@ -36,6 +38,7 @@ return new class extends Migration
 
             $table->index(['staff_profile_id', 'status']);
             $table->index(['department_id', 'entry_academic_session_id', 'status'], 'payment_accounts_department_set_status_index');
+            $table->unique('staff_profile_id');
         });
 
         // Stores dues created by course advisers for a student set in a department.
@@ -54,6 +57,7 @@ return new class extends Migration
             $table->date('due_on')->nullable();
             $table->string('status')->default('draft');
             $table->timestamp('published_at')->nullable();
+            $table->timestamp('archived_at')->nullable();
             $table->timestamps();
 
             $table->index(['department_id', 'entry_academic_session_id', 'status']);
@@ -68,6 +72,9 @@ return new class extends Migration
             $table->unsignedInteger('amount_kobo');
             $table->string('status')->default('pending');
             $table->timestamp('paid_at')->nullable();
+            $table->timestamp('waived_at')->nullable();
+            $table->foreignId('waived_by_user_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->string('waiver_reason')->nullable();
             $table->unsignedBigInteger('latest_due_payment_id')->nullable();
             $table->timestamps();
 
@@ -86,21 +93,32 @@ return new class extends Migration
             $table->string('provider')->default('paystack');
             $table->string('reference')->unique();
             $table->string('status')->default('initialized');
+            $table->unsignedTinyInteger('active_marker')->nullable();
             $table->unsignedInteger('amount_kobo');
             $table->string('currency', 3)->default('NGN');
             $table->text('authorization_url')->nullable();
             $table->string('access_code')->nullable();
-            $table->string('paystack_transaction_id')->nullable();
+            $table->string('paystack_transaction_id')->nullable()->unique();
             $table->string('channel')->nullable();
             $table->unsignedInteger('fees_kobo')->nullable();
             $table->string('gateway_response')->nullable();
             $table->timestamp('paid_at')->nullable();
+            $table->timestamp('reversed_at')->nullable();
+            $table->string('reversal_reason')->nullable();
             $table->string('receipt_number')->nullable()->unique();
+            $table->string('receipt_status')->nullable();
+            $table->string('receipt_disk')->nullable();
+            $table->string('receipt_path')->nullable();
+            $table->timestamp('receipt_generated_at')->nullable();
+            $table->text('receipt_generation_error')->nullable();
+            $table->unsignedSmallInteger('receipt_generation_attempts')->default(0);
+            $table->foreignId('receipt_email_delivery_id')->nullable()->constrained('email_deliveries')->nullOnDelete();
             $table->json('provider_payload')->nullable();
             $table->timestamps();
 
             $table->index(['student_profile_id', 'status']);
             $table->index(['school_id', 'created_at']);
+            $table->unique(['student_due_assignment_id', 'active_marker'], 'due_payments_one_active_checkout');
         });
 
         // Stores Paystack webhook payloads so retries are processed once and can be audited.
@@ -112,6 +130,7 @@ return new class extends Migration
             $table->string('payload_hash')->unique();
             $table->json('payload');
             $table->timestamp('processed_at')->nullable();
+            $table->text('processing_error')->nullable();
             $table->timestamps();
 
             $table->index(['event', 'reference']);

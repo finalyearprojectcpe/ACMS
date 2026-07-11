@@ -2,6 +2,7 @@
 
 namespace App\Actions;
 
+use App\AccountStatus;
 use App\Models\Faculty;
 use App\Models\FacultyHeadTransfer;
 use App\Models\StaffProfile;
@@ -50,6 +51,8 @@ class AcceptFacultyHeadTransferAction
                 'access_code' => null,
                 'access_code_used_at' => now(),
                 'activated_at' => now(),
+                'disabled_at' => null,
+                'status' => AccountStatus::Active,
             ])->save();
 
             $faculty->forceFill([

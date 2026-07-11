@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\AccountStatus;
 use App\AccountType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\RegisterAccountRequest;
@@ -147,6 +148,8 @@ class RegisteredUserController extends Controller
                 'password' => $validated['password'],
                 'access_code_used_at' => now(),
                 'activated_at' => now(),
+                'disabled_at' => null,
+                'status' => AccountStatus::Active,
             ])->save();
         });
 

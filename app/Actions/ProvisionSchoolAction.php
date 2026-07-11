@@ -2,6 +2,7 @@
 
 namespace App\Actions;
 
+use App\AccountStatus;
 use App\AccountType;
 use App\Models\AcademicSession;
 use App\Models\School;
@@ -18,6 +19,7 @@ class ProvisionSchoolAction
      *     name: string,
      *     abbreviation: string,
      *     slug?: string|null,
+     *     timezone?: string|null,
      *     admin_name: string,
      *     admin_email: string,
      *     admin_password: string,
@@ -31,6 +33,7 @@ class ProvisionSchoolAction
             'name' => ['required', 'string', 'max:255'],
             'abbreviation' => ['required', 'string', 'max:20'],
             'slug' => ['nullable', 'string', 'max:255'],
+            'timezone' => ['nullable', 'timezone:all'],
             'admin_name' => ['required', 'string', 'max:255'],
             'admin_email' => ['required', 'email', 'max:255'],
             'admin_password' => ['required', 'string', 'min:8'],
@@ -56,6 +59,7 @@ class ProvisionSchoolAction
                 'name' => $schoolName,
                 'abbreviation' => $schoolAbbreviation,
                 'slug' => $schoolSlug,
+                'timezone' => $validated['timezone'] ?? 'Africa/Lagos',
             ])->save();
 
             $admin = User::query()->updateOrCreate(
@@ -70,8 +74,22 @@ class ProvisionSchoolAction
                     'access_code' => null,
                     'access_code_used_at' => null,
                     'activated_at' => now(),
+                    'disabled_at' => null,
+                    'status' => AccountStatus::Active,
                 ],
             );
+
+            User::query()
+                ->where('school_id', $school->id)
+                ->where('account_type', AccountType::SchoolAdmin)
+                ->whereKeyNot($admin->id)
+                ->update([
+                    'status' => AccountStatus::Disabled,
+                    'disabled_at' => now(),
+                    'activated_at' => null,
+                ]);
+
+            $school->forceFill(['administrator_user_id' => $admin->id])->save();
 
             $academicSessionsSeeded = $seedAcademicSessions
                 ? $this->seedDefaultAcademicSessions($school)

@@ -20,6 +20,7 @@ return new class extends Migration
             $table->foreignId('current_academic_year_id')->nullable()->constrained('academic_years')->nullOnDelete();
             $table->foreignId('entry_academic_session_id')->nullable()->constrained('academic_sessions')->nullOnDelete();
             $table->string('registration_number');
+            $table->string('status')->default('active');
             $table->timestamps();
 
             $table->index(['department_id', 'current_academic_year_id']);

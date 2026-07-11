@@ -81,7 +81,9 @@ export function ChartCard({
                         </p>
                     ) : null}
                 </div>
-                {control ? <div className="w-full lg:w-80">{control}</div> : null}
+                {control ? (
+                    <div className="w-full lg:w-80">{control}</div>
+                ) : null}
             </CardHeader>
             <CardContent className="p-4">{children}</CardContent>
         </Card>
@@ -344,8 +346,11 @@ export function classificationRowsForStudents(
 }
 
 export function classificationRowsForGpas(
-    values: Array<string | number>,
+    values: Array<string | number | null>,
 ): ClassificationChartRow[] {
+    const availableValues = values.filter(
+        (value): value is string | number => value !== null,
+    );
     const labels = [
         ['First Class', 'var(--chart-1)'],
         ['Second Class Upper', 'var(--chart-2)'],
@@ -357,7 +362,7 @@ export function classificationRowsForGpas(
     return labels.map(([classification, fill]) => ({
         classification,
         fill,
-        students: values.filter(
+        students: availableValues.filter(
             (value) => classificationFor(Number(value)) === classification,
         ).length,
     }));
@@ -371,9 +376,12 @@ export function averageGpaByLevelRows(
         const level = shortLevelTitle(academicLevel.title);
         const gpas = students
             .map((student) =>
-                student.levelGpas.find((row) => row.level === level),
+                (student.levelGpas ?? []).find((row) => row.level === level),
             )
-            .filter((row) => row !== undefined)
+            .filter(
+                (row): row is { level: string; gpa: string } =>
+                    typeof row?.gpa === 'string',
+            )
             .map((row) => Number(row.gpa))
             .filter((gpa) => !Number.isNaN(gpa));
 

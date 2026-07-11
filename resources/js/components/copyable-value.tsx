@@ -57,7 +57,7 @@ export function CopyableValue({
             <span
                 title={copyValue || undefined}
                 className={cn(
-                    'flex min-w-0 max-w-[min(18rem,calc(100vw-5rem))] items-center truncate px-2.5 font-mono text-sm font-semibold tracking-normal tabular-nums',
+                    'flex max-w-[min(18rem,calc(100vw-5rem))] min-w-0 items-center truncate px-2.5 font-mono text-sm font-semibold tracking-normal tabular-nums',
                     fullWidth && 'max-w-none flex-1',
                     !canCopy && 'text-muted-foreground',
                     valueClassName,

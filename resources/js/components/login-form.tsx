@@ -2,6 +2,7 @@ import { Link, useForm } from '@inertiajs/react';
 import type { ComponentProps, FormEvent } from 'react';
 
 import { store as loginUser } from '@/actions/App/Http/Controllers/Auth/AuthenticatedSessionController';
+import { createRequest as requestPasswordReset } from '@/actions/App/Http/Controllers/Auth/PasswordResetController';
 import {
     AuthCard,
     AuthFormActions,
@@ -67,7 +68,15 @@ export function LoginForm({ className, ...props }: ComponentProps<'div'>) {
                     </Field>
 
                     <Field data-invalid={Boolean(form.errors.password)}>
-                        <FieldLabel htmlFor="password">Password</FieldLabel>
+                        <div className="flex items-center justify-between gap-4">
+                            <FieldLabel htmlFor="password">Password</FieldLabel>
+                            <Link
+                                href={requestPasswordReset()}
+                                className="text-xs font-medium text-link hover:underline"
+                            >
+                                Forgot password?
+                            </Link>
+                        </div>
                         <PasswordInput
                             id="password"
                             name="password"

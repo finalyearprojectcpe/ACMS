@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['name', 'slug'])]
+#[Fillable(['name', 'slug', 'year_number'])]
 class AcademicYear extends Model
 {
     /** @use HasFactory<AcademicYearFactory> */
@@ -20,5 +20,15 @@ class AcademicYear extends Model
     public function academicYearSemesters(): HasMany
     {
         return $this->hasMany(AcademicYearSemester::class);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'year_number' => 'integer',
+        ];
     }
 }

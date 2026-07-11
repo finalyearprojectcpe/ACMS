@@ -8,12 +8,10 @@ import {
     RiSave3Line,
 } from '@remixicon/react';
 import type { FormEvent } from 'react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 import { storeStaffPaymentAccount } from '@/actions/App/Http/Controllers/DashboardController';
 import { CopyableValue } from '@/components/copyable-value';
-import { studentSetText } from '@/components/student-set-label';
-import { StudentSetPicker } from '@/components/student-set-picker';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
     AlertDialog,
@@ -64,15 +62,12 @@ import type {
 } from '@/types';
 
 type PaymentAccountFormData = {
-    entry_academic_session_id: string;
     label: string;
     business_name: string;
     bank_code: string;
     account_number: string;
     payment_account?: string;
 };
-
-type AssignedSet = DashboardStaffPaymentAccountForm['assignedSets'][number];
 
 export function StaffPaymentSettingsDashboard({
     settings,
@@ -125,60 +120,12 @@ export function StaffPaymentAccountFormDashboard({
     form: DashboardStaffPaymentAccountForm;
 }) {
     const [confirmOpen, setConfirmOpen] = useState(false);
+    const currentAccount = accountForm.accounts[0] ?? null;
     const form = useForm<PaymentAccountFormData>({
-        entry_academic_session_id: '',
-        label: 'Student dues account',
-        business_name: 'GradeManager Dues',
+        label: currentAccount?.label ?? 'Student dues account',
+        business_name: currentAccount?.businessName ?? 'GradeManager Dues',
         bank_code: '',
         account_number: '',
-    });
-
-    const setOptions = useMemo(
-        () =>
-            accountForm.assignedSets.map((set) => ({
-                value: set.entrySession.id.toString(),
-                entrySession: set.entrySession,
-                currentLevel: set.currentLevel,
-                minimumYearsToDegree: set.minimumYearsToDegree,
-                meta: 'Assigned set',
-            })),
-        [accountForm.assignedSets],
-    );
-
-    const selectedScopeLabel = useMemo(() => {
-        if (!form.data.entry_academic_session_id) {
-            return 'all assigned sets';
-        }
-
-        return (
-            accountForm.accounts.find(
-                (account) =>
-                    account.entryAcademicSessionId?.toString() ===
-                    form.data.entry_academic_session_id,
-            )?.set ??
-            selectedSetLabel(
-                accountForm.assignedSets.find(
-                    (set) =>
-                        set.entrySession.id.toString() ===
-                        form.data.entry_academic_session_id,
-                ),
-            ) ??
-            'the selected set'
-        );
-    }, [
-        accountForm.accounts,
-        accountForm.assignedSets,
-        form.data.entry_academic_session_id,
-    ]);
-
-    const replacingAccount = accountForm.accounts.find((account) => {
-        const selectedSetId = form.data.entry_academic_session_id || null;
-
-        return (
-            account.status === 'Active' &&
-            (account.entryAcademicSessionId?.toString() ?? null) ===
-                selectedSetId
-        );
     });
 
     const bankOptionsLoaded = accountForm.bankOptions.length > 0;
@@ -203,8 +150,8 @@ export function StaffPaymentAccountFormDashboard({
                         : 'Connect Payout Account'}
                 </h1>
                 <p className="max-w-2xl text-sm text-muted-foreground">
-                    Choose the student set, then enter the bank account that
-                    should receive dues paid through Paystack.
+                    Enter the bank account that should receive every student due
+                    you collect through Paystack.
                 </p>
             </div>
 
@@ -224,43 +171,11 @@ export function StaffPaymentAccountFormDashboard({
                                     What happens after you save
                                 </AlertTitle>
                                 <AlertDescription>
-                                    New dues for the selected set will use this
-                                    account. Existing dues, payments, and
-                                    receipts stay unchanged.
+                                    All unpaid and future dues will use this
+                                    account. Completed payments and receipts
+                                    stay unchanged.
                                 </AlertDescription>
                             </Alert>
-
-                            <Field
-                                data-invalid={Boolean(
-                                    form.errors.entry_academic_session_id,
-                                )}
-                            >
-                                <FieldLabel>Student Set</FieldLabel>
-                                <StudentSetPicker
-                                    value={
-                                        form.data.entry_academic_session_id ||
-                                        'all'
-                                    }
-                                    onValueChange={(value) =>
-                                        form.setData(
-                                            'entry_academic_session_id',
-                                            value === 'all' ? '' : value,
-                                        )
-                                    }
-                                    options={setOptions}
-                                    allOption={{
-                                        value: 'all',
-                                        label: 'All assigned sets',
-                                        meta: 'Default payout',
-                                    }}
-                                    placeholder="Choose student set"
-                                    searchPlaceholder="Search student sets..."
-                                    emptyLabel="No assigned set found."
-                                />
-                                <FieldError>
-                                    {form.errors.entry_academic_session_id}
-                                </FieldError>
-                            </Field>
 
                             <FieldGroup className="grid gap-5 sm:grid-cols-2">
                                 <Field
@@ -278,7 +193,7 @@ export function StaffPaymentAccountFormDashboard({
                                                 event.target.value,
                                             )
                                         }
-                                        placeholder="300L dues account"
+                                        placeholder="Student dues account"
                                     />
                                     <FieldError>{form.errors.label}</FieldError>
                                 </Field>
@@ -300,7 +215,7 @@ export function StaffPaymentAccountFormDashboard({
                                                 event.target.value,
                                             )
                                         }
-                                        placeholder="CPE 300L Dues"
+                                        placeholder="CPE Student Dues"
                                     />
                                     <FieldError>
                                         {form.errors.business_name}
@@ -385,7 +300,7 @@ export function StaffPaymentAccountFormDashboard({
                 <ConnectedAccounts
                     accounts={accountForm.accounts}
                     compact
-                    title="Current Accounts"
+                    title="Current Payout Account"
                 />
             </div>
 
@@ -393,39 +308,35 @@ export function StaffPaymentAccountFormDashboard({
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle>
-                            {replacingAccount
+                            {currentAccount
                                 ? 'Replace payout account?'
                                 : 'Save payout account?'}
                         </AlertDialogTitle>
                         <AlertDialogDescription asChild>
                             <div className="grid gap-2">
                                 <p>
-                                    {replacingAccount ? (
+                                    {currentAccount ? (
                                         <>
                                             You are replacing{' '}
                                             <strong className="font-semibold text-foreground">
-                                                {replacingAccount.label}
-                                            </strong>{' '}
-                                            for{' '}
-                                            <strong className="font-semibold text-foreground">
-                                                {selectedScopeLabel}
+                                                {currentAccount.label}
                                             </strong>
-                                            .
+                                            , the account currently used for all
+                                            your student dues.
                                         </>
                                     ) : (
                                         <>
-                                            You are saving a payout account for{' '}
-                                            <strong className="font-semibold text-foreground">
-                                                {selectedScopeLabel}
-                                            </strong>
-                                            .
+                                            You are connecting the payout
+                                            account used for all your student
+                                            dues.
                                         </>
                                     )}
                                 </p>
                                 <p>
-                                    New dues in this scope will use the new
-                                    account. Existing dues, payments, and
-                                    receipts stay unchanged.
+                                    Unpaid and future dues will use this
+                                    account. Any checkout already open will be
+                                    replaced; completed payments and receipts
+                                    stay unchanged.
                                 </p>
                             </div>
                         </AlertDialogDescription>
@@ -442,14 +353,10 @@ export function StaffPaymentAccountFormDashboard({
     );
 }
 
-function selectedSetLabel(set: AssignedSet | undefined): string | null {
-    return set ? studentSetText(set) : null;
-}
-
 function ConnectedAccounts({
     accounts,
     compact = false,
-    title = 'Connected Payout Accounts',
+    title = 'Connected Payout Account',
 }: {
     accounts: DashboardPaymentAccount[];
     compact?: boolean;

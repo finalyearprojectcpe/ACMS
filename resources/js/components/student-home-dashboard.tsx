@@ -27,23 +27,29 @@ type StudentHomeDashboardProps = {
 };
 
 export function StudentHomeDashboard({ home }: StudentHomeDashboardProps) {
-    const semesterLabel = qualifiedSemesterLabel(
-        home.currentSemester.level,
-        home.currentSemester.name,
-    );
+    const semesterLabel = home.currentSemester
+        ? qualifiedSemesterLabel(
+              home.currentSemester.level,
+              home.currentSemester.name,
+          )
+        : null;
 
     return (
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
             <div className="grid gap-3 md:grid-cols-3">
                 <MetricBlock
                     label="CGPA"
-                    value={home.cgpa}
+                    value={home.cgpa ?? 'Not available'}
                     detail="Cumulative grade point average"
                 />
                 <MetricBlock
                     label="Total Units"
                     value={home.totalCourseUnits}
-                    detail={`For ${semesterLabel}`}
+                    detail={
+                        semesterLabel
+                            ? `For ${semesterLabel}`
+                            : 'No active registration period'
+                    }
                 />
                 <MetricBlock
                     label="Course Adviser"
@@ -56,11 +62,17 @@ export function StudentHomeDashboard({ home }: StudentHomeDashboardProps) {
             <SolidCard>
                 <CardHeader className="flex flex-row items-center justify-between gap-3 border-b border-border">
                     <CardTitle>
-                        <QualifiedSemester
-                            level={home.currentSemester.level}
-                            semester={home.currentSemester.name}
-                        />{' '}
-                        Course Load
+                        {home.currentSemester ? (
+                            <>
+                                <QualifiedSemester
+                                    level={home.currentSemester.level}
+                                    semester={home.currentSemester.name}
+                                />{' '}
+                                Course Load
+                            </>
+                        ) : (
+                            'Course Load'
+                        )}
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">

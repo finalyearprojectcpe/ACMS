@@ -15,6 +15,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'amount_kobo',
     'status',
     'paid_at',
+    'waived_at',
+    'waived_by_user_id',
+    'waiver_reason',
     'latest_due_payment_id',
 ])]
 class StudentDueAssignment extends Model
@@ -67,6 +70,7 @@ class StudentDueAssignment extends Model
     {
         return [
             'paid_at' => 'datetime',
+            'waived_at' => 'datetime',
         ];
     }
 }

@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'provider',
     'reference',
     'status',
+    'active_marker',
     'amount_kobo',
     'currency',
     'authorization_url',
@@ -25,13 +26,25 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'fees_kobo',
     'gateway_response',
     'paid_at',
+    'reversed_at',
+    'reversal_reason',
     'receipt_number',
+    'receipt_status',
+    'receipt_disk',
+    'receipt_path',
+    'receipt_generated_at',
+    'receipt_generation_error',
+    'receipt_generation_attempts',
+    'receipt_email_delivery_id',
     'provider_payload',
 ])]
 class DuePayment extends Model
 {
     /** @use HasFactory<DuePaymentFactory> */
     use HasFactory;
+
+    /** @var list<string> */
+    protected $hidden = ['access_code', 'authorization_url', 'provider_payload'];
 
     public const string ProviderPaystack = 'paystack';
 
@@ -44,6 +57,21 @@ class DuePayment extends Model
     public const string StatusAbandoned = 'abandoned';
 
     public const string StatusReversed = 'reversed';
+
+    public const string ReceiptStatusPending = 'pending';
+
+    public const string ReceiptStatusProcessing = 'processing';
+
+    public const string ReceiptStatusReady = 'ready';
+
+    public const string ReceiptStatusFailed = 'failed';
+
+    protected static function booted(): void
+    {
+        static::saving(function (DuePayment $duePayment): void {
+            $duePayment->active_marker = $duePayment->status === self::StatusInitialized ? 1 : null;
+        });
+    }
 
     /**
      * @return BelongsTo<StudentDueAssignment, $this>
@@ -78,13 +106,25 @@ class DuePayment extends Model
     }
 
     /**
+     * @return BelongsTo<EmailDelivery, $this>
+     */
+    public function receiptEmailDelivery(): BelongsTo
+    {
+        return $this->belongsTo(EmailDelivery::class, 'receipt_email_delivery_id');
+    }
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array
     {
         return [
             'paid_at' => 'datetime',
+            'reversed_at' => 'datetime',
+            'receipt_generated_at' => 'datetime',
             'provider_payload' => 'array',
+            'active_marker' => 'integer',
+            'receipt_generation_attempts' => 'integer',
         ];
     }
 }

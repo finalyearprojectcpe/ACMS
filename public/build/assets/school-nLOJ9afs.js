@@ -1,0 +1,1 @@
+import{s as e}from"./jsx-runtime-DCXLslBY.js";function t(){return e().props.school}function n(e){let t=e?.domainKey||e?.abbreviation.toLowerCase();return t?`name@${t}.edu`:`name@school.edu`}export{t as n,n as t};

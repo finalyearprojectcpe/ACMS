@@ -23,6 +23,7 @@ return new class extends Migration
             $table->foreignId('submitted_by_user_id')->nullable()->constrained('users')->nullOnDelete();
             $table->foreignId('reviewed_by_user_id')->nullable()->constrained('users')->nullOnDelete();
             $table->string('status')->default('draft');
+            $table->unsignedInteger('current_revision_number')->default(0);
             $table->text('correction_note')->nullable();
             $table->timestamp('submitted_at')->nullable();
             $table->timestamp('approved_at')->nullable();
@@ -82,6 +83,26 @@ return new class extends Migration
             );
             $table->index(['result_sheet_course_id', 'grade']);
         });
+
+        // Preserves each imported or reviewed version of a result sheet, including its source spreadsheet and grade snapshot.
+        Schema::create('result_sheet_revisions', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('result_sheet_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('actor_user_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->unsignedInteger('revision_number');
+            $table->string('action');
+            $table->string('source_file_disk')->nullable();
+            $table->string('source_file_path')->nullable();
+            $table->string('source_file_name')->nullable();
+            $table->string('source_file_checksum', 64)->nullable();
+            $table->json('column_mappings')->nullable();
+            $table->json('snapshot');
+            $table->text('note')->nullable();
+            $table->timestamps();
+
+            $table->unique(['result_sheet_id', 'revision_number']);
+            $table->index(['result_sheet_id', 'action']);
+        });
     }
 
     /**
@@ -89,6 +110,7 @@ return new class extends Migration
      */
     public function down(): void
     {
+        Schema::dropIfExists('result_sheet_revisions');
         Schema::dropIfExists('student_course_results');
         Schema::dropIfExists('student_semester_results');
         Schema::dropIfExists('result_sheet_courses');

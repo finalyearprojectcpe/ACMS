@@ -1,8 +1,9 @@
-import { Link } from '@inertiajs/react';
+import { Link, usePoll } from '@inertiajs/react';
 import { RiCheckboxCircleFill } from '@remixicon/react';
+import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 
-import { ActionLink } from '@/components/action-link';
+import { ReceiptAction } from '@/components/receipt-action';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     Table,
@@ -23,6 +24,27 @@ type StudentDuesDashboardProps = {
 };
 
 export function StudentDuesDashboard({ dues }: StudentDuesDashboardProps) {
+    const hasReceiptWork = dues.paid.some(
+        (due) =>
+            ['pending', 'processing'].includes(due.receiptStatus ?? '') ||
+            ['queued', 'processing'].includes(due.receiptEmailStatus ?? ''),
+    );
+    const { start: startReceiptPoll, stop: stopReceiptPoll } = usePoll(
+        3000,
+        {},
+        { autoStart: false },
+    );
+
+    useEffect(() => {
+        if (hasReceiptWork) {
+            startReceiptPoll();
+        } else {
+            stopReceiptPoll();
+        }
+
+        return stopReceiptPoll;
+    }, [hasReceiptWork, startReceiptPoll, stopReceiptPoll]);
+
     return (
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
             <div className="grid gap-3 md:grid-cols-2">
@@ -128,14 +150,26 @@ function PendingDuesTable({ dues }: { dues: DashboardStudentDue[] }) {
                                 {due.amount}
                             </TableCell>
                             <TableCell className="pr-4 text-right">
-                                <Link
-                                    href={due.paymentUrl}
-                                    method="post"
-                                    as="button"
-                                    className="text-xs font-medium text-link"
-                                >
-                                    Pay now
-                                </Link>
+                                {due.paymentUrl ? (
+                                    <Link
+                                        href={due.paymentUrl}
+                                        method="post"
+                                        as="button"
+                                        className="text-xs font-medium text-link"
+                                    >
+                                        {due.paymentActionLabel}
+                                    </Link>
+                                ) : (
+                                    <span
+                                        className="text-xs text-muted-foreground"
+                                        title={
+                                            due.paymentUnavailableReason ??
+                                            undefined
+                                        }
+                                    >
+                                        Unavailable
+                                    </span>
+                                )}
                             </TableCell>
                         </TableRow>
                     ))
@@ -187,9 +221,7 @@ function PaidDuesTable({ dues }: { dues: DashboardStudentPaidDue[] }) {
                                 {due.paidAt}
                             </TableCell>
                             <TableCell className="pr-4 text-right">
-                                <ActionLink href={due.receiptUrl}>
-                                    Download receipt
-                                </ActionLink>
+                                <ReceiptAction receipt={due} />
                             </TableCell>
                         </TableRow>
                     ))

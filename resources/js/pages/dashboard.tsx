@@ -1,17 +1,14 @@
-import { Head, Link, usePage } from '@inertiajs/react';
-import { RiArrowLeftLine, RiNotification3Line } from '@remixicon/react';
-import { useEffect } from 'react';
-import { toast } from 'sonner';
+import { Head, usePage } from '@inertiajs/react';
+import { RiArrowLeftLine } from '@remixicon/react';
 
-import {
-    home as dashboardHome,
-    section as dashboardSection,
-} from '@/actions/App/Http/Controllers/DashboardController';
+import { home as dashboardHome } from '@/actions/App/Http/Controllers/DashboardController';
 import { AppSidebar } from '@/components/app-sidebar';
 import { FacultyHeadDashboard } from '@/components/faculty-head-dashboard';
+import { FlashToasts } from '@/components/flash-toasts';
 import {
     HodDashboard,
     HodStaffImport,
+    HodSetAdvisorForm,
     StudentRecordDashboard,
 } from '@/components/hod-dashboard';
 import { ResultSheetDetailDashboard } from '@/components/result-sheet-detail-dashboard';
@@ -24,6 +21,7 @@ import {
 import {
     StaffDueDetailDashboard,
     StaffDueFormDashboard,
+    StaffDueWaiverFormDashboard,
     StaffDuesDashboard,
 } from '@/components/staff-dues-dashboard';
 import { StaffHomeDashboard } from '@/components/staff-home-dashboard';
@@ -35,6 +33,7 @@ import { StaffProfileDashboard } from '@/components/staff-profile-dashboard';
 import { StaffResultImportWizard } from '@/components/staff-result-import-wizard';
 import { StaffResultsDashboard } from '@/components/staff-results-dashboard';
 import { StaffSettingsDashboard } from '@/components/staff-settings-dashboard';
+import { StaffStudentOnboarding } from '@/components/staff-student-onboarding';
 import { StaffStudentsDashboard } from '@/components/staff-students-dashboard';
 import { StudentCourseRegistrationDashboard } from '@/components/student-course-registration-dashboard';
 import { StudentDuesDashboard } from '@/components/student-dues-dashboard';
@@ -63,18 +62,22 @@ type DashboardPageProps = {
     dashboard: DashboardContext;
 };
 
-type DashboardFlash = {
-    success?: string | null;
-    error?: string | null;
-};
-
 export default function DashboardPage({ dashboard }: DashboardPageProps) {
-    const { auth, flash } = usePage<{
+    const { auth } = usePage<{
         auth: Auth;
-        flash?: DashboardFlash;
     }>().props;
     const headerOrganizationLabel = dashboardHeaderOrganizationLabel(dashboard);
-    const backTarget = dashboardBackTarget(dashboard);
+    const canGoBack = dashboard.section !== 'home';
+
+    function goBack() {
+        if (window.history.length > 1) {
+            window.history.back();
+
+            return;
+        }
+
+        window.location.assign(dashboardHome().url);
+    }
     const studentHeaderMeta =
         dashboard.role === 'student' && dashboard.student !== null
             ? [
@@ -103,21 +106,15 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
             ? dashboard.hod
             : null;
 
-    useEffect(() => {
-        if (flash?.success) {
-            toast.success(flash.success);
-        }
-
-        if (flash?.error) {
-            toast.error(flash.error);
-        }
-    }, [flash?.success, flash?.error]);
-
     const staffStudents =
         dashboard.role === 'staff' &&
         dashboard.section === 'students' &&
         dashboard.staffStudents !== null
             ? dashboard.staffStudents
+            : null;
+    const staffStudentForm =
+        dashboard.role === 'staff' && dashboard.staffStudentForm !== null
+            ? dashboard.staffStudentForm
             : null;
     const staffCourseSchedules =
         dashboard.role === 'staff' &&
@@ -167,6 +164,12 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
         dashboard.staffDueDetail !== null
             ? dashboard.staffDueDetail
             : null;
+    const staffDueWaiverForm =
+        dashboard.role === 'staff' &&
+        dashboard.section === 'dues' &&
+        dashboard.staffDueWaiverForm !== null
+            ? dashboard.staffDueWaiverForm
+            : null;
     const staffPaymentSettings =
         dashboard.role === 'staff' &&
         dashboard.section === 'payment-settings' &&
@@ -188,6 +191,10 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
     const hodStaffForm =
         dashboard.role === 'hod' && dashboard.hodStaffForm !== null
             ? dashboard.hodStaffForm
+            : null;
+    const hodSetAdvisorForm =
+        dashboard.role === 'hod' && dashboard.hodSetAdvisorForm !== null
+            ? dashboard.hodSetAdvisorForm
             : null;
     const studentHome =
         dashboard.role === 'student' &&
@@ -237,6 +244,7 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
 
     return (
         <>
+            <FlashToasts />
             <Head title={dashboard.sectionTitle} />
             <SidebarProvider>
                 <AppSidebar dashboard={dashboard} user={auth.user} />
@@ -244,14 +252,15 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                     <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-2 border-b bg-background px-4">
                         <div className="flex min-w-0 items-center gap-2">
                             <SidebarTrigger />
-                            {backTarget ? (
-                                <Button variant="ghost" size="icon-sm" asChild>
-                                    <Link
-                                        href={backTarget.href}
-                                        aria-label={backTarget.label}
-                                    >
-                                        <RiArrowLeftLine />
-                                    </Link>
+                            {canGoBack ? (
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    aria-label="Go to previous page"
+                                    onClick={goBack}
+                                >
+                                    <RiArrowLeftLine />
                                 </Button>
                             ) : null}
                             <Separator
@@ -288,14 +297,6 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                         ) : null}
                         <div className="ml-auto flex items-center gap-1">
                             <ThemeToggle />
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon-sm"
-                                aria-label="Notifications"
-                            >
-                                <RiNotification3Line />
-                            </Button>
                         </div>
                     </header>
 
@@ -325,6 +326,10 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                         ) : staffResultImportForm ? (
                             <StaffResultImportWizard
                                 form={staffResultImportForm}
+                            />
+                        ) : staffDueWaiverForm ? (
+                            <StaffDueWaiverFormDashboard
+                                form={staffDueWaiverForm}
                             />
                         ) : staffDueForm ? (
                             <StaffDueFormDashboard form={staffDueForm} />
@@ -369,6 +374,8 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                             />
                         ) : staffSettings ? (
                             <StaffSettingsDashboard settings={staffSettings} />
+                        ) : hodSetAdvisorForm ? (
+                            <HodSetAdvisorForm form={hodSetAdvisorForm} />
                         ) : hodStaffForm ? (
                             <HodStaffImport form={hodStaffForm} />
                         ) : studentRecord ? (
@@ -380,6 +387,10 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                             />
                         ) : staffHome ? (
                             <StaffHomeDashboard home={staffHome} />
+                        ) : staffStudentForm ? (
+                            <StaffStudentOnboarding
+                                onboarding={staffStudentForm}
+                            />
                         ) : staffStudents ? (
                             <StaffStudentsDashboard students={staffStudents} />
                         ) : studentHome ? (
@@ -404,158 +415,4 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
             </SidebarProvider>
         </>
     );
-}
-
-function dashboardBackTarget(dashboard: DashboardContext) {
-    if (dashboard.section === 'home') {
-        return null;
-    }
-
-    if (dashboard.facultyHeadHodForm !== null) {
-        return {
-            href: dashboardSection({ section: 'departments' }),
-            label: 'Back to Departments',
-        };
-    }
-
-    if (dashboard.schoolAdminAcademicSessionForm !== null) {
-        return {
-            href: dashboardSection({ section: 'academic-sessions' }),
-            label: 'Back to Academic Sessions',
-        };
-    }
-
-    if (
-        dashboard.schoolAdminFacultyForm !== null ||
-        dashboard.schoolAdminDepartmentForm !== null
-    ) {
-        return {
-            href: dashboardSection({ section: 'structure' }),
-            label: 'Back to School Structure',
-        };
-    }
-
-    if (dashboard.schoolAdminFacultyHeadForm !== null) {
-        return {
-            href: dashboardSection({ section: 'faculty-heads' }),
-            label: 'Back to Faculty Heads',
-        };
-    }
-
-    if (dashboard.facultyHeadStaffForm !== null) {
-        return {
-            href: dashboardSection({ section: 'staff' }),
-            label: 'Back to Staff',
-        };
-    }
-
-    if (dashboard.hodStaffForm !== null) {
-        return {
-            href: dashboardSection({ section: 'staff' }),
-            label: 'Back to Staff',
-        };
-    }
-
-    if (dashboard.facultyHeadCourseOfferingForm !== null) {
-        return {
-            href: dashboardSection(
-                { section: 'sessions-courses' },
-                {
-                    query: {
-                        academic_session:
-                            dashboard.facultyHeadCourseOfferingForm
-                                .academicSession.id,
-                    },
-                },
-            ),
-            label: 'Back to Sessions & Courses',
-        };
-    }
-
-    if (dashboard.staffCourseOfferingForm !== null) {
-        return {
-            href: dashboardSection(
-                { section: 'courses' },
-                {
-                    query: {
-                        academic_session:
-                            dashboard.staffCourseOfferingForm.academicSession
-                                .id,
-                        level: dashboard.staffCourseOfferingForm.level.slug,
-                    },
-                },
-            ),
-            label: 'Back to Course Offerings',
-        };
-    }
-
-    if (dashboard.staffResultImportForm !== null) {
-        return {
-            href: dashboardSection({ section: 'result-management' }),
-            label: 'Back to Result Management',
-        };
-    }
-
-    if (dashboard.staffCourseRegistration?.review !== null) {
-        return {
-            href: dashboardSection({ section: 'course-registration' }),
-            label: 'Back to Course Registrations',
-        };
-    }
-
-    if (dashboard.staffDueForm !== null || dashboard.staffDueDetail !== null) {
-        return {
-            href: dashboardSection({ section: 'dues' }),
-            label: 'Back to Dues',
-        };
-    }
-
-    if (dashboard.staffPaymentAccountForm !== null) {
-        return {
-            href: dashboardSection({ section: 'payment-settings' }),
-            label: 'Back to Paystack Settings',
-        };
-    }
-
-    if (dashboard.resultSheetDetail !== null) {
-        return {
-            href: dashboardSection({
-                section: dashboard.resultSheetDetail.returnSection,
-            }),
-            label: dashboard.resultSheetDetail.returnLabel,
-        };
-    }
-
-    if (dashboard.staffCourseSchedules !== null) {
-        return {
-            href: dashboardSection({ section: 'courses' }),
-            label: 'Back to Course Offerings',
-        };
-    }
-
-    if (dashboard.studentRecord !== null) {
-        return {
-            href: dashboardSection({ section: 'students' }),
-            label: 'Back to Students',
-        };
-    }
-
-    if (dashboard.staffRecord !== null) {
-        return {
-            href: dashboardSection({ section: 'staff' }),
-            label: 'Back to Staff',
-        };
-    }
-
-    if (dashboard.studentResults !== null) {
-        return {
-            href: dashboardSection({ section: 'results' }),
-            label: 'Back to Results',
-        };
-    }
-
-    return {
-        href: dashboardHome(),
-        label: 'Back to Dashboard',
-    };
 }

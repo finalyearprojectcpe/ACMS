@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use Database\Factories\ResultSheetFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -17,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'submitted_by_user_id',
     'reviewed_by_user_id',
     'status',
+    'current_revision_number',
     'correction_note',
     'submitted_at',
     'approved_at',
@@ -24,6 +27,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 ])]
 class ResultSheet extends Model
 {
+    /** @use HasFactory<ResultSheetFactory> */
+    use HasFactory;
+
     public const string StatusDraft = 'draft';
 
     public const string StatusSubmitted = 'submitted';
@@ -112,6 +118,14 @@ class ResultSheet extends Model
         return $this->hasMany(StudentSemesterResult::class);
     }
 
+    /**
+     * @return HasMany<ResultSheetRevision, $this>
+     */
+    public function revisions(): HasMany
+    {
+        return $this->hasMany(ResultSheetRevision::class)->orderBy('revision_number');
+    }
+
     public function canBeEditedByAdvisor(): bool
     {
         return in_array($this->status, [self::StatusDraft, self::StatusReturned], true);
@@ -123,6 +137,7 @@ class ResultSheet extends Model
     protected function casts(): array
     {
         return [
+            'current_revision_number' => 'integer',
             'submitted_at' => 'datetime',
             'approved_at' => 'datetime',
             'returned_at' => 'datetime',

@@ -2,7 +2,6 @@
 
 namespace Database\Factories;
 
-use App\Models\AcademicSession;
 use App\Models\Department;
 use App\Models\Faculty;
 use App\Models\PaymentAccount;
@@ -34,9 +33,9 @@ class PaymentAccountFactory extends Factory
             'school_id' => $school->id,
             'department_id' => $department->id,
             'staff_profile_id' => $staffProfile->id,
-            'entry_academic_session_id' => AcademicSession::factory()->create(['school_id' => $school->id])->id,
+            'entry_academic_session_id' => null,
             'provider' => PaymentAccount::ProviderPaystack,
-            'label' => 'Set Dues Account',
+            'label' => 'Student Dues Account',
             'business_name' => 'GradeManager Department Dues',
             'bank_code' => '058',
             'bank_name' => 'Guaranty Trust Bank',

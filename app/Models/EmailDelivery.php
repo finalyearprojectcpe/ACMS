@@ -8,11 +8,14 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['school_id', 'user_id', 'recipient_email', 'subject', 'mailer', 'status', 'provider_message_id', 'error', 'metadata', 'sent_at', 'failed_at'])]
+#[Fillable(['school_id', 'user_id', 'recipient_email', 'subject', 'mailer', 'purpose_key', 'status', 'attempts', 'provider_message_id', 'error', 'metadata', 'sent_at', 'failed_at'])]
 class EmailDelivery extends Model
 {
     /** @use HasFactory<EmailDeliveryFactory> */
     use HasFactory;
+
+    /** @var list<string> */
+    protected $hidden = ['metadata'];
 
     /**
      * @return BelongsTo<School, $this>
@@ -37,6 +40,7 @@ class EmailDelivery extends Model
     {
         return [
             'metadata' => 'array',
+            'attempts' => 'integer',
             'sent_at' => 'datetime',
             'failed_at' => 'datetime',
         ];

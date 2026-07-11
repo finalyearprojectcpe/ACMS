@@ -99,9 +99,7 @@ function NameSettingsCard({ profile }: { profile: DashboardStudentProfile }) {
                 <CardContent className="px-5 pb-6">
                     <FieldGroup className="gap-6">
                         <div className="grid gap-4 sm:grid-cols-2">
-                            <Field
-                                data-invalid={Boolean(form.errors.surname)}
-                            >
+                            <Field data-invalid={Boolean(form.errors.surname)}>
                                 <FieldLabel htmlFor="student-surname">
                                     Surname
                                 </FieldLabel>
@@ -121,9 +119,7 @@ function NameSettingsCard({ profile }: { profile: DashboardStudentProfile }) {
                                 <FieldError>{form.errors.surname}</FieldError>
                             </Field>
                             <Field
-                                data-invalid={Boolean(
-                                    form.errors.other_names,
-                                )}
+                                data-invalid={Boolean(form.errors.other_names)}
                             >
                                 <FieldLabel htmlFor="student-other-names">
                                     Other Names
@@ -181,11 +177,7 @@ function NameSettingsCard({ profile }: { profile: DashboardStudentProfile }) {
     );
 }
 
-function ProfileSummaryCard({
-    profile,
-}: {
-    profile: DashboardStudentProfile;
-}) {
+function ProfileSummaryCard({ profile }: { profile: DashboardStudentProfile }) {
     return (
         <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
             <CardHeader className="border-b border-border">
@@ -197,7 +189,10 @@ function ProfileSummaryCard({
                         label="Registration Number"
                         value={profile.registrationNumber}
                     />
-                    <SummaryItem label="CGPA" value={profile.cgpa} />
+                    <SummaryItem
+                        label="CGPA"
+                        value={profile.cgpa ?? 'Not available'}
+                    />
                     <SummaryItem
                         label="Department"
                         value={departmentLabel(profile.department)}
@@ -237,7 +232,7 @@ function SummaryItem({
             <div className="text-xs font-medium text-muted-foreground">
                 {label}
             </div>
-            <div className="mt-1 break-words text-sm font-semibold">
+            <div className="mt-1 text-sm font-semibold break-words">
                 {value}
             </div>
         </div>

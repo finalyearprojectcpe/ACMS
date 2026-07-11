@@ -7,7 +7,6 @@ import {
     RiSendPlaneLine,
 } from '@remixicon/react';
 import { useMemo, useState } from 'react';
-import * as XLSX from 'xlsx';
 
 import {
     createCourseOffering,
@@ -111,6 +110,10 @@ export function StaffResultImportWizard({
         form.defaults.academicYearSemesterId?.toString() ?? '',
     );
     const [fileName, setFileName] = useState<string | null>(null);
+    const [sourceFile, setSourceFile] = useState<File | null>(null);
+    const [columnMappings, setColumnMappings] = useState<
+        Record<string, string>
+    >({});
     const [courses, setCourses] = useState<ParsedCourse[]>([]);
     const [rows, setRows] = useState<ParsedRow[]>([]);
     const [parseErrors, setParseErrors] = useState<string[]>([]);
@@ -191,6 +194,7 @@ export function StaffResultImportWizard({
         !processing;
 
     async function parseFile(file: File) {
+        const XLSX = await import('xlsx');
         const workbook = XLSX.read(await file.arrayBuffer(), {
             type: 'array',
         });
@@ -202,6 +206,7 @@ export function StaffResultImportWizard({
         });
 
         setFileName(file.name);
+        setSourceFile(file);
         parseRows(sheetRows, knownCourses);
     }
 
@@ -333,6 +338,16 @@ export function StaffResultImportWizard({
         setCourses(parsedCourses);
         setRows(parsedRows);
         setParseErrors(nextErrors);
+        setColumnMappings({
+            registration_number:
+                regIndex === -1 ? 'Not found' : headers[regIndex],
+            ...Object.fromEntries(
+                courseIndexes.map(({ header }) => [
+                    normalizeCourseCode(header),
+                    header,
+                ]),
+            ),
+        });
 
         if (parsedCourses.length > 0 && parsedRows.length > 0) {
             setStep('courses');
@@ -360,6 +375,8 @@ export function StaffResultImportWizard({
                 entry_academic_session_id: Number(entryAcademicSessionId),
                 academic_year_semester_id: Number(academicYearSemesterId),
                 action,
+                source_file: sourceFile,
+                column_mappings: columnMappings,
                 courses: courses.map((course) => ({
                     course_offering_id: course.courseOfferingId,
                     code: course.code,
@@ -373,6 +390,7 @@ export function StaffResultImportWizard({
                 })),
             },
             {
+                forceFormData: true,
                 onError: (serverErrors) =>
                     setParseErrors(Object.values(serverErrors).map(String)),
                 onFinish: () => setProcessing(false),

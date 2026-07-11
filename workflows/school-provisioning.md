@@ -24,9 +24,9 @@ php artisan school:provision \
     --seed-sessions
 ```
 
-The school slug defaults to the full school name with `Str::slug()`. For example, `Federal University of Technology Owerri` becomes `federal-university-of-technology-owerri`.
+The school record slug defaults to the full school name with `Str::slug()`. For example, `Federal University of Technology Owerri` becomes `federal-university-of-technology-owerri`. School addresses use the school abbreviation instead: `FUTO.site.edu` resolves the FUTO school.
 
-Pass `--slug=...` only when the school needs a custom domain slug.
+Pass `--slug=...` only when the school record needs a custom URL-safe identifier. It does not change the school subdomain.
 
 ```shell
 php artisan school:provision \
@@ -58,7 +58,7 @@ After the School Admin exists, platform setup flows downward:
 Confirm the school and admin were created:
 
 ```shell
-php artisan tinker --execute 'App\Models\School::query()->where("abbreviation", "FUTO")->first()?->schoolAdmins()->count();'
+php artisan tinker --execute '$school = App\Models\School::query()->where("abbreviation", "FUTO")->first(); echo App\Models\User::query()->where("school_id", $school?->id)->where("account_type", App\AccountType::SchoolAdmin)->count();'
 ```
 
 Confirm the admin can sign in through the normal login page.

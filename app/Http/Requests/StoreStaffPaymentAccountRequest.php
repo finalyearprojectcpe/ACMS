@@ -29,7 +29,6 @@ class StoreStaffPaymentAccountRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'entry_academic_session_id' => ['nullable', 'integer', 'exists:academic_sessions,id'],
             'label' => ['required', 'string', 'max:80'],
             'business_name' => ['required', 'string', 'max:120'],
             'bank_code' => ['required', 'string', 'max:20'],

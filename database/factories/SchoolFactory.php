@@ -25,6 +25,7 @@ class SchoolFactory extends Factory
             'name' => Str::title($name),
             'abbreviation' => $abbreviation,
             'slug' => Str::slug($name),
+            'timezone' => 'Africa/Lagos',
         ];
     }
 }

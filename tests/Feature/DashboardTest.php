@@ -1,6 +1,9 @@
 <?php
 
+use App\AccountStatus;
 use App\AccountType;
+use App\CourseCategory;
+use App\Jobs\GenerateDuePaymentReceipt;
 use App\Models\AcademicSession;
 use App\Models\AcademicYear;
 use App\Models\AcademicYearSemester;
@@ -29,11 +32,15 @@ use App\Models\User;
 use App\Services\GpaCalculator;
 use App\Services\PaystackService;
 use App\Services\ResultSheetImporter;
+use Carbon\CarbonImmutable;
 use Database\Seeders\AcademicStructureSeeder;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 
 test('student users see the student dashboard shell', function () {
@@ -48,6 +55,18 @@ test('student users see the student dashboard shell', function () {
         'name' => '2021/2022',
         'starts_on' => '2021-09-01',
         'ends_on' => '2022-08-31',
+    ]);
+    AcademicSession::factory()->create([
+        'school_id' => $school->id,
+        'name' => '2022/2023',
+        'starts_on' => '2022-09-01',
+        'ends_on' => '2023-08-31',
+    ]);
+    AcademicSession::factory()->create([
+        'school_id' => $school->id,
+        'name' => '2023/2024',
+        'starts_on' => '2023-09-01',
+        'ends_on' => '2024-08-31',
     ]);
     $currentSession = AcademicSession::factory()->create([
         'school_id' => $school->id,
@@ -85,15 +104,15 @@ test('student users see the student dashboard shell', function () {
         ->has('dashboard.levels', 4)
         ->where('dashboard.levels.0.slug', '100-level')
         ->where('dashboard.levels.3.slug', '400-level')
-        ->where('dashboard.studentHome.cgpa', '4.32')
-        ->where('dashboard.studentHome.currentSemester.name', 'Harmattan')
+        ->where('dashboard.studentHome.cgpa', null)
+        ->where('dashboard.studentHome.currentSemester.name', 'Rain')
         ->where('dashboard.studentHome.currentSemester.session', '2025/2026')
-        ->where('dashboard.studentHome.totalCourseUnits', 13)
-        ->has('dashboard.studentHome.courses', 5)
+        ->where('dashboard.studentHome.totalCourseUnits', 0)
+        ->has('dashboard.studentHome.courses', 0)
         ->has('dashboard.studentHome.pendingDues', 2)
         ->where('dashboard.studentHome.pendingDues.0.title', 'Departmental Dues 400 Level')
         ->where('dashboard.studentHome.pendingDues.0.amount', 'NGN 15,000')
-        ->has('dashboard.studentHome.resits', 2)
+        ->has('dashboard.studentHome.resits', 0)
         ->where('dashboard.staffHome', null)
         ->where('dashboard.studentResults', null)
         ->where('dashboard.studentDues', null)
@@ -101,6 +120,7 @@ test('student users see the student dashboard shell', function () {
 });
 
 test('student course registration starts empty and derives carryovers from approved results', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-01-15'));
     $this->seed(AcademicStructureSeeder::class);
 
     $department = Department::factory()->create();
@@ -162,7 +182,7 @@ test('student course registration starts empty and derives carryovers from appro
         'course_id' => $regularCourse->id,
         'academic_session_id' => $currentSession->id,
         'academic_year_semester_id' => $currentYearSemester->id,
-        'is_mandatory' => true,
+        'category' => CourseCategory::Departmental,
     ]);
 
     $carryoverCourse = Course::factory()->create([
@@ -178,7 +198,7 @@ test('student course registration starts empty and derives carryovers from appro
         'course_id' => $carryoverCourse->id,
         'academic_session_id' => $secondSession->id,
         'academic_year_semester_id' => $carryoverYearSemester->id,
-        'is_mandatory' => true,
+        'category' => CourseCategory::Departmental,
     ]);
     CourseOffering::factory()->create([
         'owner_type' => Department::class,
@@ -186,7 +206,7 @@ test('student course registration starts empty and derives carryovers from appro
         'course_id' => $carryoverCourse->id,
         'academic_session_id' => $currentSession->id,
         'academic_year_semester_id' => $carryoverYearSemester->id,
-        'is_mandatory' => true,
+        'category' => CourseCategory::Departmental,
     ]);
     createApprovedCourseResult(
         $department,
@@ -221,6 +241,7 @@ test('student course registration starts empty and derives carryovers from appro
 });
 
 test('course registration shows outstanding requirements and blocks failed prerequisites on submit', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-01-15'));
     $this->seed(AcademicStructureSeeder::class);
 
     $department = Department::factory()->create();
@@ -280,7 +301,7 @@ test('course registration shows outstanding requirements and blocks failed prere
         'course_id' => $prerequisiteCourse->id,
         'academic_session_id' => $previousSession->id,
         'academic_year_semester_id' => $previousYearSemester->id,
-        'is_mandatory' => true,
+        'category' => CourseCategory::Departmental,
     ]);
     CourseOffering::factory()->create([
         'owner_type' => Department::class,
@@ -288,7 +309,7 @@ test('course registration shows outstanding requirements and blocks failed prere
         'course_id' => $prerequisiteCourse->id,
         'academic_session_id' => $currentSession->id,
         'academic_year_semester_id' => $previousYearSemester->id,
-        'is_mandatory' => true,
+        'category' => CourseCategory::Departmental,
     ]);
     createApprovedCourseResult(
         $department,
@@ -311,7 +332,7 @@ test('course registration shows outstanding requirements and blocks failed prere
         'course_id' => $outstandingCourse->id,
         'academic_session_id' => $previousSession->id,
         'academic_year_semester_id' => $previousYearSemester->id,
-        'is_mandatory' => true,
+        'category' => CourseCategory::Departmental,
     ]);
     CourseOffering::factory()->create([
         'owner_type' => Department::class,
@@ -319,7 +340,7 @@ test('course registration shows outstanding requirements and blocks failed prere
         'course_id' => $outstandingCourse->id,
         'academic_session_id' => $currentSession->id,
         'academic_year_semester_id' => $previousYearSemester->id,
-        'is_mandatory' => true,
+        'category' => CourseCategory::Departmental,
     ]);
     $currentCourse = Course::factory()->create([
         'school_id' => $school->id,
@@ -328,15 +349,15 @@ test('course registration shows outstanding requirements and blocks failed prere
         'slug' => 'cpe-301-computer-architecture',
         'credit_units' => 3,
     ]);
-    $currentCourse->prerequisites()->sync([$prerequisiteCourse->id]);
     $currentOffering = CourseOffering::factory()->create([
         'owner_type' => Department::class,
         'owner_id' => $department->id,
         'course_id' => $currentCourse->id,
         'academic_session_id' => $currentSession->id,
         'academic_year_semester_id' => $currentYearSemester->id,
-        'is_mandatory' => true,
+        'category' => CourseCategory::Departmental,
     ]);
+    $currentOffering->prerequisiteCourses()->sync([$prerequisiteCourse->id]);
 
     $this->actingAs($user)->get(route('dashboard.section', [
         'section' => 'course-registration',
@@ -404,13 +425,17 @@ test('student users see pending and paid dues records', function () {
         'current_academic_year_id' => $currentLevel->id,
         'entry_academic_session_id' => $entrySession->id,
     ]);
-    $associationDue = createTestDue($department, $entrySession, $currentSession, 'Student Association Levy 300 Level', 500000);
+    $staffProfile = StaffProfile::factory()->create([
+        'department_id' => $department->id,
+    ]);
+    $paymentAccount = createTestPaymentAccount($department, $staffProfile);
+    $associationDue = createTestDue($department, $entrySession, $currentSession, 'Student Association Levy 300 Level', 500000, $staffProfile, $paymentAccount);
     assignTestDue($associationDue, $studentProfile);
-    $departmentDue = createTestDue($department, $entrySession, $currentSession, 'Departmental Dues 300 Level', 1500000);
+    $departmentDue = createTestDue($department, $entrySession, $currentSession, 'Departmental Dues 300 Level', 1500000, $staffProfile, $paymentAccount);
     assignTestDue($departmentDue, $studentProfile);
-    $insuranceDue = createTestDue($department, $entrySession, $currentSession, 'Student Insurance', 300000);
+    $insuranceDue = createTestDue($department, $entrySession, $currentSession, 'Student Insurance', 300000, $staffProfile, $paymentAccount);
     markTestDuePaid(assignTestDue($insuranceDue, $studentProfile), '2026-05-03 10:00:00');
-    $facultyDue = createTestDue($department, $entrySession, $currentSession, 'Faculty Development Levy', 800000);
+    $facultyDue = createTestDue($department, $entrySession, $currentSession, 'Faculty Development Levy', 800000, $staffProfile, $paymentAccount);
     markTestDuePaid(assignTestDue($facultyDue, $studentProfile), '2026-05-04 10:00:00');
 
     $response = $this->actingAs($user)->get(route('dashboard.section', [
@@ -486,15 +511,22 @@ test('students start Paystack checkout for a pending due', function () {
     $staffProfile = StaffProfile::factory()->create([
         'department_id' => $department->id,
     ]);
+    $previousStaffProfile = StaffProfile::factory()->create([
+        'department_id' => $department->id,
+    ]);
     $paymentAccount = createTestPaymentAccount($department, $staffProfile, $entrySession);
-    $due = createTestDue($department, $entrySession, $currentSession, 'Departmental Dues 300 Level', 1500000, $staffProfile, $paymentAccount);
+    $previousPaymentAccount = createTestPaymentAccount($department, $previousStaffProfile, $entrySession);
+    $due = createTestDue($department, $entrySession, $currentSession, 'Departmental Dues 300 Level', 1500000, $staffProfile, $previousPaymentAccount);
     $assignment = assignTestDue($due, $studentProfile);
 
-    $response = $this->actingAs($studentUser)->post(route('dashboard.dues.payments.store', [
-        'studentDueAssignment' => $assignment,
-    ]));
+    $response = $this->actingAs($studentUser)
+        ->withHeader('X-Inertia', 'true')
+        ->post(route('dashboard.dues.payments.store', [
+            'studentDueAssignment' => $assignment,
+        ]));
 
-    $response->assertRedirect('https://checkout.paystack.com/test-checkout');
+    $response->assertStatus(409)
+        ->assertHeader('X-Inertia-Location', 'https://checkout.paystack.com/test-checkout');
     Http::assertSent(fn ($request): bool => $request->url() === 'https://api.paystack.co/transaction/initialize'
         && $request->data()['email'] === 'student.payments@example.com'
         && $request->data()['amount'] === '1500000'
@@ -508,11 +540,71 @@ test('students start Paystack checkout for a pending due', function () {
         ->and($payment->status)->toBe(DuePayment::StatusInitialized)
         ->and($payment->payment_account_id)->toBe($paymentAccount->id)
         ->and($payment->authorization_url)->toBe('https://checkout.paystack.com/test-checkout')
-        ->and($payment->access_code)->toBe('ACCS_test_checkout');
+        ->and($payment->access_code)->toBe('ACCS_test_checkout')
+        ->and(data_get($payment->provider_payload, 'payout_account.subaccount_code'))
+        ->toBe($paymentAccount->paystack_subaccount_code);
+});
+
+test('an invalid Paystack subaccount returns students to dues without a server error', function () {
+    $this->seed(AcademicStructureSeeder::class);
+
+    Config::set('services.paystack.secret_key', 'sk_test_grade_manager');
+    Http::preventStrayRequests();
+    Http::fake([
+        'https://api.paystack.co/transaction/initialize' => Http::response([
+            'status' => false,
+            'message' => 'Invalid Subaccount.',
+        ], 404),
+    ]);
+
+    $department = Department::factory()->create();
+    $department->load('faculty.school');
+    $school = $department->faculty->school;
+    $entrySession = AcademicSession::factory()->create(['school_id' => $school->id]);
+    $currentSession = AcademicSession::factory()->create(['school_id' => $school->id]);
+    $studentUser = User::factory()->student()->create([
+        'school_id' => $school->id,
+        'email' => 'invalid-subaccount@example.com',
+    ]);
+    $studentProfile = StudentProfile::factory()->create([
+        'school_id' => $school->id,
+        'user_id' => $studentUser->id,
+        'department_id' => $department->id,
+        'current_academic_year_id' => AcademicYear::query()->where('slug', '100-level')->firstOrFail()->id,
+        'entry_academic_session_id' => $entrySession->id,
+    ]);
+    $staffProfile = StaffProfile::factory()->create([
+        'department_id' => $department->id,
+    ]);
+    $paymentAccount = createTestPaymentAccount($department, $staffProfile);
+    $due = createTestDue(
+        $department,
+        $entrySession,
+        $currentSession,
+        'Departmental Dues',
+        1500000,
+        $staffProfile,
+        $paymentAccount,
+    );
+    $assignment = assignTestDue($due, $studentProfile);
+
+    $this->actingAs($studentUser)
+        ->post(route('dashboard.dues.payments.store', [
+            'studentDueAssignment' => $assignment,
+        ]))
+        ->assertRedirect(route('dashboard.section', ['section' => 'dues']))
+        ->assertSessionHas(
+            'error',
+            'Payment is temporarily unavailable for this due. Contact your course adviser.',
+        );
+
+    expect(DuePayment::query()->firstOrFail()->status)->toBe(DuePayment::StatusFailed)
+        ->and($paymentAccount->refresh()->status)->toBe(PaymentAccount::StatusDisabled);
 });
 
 test('signed Paystack webhook marks a due as paid', function () {
     $this->seed(AcademicStructureSeeder::class);
+    Queue::fake();
 
     Config::set('services.paystack.secret_key', 'sk_test_grade_manager');
     Http::preventStrayRequests();
@@ -576,6 +668,13 @@ test('signed Paystack webhook marks a due as paid', function () {
                 'fees' => 20000,
                 'gateway_response' => 'Successful',
                 'paid_at' => '2026-05-04T10:00:00+00:00',
+                'metadata' => [
+                    'school_id' => $school->id,
+                    'due_id' => $due->id,
+                    'student_due_assignment_id' => $assignment->id,
+                    'student_profile_id' => $studentProfile->id,
+                    'payment_account_id' => $paymentAccount->id,
+                ],
             ],
         ]),
     ]);
@@ -595,8 +694,11 @@ test('signed Paystack webhook marks a due as paid', function () {
 
     expect($payment->refresh()->status)->toBe(DuePayment::StatusSuccess)
         ->and($payment->receipt_number)->not->toBeNull()
+        ->and($payment->receipt_status)->toBe(DuePayment::ReceiptStatusPending)
         ->and($assignment->refresh()->status)->toBe(StudentDueAssignment::StatusPaid)
         ->and($assignment->latest_due_payment_id)->toBe($payment->id);
+
+    Queue::assertPushed(GenerateDuePaymentReceipt::class);
 });
 
 test('student result levels stop at their current academic level', function () {
@@ -604,12 +706,17 @@ test('student result levels stop at their current academic level', function () {
 
     $department = Department::factory()->create();
     $currentLevel = AcademicYear::query()->where('slug', '300-level')->firstOrFail();
-    $user = User::factory()->student()->create();
+    $department->load('faculty');
+    $user = User::factory()->student()->create([
+        'school_id' => $department->faculty->school_id,
+    ]);
 
     StudentProfile::factory()->create([
+        'school_id' => $department->faculty->school_id,
         'user_id' => $user->id,
         'department_id' => $department->id,
         'current_academic_year_id' => $currentLevel->id,
+        'entry_academic_session_id' => null,
     ]);
 
     $response = $this->actingAs($user)->get(route('dashboard.level', [
@@ -626,17 +733,17 @@ test('student result levels stop at their current academic level', function () {
         ->where('dashboard.studentDues', null)
         ->has('dashboard.studentResults', fn (Assert $page) => $page
             ->where('level.title', '300 Level')
-            ->where('averageGpa', '0.00')
+            ->where('averageGpa', null)
             ->where('totalUnits', 0)
             ->where('failedCourses', 0)
             ->where('totalCourses', 0)
             ->has('semesters', 2)
             ->where('semesters.0.name', 'Harmattan')
-            ->where('semesters.0.gpa', '0.00')
+            ->where('semesters.0.gpa', null)
             ->where('semesters.0.totalUnits', 0)
             ->has('semesters.0.courses', 0)
             ->where('semesters.1.name', 'Rain')
-            ->where('semesters.1.gpa', '0.00')
+            ->where('semesters.1.gpa', null)
             ->where('semesters.1.totalUnits', 0)
             ->has('semesters.1.courses', 0)
         )
@@ -649,6 +756,8 @@ test('student result levels stop at their current academic level', function () {
 });
 
 test('faculty heads see the faculty head dashboard shell', function () {
+    $this->seed(AcademicStructureSeeder::class);
+
     $faculty = Faculty::factory()->create();
     $department = Department::factory()->create([
         'faculty_id' => $faculty->id,
@@ -660,6 +769,16 @@ test('faculty heads see the faculty head dashboard shell', function () {
     ]);
 
     $faculty->assignHead($staffProfile);
+    $studentUser = User::factory()->student()->create([
+        'school_id' => $faculty->school_id,
+        'name' => 'Ada Nwosu',
+    ]);
+    StudentProfile::factory()->create([
+        'school_id' => $faculty->school_id,
+        'user_id' => $studentUser->id,
+        'department_id' => $department->id,
+        'current_academic_year_id' => AcademicYear::query()->where('slug', '100-level')->firstOrFail()->id,
+    ]);
 
     $response = $this->actingAs($user)->get(route('dashboard'));
 
@@ -672,6 +791,8 @@ test('faculty heads see the faculty head dashboard shell', function () {
         ->where('dashboard.facultyHead.metrics.departments', 1)
         ->where('dashboard.facultyHead.metrics.hodCoverage', '0/1')
         ->where('dashboard.facultyHead.departments.0.status', 'Vacant')
+        ->where('dashboard.facultyHead.students.0.fullName', 'Ada Nwosu')
+        ->has('dashboard.facultyHead.students.0.levelGpas')
         ->where('dashboard.facultyHead.pendingTasks.0.status', 'Needs action')
         ->where('dashboard.staffHome', null)
         ->etc());
@@ -1717,7 +1838,7 @@ test('staff can review approve and return course registrations for assigned sets
         'course_id' => $course->id,
         'academic_session_id' => $academicSession->id,
         'academic_year_semester_id' => $yearSemester->id,
-        'is_mandatory' => true,
+        'category' => CourseCategory::Departmental,
     ]);
     $registration = CourseRegistration::query()->create([
         'school_id' => $school->id,
@@ -1814,6 +1935,12 @@ test('staff home is scoped to assigned student sets', function () {
         'starts_on' => '2023-09-01',
         'ends_on' => '2024-08-31',
     ]);
+    AcademicSession::factory()->create([
+        'school_id' => $school->id,
+        'name' => '2024/2025',
+        'starts_on' => '2024-09-01',
+        'ends_on' => '2025-08-31',
+    ]);
     $otherEntrySession = AcademicSession::factory()->create([
         'school_id' => $school->id,
         'name' => '2022/2023',
@@ -1891,7 +2018,7 @@ test('staff home is scoped to assigned student sets', function () {
             ->where('students.0.registrationNumber', '2023001001')
             ->where('totalStudents', 2)
             ->where('maximumCourseUnits', 24)
-            ->where('studentsWithCarryovers', 2)
+            ->where('studentsWithCarryovers', 0)
             ->has('pendingDuesByStudent', 2)
             ->where('pendingDuesByStudent.0.studentName', 'Ada Nwosu')
             ->where('pendingDuesByStudent.0.registrationNumber', '2023001001')
@@ -1902,9 +2029,7 @@ test('staff home is scoped to assigned student sets', function () {
             ->where('recentPayments.0.studentName', 'Ada Nwosu')
             ->where('recentPayments.0.dueName', 'Faculty Development Levy')
             ->where('recentPayments.0.amount', 'NGN 8,000')
-            ->has('carryoverSummaries', 1)
-            ->where('carryoverSummaries.0.code', 'MTH 201')
-            ->has('carryoverSummaries.0.students', 2)
+            ->has('carryoverSummaries', 0)
         )
         ->where('dashboard.studentHome', null)
         ->etc());
@@ -2141,7 +2266,7 @@ test('staff Paystack account form loads banks from Paystack', function () {
         && $request->data()['country'] === 'nigeria');
 });
 
-test('staff can connect a Paystack payout account for an assigned set', function () {
+test('staff can connect one Paystack payout account for all their dues', function () {
     $this->seed(AcademicStructureSeeder::class);
 
     Cache::forget(PaystackService::NigerianBankCacheKey);
@@ -2199,9 +2324,8 @@ test('staff can connect a Paystack payout account for an assigned set', function
     $department->assignAdvisorToStudentSet($assignedEntrySession, $staffProfile, $currentSession);
 
     $response = $this->actingAs($user)->post(route('dashboard.payment-settings.store'), [
-        'entry_academic_session_id' => $assignedEntrySession->id,
-        'label' => '300L dues payout',
-        'business_name' => 'CPE 300L Dues',
+        'label' => 'Student dues payout',
+        'business_name' => 'CPE Student Dues',
         'bank_code' => '058',
         'bank_name' => 'Browser Submitted Bank',
         'account_number' => '0123456789',
@@ -2210,10 +2334,10 @@ test('staff can connect a Paystack payout account for an assigned set', function
     $response->assertRedirect(route('dashboard.section', [
         'section' => 'payment-settings',
     ]));
-    $response->assertSessionHas('success', 'Payout account connected. Student dues for the selected set can now settle into that account.');
+    $response->assertSessionHas('success', 'Payout account saved. New payments for all your dues will use this account.');
 
     Http::assertSent(fn ($request): bool => $request->url() === 'https://api.paystack.co/subaccount'
-        && $request->data()['business_name'] === 'CPE 300L Dues'
+        && $request->data()['business_name'] === 'CPE Student Dues'
         && $request->data()['bank_code'] === '058'
         && ! array_key_exists('settlement_bank', $request->data())
         && $request->data()['account_number'] === '0123456789'
@@ -2222,11 +2346,84 @@ test('staff can connect a Paystack payout account for an assigned set', function
     $paymentAccount = PaymentAccount::query()->firstOrFail();
 
     expect($paymentAccount->status)->toBe(PaymentAccount::StatusActive)
-        ->and($paymentAccount->entry_academic_session_id)->toBe($assignedEntrySession->id)
+        ->and($paymentAccount->entry_academic_session_id)->toBeNull()
         ->and($paymentAccount->bank_name)->toBe('Paystack Returned Bank')
         ->and($paymentAccount->account_name)->toBe('Ada Eze')
         ->and($paymentAccount->account_number_last4)->toBe('6789')
-        ->and($paymentAccount->paystack_subaccount_code)->toBe('ACCT_staff_dues');
+        ->and($paymentAccount->paystack_subaccount_code)->toBe('ACCT_staff_dues')
+        ->and($paymentAccount->provider_payload)->not->toHaveKeys(['resolved_account', 'subaccount']);
+});
+
+test('changing payout details updates the advisers current account instead of adding another account', function () {
+    $this->seed(AcademicStructureSeeder::class);
+
+    Cache::forget(PaystackService::NigerianBankCacheKey);
+    Config::set('services.paystack.secret_key', 'sk_test_grade_manager');
+    Http::preventStrayRequests();
+    Http::fake([
+        'https://api.paystack.co/bank/resolve*' => Http::response([
+            'status' => true,
+            'data' => [
+                'account_number' => '1111111111',
+                'account_name' => 'Ada Eze',
+            ],
+        ]),
+        'https://api.paystack.co/subaccount/ACCT_existing' => Http::response([
+            'status' => true,
+            'data' => [
+                'id' => 27,
+                'subaccount_code' => 'ACCT_existing',
+                'business_name' => 'CPE Student Dues',
+                'domain' => 'test',
+                'active' => true,
+            ],
+        ]),
+        'https://api.paystack.co/bank*' => Http::response([
+            'status' => true,
+            'data' => [
+                ['code' => '058', 'name' => 'Guaranty Trust Bank'],
+            ],
+            'meta' => ['next' => null],
+        ]),
+    ]);
+
+    $department = Department::factory()->create();
+    $department->load('faculty.school');
+    $school = $department->faculty->school;
+    $user = User::factory()->staff()->create([
+        'school_id' => $school->id,
+        'name' => 'Ada Eze',
+    ]);
+    $staffProfile = StaffProfile::factory()->create([
+        'user_id' => $user->id,
+        'department_id' => $department->id,
+    ]);
+    $paymentAccount = createTestPaymentAccount($department, $staffProfile);
+    $paymentAccount->forceFill([
+        'paystack_subaccount_code' => 'ACCT_existing',
+    ])->save();
+
+    $this->actingAs($user)
+        ->post(route('dashboard.payment-settings.store'), [
+            'label' => 'Student dues payout',
+            'business_name' => 'CPE Student Dues',
+            'bank_code' => '058',
+            'account_number' => '1111111111',
+        ])
+        ->assertRedirect(route('dashboard.section', ['section' => 'payment-settings']))
+        ->assertSessionHas(
+            'success',
+            'Payout account saved. New payments for all your dues will use this account.',
+        );
+
+    expect(PaymentAccount::query()->where('staff_profile_id', $staffProfile->id)->count())->toBe(1)
+        ->and($paymentAccount->refresh()->account_number)->toBe('1111111111')
+        ->and($paymentAccount->account_name)->toBe('Ada Eze')
+        ->and($paymentAccount->paystack_subaccount_code)->toBe('ACCT_existing');
+
+    Http::assertSent(fn ($request): bool => $request->method() === 'PUT'
+        && $request->url() === 'https://api.paystack.co/subaccount/ACCT_existing'
+        && $request->data()['account_number'] === '1111111111');
 });
 
 test('staff students page lists assigned students alphabetically', function () {
@@ -2247,6 +2444,12 @@ test('staff students page lists assigned students alphabetically', function () {
         'name' => '2023/2024',
         'starts_on' => '2023-09-01',
         'ends_on' => '2024-08-31',
+    ]);
+    AcademicSession::factory()->create([
+        'school_id' => $school->id,
+        'name' => '2024/2025',
+        'starts_on' => '2024-09-01',
+        'ends_on' => '2025-08-31',
     ]);
     $otherEntrySession = AcademicSession::factory()->create([
         'school_id' => $school->id,
@@ -2319,16 +2522,136 @@ test('staff students page lists assigned students alphabetically', function () {
             ->where('students.0.registrationNumber', '2023001001')
             ->where('students.0.currentLevel.title', '300 Level')
             ->where('students.0.profileUrl', fn (string $url): bool => str_contains($url, '/dashboard/students/2023001001'))
-            ->has('students.0.pendingCarryovers', 1)
-            ->where('students.0.pendingCarryovers.0', 'MTH 201')
+            ->where('students.0.pendingCarryovers', [])
             ->has('students.0.levelGpas', 3)
             ->where('students.0.levelGpas.0.level', '100L')
-            ->where('students.0.cgpa', '3.55')
+            ->where('students.0.cgpa', null)
             ->where('students.1.fullName', 'Chidera Eze')
             ->etc()
         )
         ->where('dashboard.studentHome', null)
         ->etc());
+});
+
+test('course advisers can provision a student for an assigned set', function () {
+    $this->seed(AcademicStructureSeeder::class);
+
+    $department = Department::factory()->create();
+    $department->load('faculty.school');
+    $school = $department->faculty->school;
+    $currentSession = AcademicSession::factory()->create([
+        'school_id' => $school->id,
+        'name' => '2025/2026',
+        'starts_on' => '2025-09-01',
+        'ends_on' => '2026-08-31',
+    ]);
+    $entrySession = AcademicSession::factory()->create([
+        'school_id' => $school->id,
+        'name' => '2023/2024',
+        'starts_on' => '2023-09-01',
+        'ends_on' => '2024-08-31',
+    ]);
+    $staffUser = User::factory()->staff()->create(['school_id' => $school->id]);
+    $staffProfile = StaffProfile::factory()->create([
+        'user_id' => $staffUser->id,
+        'department_id' => $department->id,
+    ]);
+
+    $department->assignAdvisorToStudentSet($entrySession, $staffProfile, $currentSession);
+
+    $this->actingAs($staffUser)
+        ->get(route('dashboard.students.create'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('dashboard')
+            ->where('dashboard.staffStudentForm.mode', 'create')
+            ->where('dashboard.staffStudentForm.assignedSets.0.entrySession.id', $entrySession->id)
+            ->etc());
+
+    $response = $this->actingAs($staffUser)->post(route('dashboard.students.store'), [
+        'entry_academic_session_id' => $entrySession->id,
+        'registration_number' => '2023004001',
+        'access_code' => 'CPE-STUDENT-ONE',
+    ]);
+
+    $response->assertRedirect(route('dashboard.section', ['section' => 'students']));
+    $response->assertSessionHasNoErrors();
+
+    $studentProfile = StudentProfile::query()
+        ->where('school_id', $school->id)
+        ->where('registration_number', '2023004001')
+        ->firstOrFail();
+
+    expect($studentProfile->department_id)->toBe($department->id)
+        ->and($studentProfile->entry_academic_session_id)->toBe($entrySession->id)
+        ->and($studentProfile->user->account_type)->toBe(AccountType::Student)
+        ->and($studentProfile->user->status)->toBe(AccountStatus::Pending)
+        ->and($studentProfile->user->access_code)->toBe('CPE-STUDENT-ONE')
+        ->and($studentProfile->user->email)->toBeNull();
+});
+
+test('course advisers can import students in auditable spreadsheet batches', function () {
+    $this->seed(AcademicStructureSeeder::class);
+
+    $department = Department::factory()->create();
+    $department->load('faculty.school');
+    $school = $department->faculty->school;
+    $currentSession = AcademicSession::factory()->create([
+        'school_id' => $school->id,
+        'name' => '2025/2026',
+        'starts_on' => '2025-09-01',
+        'ends_on' => '2026-08-31',
+    ]);
+    $entrySession = AcademicSession::factory()->create([
+        'school_id' => $school->id,
+        'name' => '2023/2024',
+        'starts_on' => '2023-09-01',
+        'ends_on' => '2024-08-31',
+    ]);
+    $staffUser = User::factory()->staff()->create(['school_id' => $school->id]);
+    $staffProfile = StaffProfile::factory()->create([
+        'user_id' => $staffUser->id,
+        'department_id' => $department->id,
+    ]);
+
+    $department->assignAdvisorToStudentSet($entrySession, $staffProfile, $currentSession);
+
+    $response = $this->actingAs($staffUser)->post(route('dashboard.students.import.store'), [
+        'entry_academic_session_id' => $entrySession->id,
+        'file_name' => 'student-classlist.xlsx',
+        'import_key' => 'student-import-test',
+        'batch_number' => 1,
+        'total_batches' => 1,
+        'start_row' => 1,
+        'total_rows' => 2,
+        'mappings' => [
+            'registrationNumber' => 'Registration Number',
+            'accessCode' => 'Access Code',
+        ],
+        'rows' => [
+            ['registrationNumber' => '2023004101', 'accessCode' => 'CPE-STUDENT-A'],
+            ['registrationNumber' => '2023004102', 'accessCode' => ''],
+        ],
+    ]);
+
+    $response->assertRedirect(route('dashboard.section', ['section' => 'students']));
+    $response->assertSessionHasNoErrors();
+
+    $importBatch = ImportBatch::query()->where('import_key', 'student-import-test')->firstOrFail();
+    $students = StudentProfile::query()
+        ->with('user')
+        ->where('school_id', $school->id)
+        ->whereIn('registration_number', ['2023004101', '2023004102'])
+        ->orderBy('registration_number')
+        ->get();
+
+    expect($importBatch->mappings)->toBe([
+        'registrationNumber' => 'Registration Number',
+        'accessCode' => 'Access Code',
+    ])->and($importBatch->rows()->count())->toBe(2)
+        ->and($students)->toHaveCount(2)
+        ->and($students[0]->user->access_code)->toBe('CPE-STUDENT-A')
+        ->and($students[1]->user->access_code)->toStartWith($department->abbreviation.'-STUDENT-');
 });
 
 test('department heads see the hod dashboard shell', function () {
@@ -2378,7 +2701,8 @@ test('department heads use student results instead of reports', function () {
             ->where('dashboard.role', 'hod')
             ->where('dashboard.section', 'student-results')
             ->where('dashboard.sectionTitle', 'Student Results')
-            ->where('dashboard.hod.studentResults.studentsCount', 0)
+            ->has('dashboard.hod.studentResults.resultSheets', 0)
+            ->has('dashboard.hod.studentResults.approvalSheets', 0)
             ->etc());
 
     $this->actingAs($user)->get(route('dashboard.section', [
@@ -2532,11 +2856,15 @@ test('result sheet detail is limited to assigned staff and department heads', fu
     $resultSheet->refresh();
 
     expect($resultSheet->status)->toBe(ResultSheet::StatusReturned)
-        ->and($resultSheet->correction_note)->toBe('Incomplete data');
+        ->and($resultSheet->correction_note)->toBe('Incomplete data')
+        ->and($resultSheet->current_revision_number)->toBe(1)
+        ->and($resultSheet->revisions()->value('action'))->toBe('returned_for_correction')
+        ->and($resultSheet->revisions()->value('actor_user_id'))->toBe($hodUser->id);
 });
 
 test('result import stores regular and carried courses in one semester sheet', function () {
     $this->seed(AcademicStructureSeeder::class);
+    Storage::fake('local');
 
     $department = Department::factory()->create();
     $department->load('faculty.school');
@@ -2631,6 +2959,15 @@ test('result import stores regular and carried courses in one semester sheet', f
         'entry_academic_session_id' => $entrySession->id,
         'academic_year_semester_id' => $yearSemester->id,
         'action' => 'draft',
+        'source_file' => UploadedFile::fake()->create(
+            '300-level-harmattan-results.xlsx',
+            24,
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ),
+        'column_mappings' => [
+            'registration_number' => 'Registration Number',
+            'CPE 301' => 'Computer Architecture',
+        ],
         'courses' => [
             ['course_offering_id' => $regularOffering->id, 'code' => 'CPE 301', 'title' => 'Computer Architecture', 'credit_units' => 3],
             ['course_offering_id' => $carryoverOffering->id, 'code' => 'CPE 204', 'title' => 'Signals and Systems', 'credit_units' => 3],
@@ -2651,6 +2988,7 @@ test('result import stores regular and carried courses in one semester sheet', f
 
     $sheet = $importer->import($department, $staffProfile, $payload);
     $sheet->load('courses', 'studentResults.courseResults.resultSheetCourse');
+    $firstRevision = $sheet->revisions()->firstOrFail();
 
     expect(ResultSheet::query()
         ->where('department_id', $department->id)
@@ -2661,7 +2999,19 @@ test('result import stores regular and carried courses in one semester sheet', f
         ->and($sheet->courses)->toHaveCount(2)
         ->and($sheet->studentResults)->toHaveCount(2)
         ->and($sheet->studentResults->firstWhere('student_profile_id', $studentOne->id)?->courseResults)->toHaveCount(2)
-        ->and($sheet->studentResults->firstWhere('student_profile_id', $studentTwo->id)?->courseResults)->toHaveCount(1);
+        ->and($sheet->studentResults->firstWhere('student_profile_id', $studentTwo->id)?->courseResults)->toHaveCount(1)
+        ->and($sheet->current_revision_number)->toBe(1)
+        ->and($firstRevision->action)->toBe('draft_saved')
+        ->and($firstRevision->source_file_checksum)->not->toBeNull()
+        ->and($firstRevision->column_mappings['registration_number'])->toBe('Registration Number')
+        ->and($firstRevision->snapshot['students'])->toHaveCount(2);
+
+    Storage::disk('local')->assertExists($firstRevision->source_file_path);
+
+    $this->actingAs($staffUser)
+        ->get(route('dashboard.results.source-file', $sheet))
+        ->assertOk()
+        ->assertDownload('300-level-harmattan-results.xlsx');
 
     $this->actingAs($staffUser)
         ->get(route('dashboard.results.show', ['resultSheet' => $sheet]))
@@ -2676,6 +3026,7 @@ test('result import stores regular and carried courses in one semester sheet', f
     $updated = $importer->import($department, $staffProfile, [
         ...$payload,
         'action' => 'submit',
+        'source_file' => null,
         'rows' => [
             [
                 'row_number' => 1,
@@ -2687,6 +3038,12 @@ test('result import stores regular and carried courses in one semester sheet', f
 
     expect($updated->id)->toBe($sheet->id)
         ->and($updated->status)->toBe(ResultSheet::StatusSubmitted)
+        ->and($updated->current_revision_number)->toBe(2)
+        ->and($updated->revisions()->count())->toBe(2)
+        ->and($updated->revisions()->orderBy('revision_number')->pluck('action')->all())->toBe([
+            'draft_saved',
+            'submitted',
+        ])
         ->and(ResultSheet::query()
             ->where('department_id', $department->id)
             ->where('entry_academic_session_id', $entrySession->id)
@@ -2761,7 +3118,7 @@ test('department heads can view student profiles in their department', function 
             ->where('dashboard.studentRecord.student.fullName', 'Ada Nwosu')
             ->where('dashboard.studentRecord.student.registrationNumber', '2023001001')
             ->where('dashboard.studentRecord.entrySession.name', '2023/2024')
-            ->has('dashboard.studentRecord.semesters', 6)
+            ->has('dashboard.studentRecord.semesters', 0)
             ->etc());
 
     $this->actingAs($hodUser)->get(route('dashboard.students.show', [
@@ -2836,6 +3193,201 @@ test('departments replace the current hod when a new staff profile is assigned',
     $department->assignHeadOfDepartment($secondProfile);
 
     expect($department->hod_staff_profile_id)->toBe($secondProfile->id);
+});
+
+test('course advisers manage the full due lifecycle and can update pending amounts', function () {
+    $this->seed(AcademicStructureSeeder::class);
+
+    $department = Department::factory()->create();
+    $department->load('faculty.school');
+    $school = $department->faculty->school;
+    $entrySession = AcademicSession::factory()->create([
+        'school_id' => $school->id,
+        'name' => '2023/2024',
+        'starts_on' => '2023-09-01',
+        'ends_on' => '2024-08-31',
+    ]);
+    AcademicSession::factory()->create([
+        'school_id' => $school->id,
+        'name' => '2025/2026',
+        'starts_on' => '2025-09-01',
+        'ends_on' => '2026-08-31',
+    ]);
+    $staffUser = User::factory()->staff()->create(['school_id' => $school->id]);
+    $staffProfile = StaffProfile::factory()->create([
+        'user_id' => $staffUser->id,
+        'department_id' => $department->id,
+    ]);
+    StudentSetAdvisorAssignment::factory()->create([
+        'department_id' => $department->id,
+        'entry_academic_session_id' => $entrySession->id,
+        'staff_profile_id' => $staffProfile->id,
+    ]);
+    createTestPaymentAccount($department, $staffProfile, $entrySession);
+    $currentLevel = AcademicYear::query()->where('slug', '300-level')->firstOrFail();
+    $studentProfile = StudentProfile::factory()->create([
+        'school_id' => $school->id,
+        'department_id' => $department->id,
+        'entry_academic_session_id' => $entrySession->id,
+        'current_academic_year_id' => $currentLevel->id,
+    ]);
+    $payload = [
+        'entry_academic_session_id' => $entrySession->id,
+        'title' => 'Departmental Dues 300 Level',
+        'description' => 'Department levy.',
+        'amount_naira' => 15000,
+        'due_on' => '2026-07-31',
+    ];
+
+    $this->actingAs($staffUser)
+        ->post(route('dashboard.dues.store'), [...$payload, 'action' => 'draft'])
+        ->assertRedirect();
+
+    $due = Due::query()->latest('id')->firstOrFail();
+
+    expect($due->status)->toBe(Due::StatusDraft)
+        ->and($due->assignments()->count())->toBe(0);
+
+    $this->actingAs($staffUser)
+        ->patch(route('dashboard.dues.update', $due), [...$payload, 'action' => 'publish'])
+        ->assertRedirect(route('dashboard.dues.show', $due));
+
+    $assignment = $due->assignments()->where('student_profile_id', $studentProfile->id)->firstOrFail();
+
+    expect($due->refresh()->status)->toBe(Due::StatusPublished)
+        ->and($assignment->status)->toBe(StudentDueAssignment::StatusPending);
+
+    $openCheckout = DuePayment::query()->create([
+        'student_due_assignment_id' => $assignment->id,
+        'student_profile_id' => $assignment->student_profile_id,
+        'school_id' => $school->id,
+        'payment_account_id' => $due->payment_account_id,
+        'provider' => DuePayment::ProviderPaystack,
+        'reference' => 'DUE-AMOUNT-CHANGE-TEST',
+        'amount_kobo' => 1500000,
+        'currency' => 'NGN',
+        'status' => DuePayment::StatusInitialized,
+    ]);
+
+    $this->actingAs($staffUser)
+        ->patch(route('dashboard.dues.update', $due), [
+            ...$payload,
+            'amount_naira' => 16000,
+            'action' => 'draft',
+        ])
+        ->assertRedirect(route('dashboard.dues.show', $due));
+
+    expect($due->refresh()->amount_kobo)->toBe(1600000)
+        ->and($assignment->refresh()->amount_kobo)->toBe(1600000)
+        ->and($openCheckout->refresh()->status)->toBe(DuePayment::StatusAbandoned);
+
+    $this->actingAs($staffUser)
+        ->get(route('dashboard.dues.assignments.waive.create', [$due, $assignment]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('dashboard.staffDueWaiverForm.due.id', $due->id)
+            ->where('dashboard.staffDueWaiverForm.assignment.id', $assignment->id)
+            ->etc());
+
+    $this->actingAs($staffUser)
+        ->patch(route('dashboard.dues.assignments.waive', [$due, $assignment]), [
+            'reason' => 'Department scholarship',
+        ])
+        ->assertRedirect(route('dashboard.dues.show', $due));
+
+    expect($assignment->refresh()->status)->toBe(StudentDueAssignment::StatusWaived)
+        ->and($assignment->waiver_reason)->toBe('Department scholarship')
+        ->and($assignment->waived_by_user_id)->toBe($staffUser->id);
+
+    $this->actingAs($staffUser)
+        ->patch(route('dashboard.dues.assignments.restore', [$due, $assignment]))
+        ->assertRedirect(route('dashboard.dues.show', $due));
+
+    $this->actingAs($staffUser)
+        ->patch(route('dashboard.dues.archive', $due))
+        ->assertRedirect(route('dashboard.dues.show', $due));
+
+    expect($due->refresh()->status)->toBe(Due::StatusArchived);
+
+    $this->actingAs($staffUser)
+        ->patch(route('dashboard.dues.restore', $due))
+        ->assertRedirect(route('dashboard.dues.show', $due));
+
+    expect($due->refresh()->status)->toBe(Due::StatusPublished)
+        ->and($assignment->refresh()->status)->toBe(StudentDueAssignment::StatusPending);
+
+    $export = $this->actingAs($staffUser)->get(route('dashboard.dues.export', $due));
+
+    $export->assertOk()->assertDownload('due-payments-departmental-dues-300-level.csv');
+    expect($export->streamedContent())
+        ->toContain('Registration Number')
+        ->toContain($studentProfile->registration_number);
+
+    $this->actingAs($staffUser)
+        ->post(route('dashboard.students.store'), [
+            'entry_academic_session_id' => $entrySession->id,
+            'registration_number' => '2023007777',
+            'access_code' => 'CPE-STUDENT-LATE',
+        ])
+        ->assertRedirect(route('dashboard.section', ['section' => 'students']));
+
+    $lateStudent = StudentProfile::query()->where('registration_number', '2023007777')->firstOrFail();
+
+    expect($due->assignments()->where('student_profile_id', $lateStudent->id)->exists())->toBeTrue();
+});
+
+test('Paystack refund webhooks reverse successful payments and reopen the due', function () {
+    $this->seed(AcademicStructureSeeder::class);
+    Queue::fake();
+
+    Config::set('services.paystack.secret_key', 'sk_test_grade_manager');
+    $department = Department::factory()->create();
+    $department->load('faculty.school');
+    $school = $department->faculty->school;
+    $entrySession = AcademicSession::factory()->create([
+        'school_id' => $school->id,
+        'name' => '2023/2024',
+        'starts_on' => '2023-09-01',
+        'ends_on' => '2024-08-31',
+    ]);
+    $currentSession = AcademicSession::factory()->create([
+        'school_id' => $school->id,
+        'name' => '2025/2026',
+        'starts_on' => '2025-09-01',
+        'ends_on' => '2026-08-31',
+    ]);
+    $currentLevel = AcademicYear::query()->where('slug', '300-level')->firstOrFail();
+    $studentProfile = StudentProfile::factory()->create([
+        'school_id' => $school->id,
+        'department_id' => $department->id,
+        'entry_academic_session_id' => $entrySession->id,
+        'current_academic_year_id' => $currentLevel->id,
+    ]);
+    $staffProfile = StaffProfile::factory()->create(['department_id' => $department->id]);
+    $paymentAccount = createTestPaymentAccount($department, $staffProfile, $entrySession);
+    $due = createTestDue($department, $entrySession, $currentSession, 'Departmental Dues', 1500000, $staffProfile, $paymentAccount);
+    $assignment = assignTestDue($due, $studentProfile);
+    $payment = markTestDuePaid($assignment);
+    $rawPayload = json_encode([
+        'event' => 'refund.processed',
+        'data' => [
+            'transaction' => ['reference' => $payment->reference],
+        ],
+    ], JSON_THROW_ON_ERROR);
+    $signature = hash_hmac('sha512', $rawPayload, 'sk_test_grade_manager');
+
+    $this->call('POST', route('paystack.webhook'), [], [], [], [
+        'CONTENT_TYPE' => 'application/json',
+        'HTTP_X_PAYSTACK_SIGNATURE' => $signature,
+    ], $rawPayload)->assertNoContent();
+
+    expect($payment->refresh()->status)->toBe(DuePayment::StatusReversed)
+        ->and($payment->reversal_reason)->toBe('Paystack refund processed')
+        ->and($payment->receipt_status)->toBe(DuePayment::ReceiptStatusPending)
+        ->and($assignment->refresh()->status)->toBe(StudentDueAssignment::StatusPending)
+        ->and($assignment->latest_due_payment_id)->toBeNull();
+
+    Queue::assertPushed(GenerateDuePaymentReceipt::class);
 });
 
 function createTestDue(
@@ -2922,11 +3474,15 @@ function markTestDuePaid(StudentDueAssignment $assignment, string $paidAt = '202
         'currency' => 'NGN',
         'authorization_url' => 'https://checkout.paystack.com/test-'.$assignment->id,
         'access_code' => 'ACCS_test_'.$assignment->id,
-        'paystack_transaction_id' => 'TEST-'.$assignment->id,
+        'paystack_transaction_id' => (string) (900000 + $assignment->id),
         'channel' => 'card',
         'gateway_response' => 'Successful',
         'paid_at' => $paidAt,
         'receipt_number' => 'GM-TEST-'.str_pad((string) $assignment->id, 6, '0', STR_PAD_LEFT),
+        'receipt_status' => DuePayment::ReceiptStatusReady,
+        'receipt_disk' => 'local',
+        'receipt_path' => 'receipts/test/'.$assignment->id.'.pdf',
+        'receipt_generated_at' => $paidAt,
         'provider_payload' => [
             'status' => DuePayment::StatusSuccess,
             'amount' => $assignment->amount_kobo,

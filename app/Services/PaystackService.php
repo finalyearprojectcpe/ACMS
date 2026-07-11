@@ -4,11 +4,14 @@ namespace App\Services;
 
 use App\Models\DuePayment;
 use App\Models\PaymentAccount;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Cache;
 use RuntimeException;
+use Throwable;
 
 class PaystackService
 {
@@ -67,14 +70,10 @@ class PaystackService
             ],
         ];
 
-        $response = $this->client()->post('/transaction/initialize', $payload)->throw();
-        $responsePayload = $response->json();
-
-        if (! is_array($responsePayload) || Arr::get($responsePayload, 'status') !== true) {
-            throw new RuntimeException('Paystack could not start this payment.');
-        }
-
-        return Arr::get($responsePayload, 'data', []);
+        return $this->responseData(
+            $this->client()->post('/transaction/initialize', $payload),
+            'Paystack could not start this payment.',
+        );
     }
 
     /**
@@ -82,16 +81,10 @@ class PaystackService
      */
     public function verifyTransaction(string $reference): array
     {
-        $response = $this->client()
-            ->get('/transaction/verify/'.rawurlencode($reference))
-            ->throw();
-        $payload = $response->json();
-
-        if (! is_array($payload) || Arr::get($payload, 'status') !== true) {
-            throw new RuntimeException('Paystack could not verify this payment.');
-        }
-
-        return Arr::get($payload, 'data', []);
+        return $this->responseData(
+            $this->client()->get('/transaction/verify/'.rawurlencode($reference)),
+            'Paystack could not verify this payment.',
+        );
     }
 
     /**
@@ -114,16 +107,9 @@ class PaystackService
                 $query['next'] = $next;
             }
 
-            $response = $this->client()
-                ->get('/bank', $query)
-                ->throw();
+            $response = $this->client()->get('/bank', $query);
             $payload = $response->json();
-
-            if (! is_array($payload) || Arr::get($payload, 'status') !== true) {
-                throw new RuntimeException('Paystack could not load Nigerian banks.');
-            }
-
-            $data = Arr::get($payload, 'data', []);
+            $data = $this->responseData($response, 'Paystack could not load Nigerian banks.');
 
             if (is_array($data)) {
                 $banks = array_merge($banks, $data);
@@ -155,19 +141,13 @@ class PaystackService
      */
     public function resolveAccount(string $accountNumber, string $bankCode): array
     {
-        $response = $this->client()
-            ->get('/bank/resolve', [
+        return $this->responseData(
+            $this->client()->get('/bank/resolve', [
                 'account_number' => $accountNumber,
                 'bank_code' => $bankCode,
-            ])
-            ->throw();
-        $payload = $response->json();
-
-        if (! is_array($payload) || Arr::get($payload, 'status') !== true) {
-            throw new RuntimeException('Paystack could not confirm this account number.');
-        }
-
-        return Arr::get($payload, 'data', []);
+            ]),
+            'Paystack could not confirm this account number.',
+        );
     }
 
     /**
@@ -179,20 +159,39 @@ class PaystackService
         string $accountNumber,
         string $description,
     ): array {
-        $response = $this->client()->post('/subaccount', [
-            'business_name' => $businessName,
-            'bank_code' => $bankCode,
-            'account_number' => $accountNumber,
-            'percentage_charge' => 0,
-            'description' => $description,
-        ])->throw();
-        $payload = $response->json();
+        return $this->responseData(
+            $this->client()->post('/subaccount', [
+                'business_name' => $businessName,
+                'bank_code' => $bankCode,
+                'account_number' => $accountNumber,
+                'percentage_charge' => 0,
+                'description' => $description,
+            ]),
+            'Paystack could not create this payout account.',
+        );
+    }
 
-        if (! is_array($payload) || Arr::get($payload, 'status') !== true) {
-            throw new RuntimeException('Paystack could not create this payout account.');
-        }
-
-        return Arr::get($payload, 'data', []);
+    /**
+     * @return array<string, mixed>
+     */
+    public function updateSubaccount(
+        string $subaccountCode,
+        string $businessName,
+        string $bankCode,
+        string $accountNumber,
+        string $description,
+    ): array {
+        return $this->responseData(
+            $this->client()->put('/subaccount/'.rawurlencode($subaccountCode), [
+                'business_name' => $businessName,
+                'bank_code' => $bankCode,
+                'account_number' => $accountNumber,
+                'percentage_charge' => 0,
+                'description' => $description,
+                'active' => true,
+            ]),
+            'Paystack could not update this payout account.',
+        );
     }
 
     public function validSignature(string $rawPayload, ?string $signature): bool
@@ -213,7 +212,37 @@ class PaystackService
             ->asJson()
             ->connectTimeout(5)
             ->timeout(15)
-            ->retry(2, 250);
+            ->retry(
+                2,
+                250,
+                fn (Throwable $throwable): bool => $throwable instanceof ConnectionException,
+                throw: false,
+            );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function responseData(Response $response, string $fallbackMessage): array
+    {
+        $payload = $response->json();
+        $providerMessage = is_array($payload) ? Arr::get($payload, 'message') : null;
+
+        if ($response->failed() || ! is_array($payload) || Arr::get($payload, 'status') !== true) {
+            throw new PaystackException(
+                $fallbackMessage,
+                $response->status(),
+                is_string($providerMessage) ? $providerMessage : null,
+            );
+        }
+
+        $data = Arr::get($payload, 'data', []);
+
+        if (! is_array($data)) {
+            throw new PaystackException($fallbackMessage, $response->status());
+        }
+
+        return $data;
     }
 
     private function baseUrl(): string

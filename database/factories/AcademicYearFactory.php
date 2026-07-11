@@ -22,6 +22,7 @@ class AcademicYearFactory extends Factory
         return [
             'name' => "{$level}00 Level",
             'slug' => "{$level}00-level",
+            'year_number' => $level,
         ];
     }
 }

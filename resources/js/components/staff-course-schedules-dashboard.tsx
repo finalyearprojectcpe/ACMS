@@ -24,7 +24,13 @@ import {
     FieldLabel,
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import type {
     DashboardStaffCourseOfferingForm,
     DashboardStaffCourseSchedules,
@@ -34,7 +40,7 @@ type CourseOfferingFormData = {
     code: string;
     title: string;
     credit_units: number;
-    is_mandatory: boolean;
+    category: 'departmental' | 'elective';
     prerequisite_course_ids: number[];
 };
 
@@ -157,9 +163,7 @@ function setHeaderControl(
                     <StudentSetChoiceLabel
                         entrySession={selectedSet.entrySession}
                         currentLevel={selectedSet.currentLevel}
-                        minimumYearsToDegree={
-                            selectedSet.minimumYearsToDegree
-                        }
+                        minimumYearsToDegree={selectedSet.minimumYearsToDegree}
                     />
                 </div>
             </div>
@@ -212,7 +216,7 @@ export function StaffCourseOfferingForm({
         title: form.offering?.title ?? form.prefill?.title ?? '',
         credit_units:
             form.offering?.creditUnits ?? form.prefill?.creditUnits ?? 3,
-        is_mandatory: form.offering?.isMandatory ?? true,
+        category: form.offering?.category ?? 'departmental',
         prerequisite_course_ids: form.offering?.prerequisiteCourseIds ?? [],
     });
     const backRoute =
@@ -419,38 +423,42 @@ export function StaffCourseOfferingForm({
 
                                 <Field
                                     data-invalid={Boolean(
-                                        courseForm.errors.is_mandatory,
+                                        courseForm.errors.category,
                                     )}
                                 >
-                                    <div className="flex h-full items-center justify-between gap-4 border border-border bg-background px-3 py-2">
-                                        <div className="min-w-0">
-                                            <FieldLabel htmlFor="course-type">
-                                                Course Type
-                                            </FieldLabel>
-                                            <div className="mt-1 text-sm font-semibold">
-                                                {courseForm.data.is_mandatory
-                                                    ? 'Departmental Course'
-                                                    : 'Elective Course'}
-                                            </div>
-                                        </div>
-                                        <Switch
-                                            id="course-type"
-                                            checked={
-                                                courseForm.data.is_mandatory
-                                            }
+                                    <FieldLabel htmlFor="course-category">
+                                        Course Category
+                                    </FieldLabel>
+                                    <Select
+                                        value={courseForm.data.category}
+                                        onValueChange={(value) =>
+                                            courseForm.setData(
+                                                'category',
+                                                value as
+                                                    | 'departmental'
+                                                    | 'elective',
+                                            )
+                                        }
+                                    >
+                                        <SelectTrigger
+                                            id="course-category"
                                             aria-invalid={Boolean(
-                                                courseForm.errors.is_mandatory,
+                                                courseForm.errors.category,
                                             )}
-                                            onCheckedChange={(checked) =>
-                                                courseForm.setData(
-                                                    'is_mandatory',
-                                                    checked,
-                                                )
-                                            }
-                                        />
-                                    </div>
+                                        >
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="departmental">
+                                                Departmental Course
+                                            </SelectItem>
+                                            <SelectItem value="elective">
+                                                Elective Course
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                     <FieldError>
-                                        {courseForm.errors.is_mandatory}
+                                        {courseForm.errors.category}
                                     </FieldError>
                                 </Field>
                             </div>

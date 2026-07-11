@@ -228,7 +228,7 @@ function RegistrationReview({
                         <PersonCell
                             name={review.student.name}
                             avatar={review.student.avatar}
-                            secondary={`${review.department.abbreviation} · CGPA ${review.student.cgpa}`}
+                            secondary={`${review.department.abbreviation} · CGPA ${review.student.cgpa ?? 'Not available'}`}
                         />
                         <div className="mt-3 flex flex-wrap items-center gap-2">
                             <CopyableValue
@@ -237,7 +237,7 @@ function RegistrationReview({
                                 valueClassName="text-xs"
                             />
                             {review.set ? (
-                                <div className="min-w-64 max-w-full">
+                                <div className="max-w-full min-w-64">
                                     <StudentSetChoiceLabel
                                         entrySession={review.set.entrySession}
                                         currentLevel={review.set.currentLevel}

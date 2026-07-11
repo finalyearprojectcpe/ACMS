@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 
-import { CourseTypeBadge } from '@/components/course-type-badge';
+import { CourseCategoryBadge } from '@/components/course-category-badge';
 import {
     LevelSemesterRail,
     LevelSemesterRailGroup,
@@ -385,7 +385,9 @@ function CourseOfferingsTable({
                                 {offering.units}
                             </TableCell>
                             <TableCell>
-                                <CourseTypeBadge type={offering.courseType} />
+                                <CourseCategoryBadge
+                                    category={offering.category}
+                                />
                             </TableCell>
                             <TableCell>
                                 <PrerequisiteBadges

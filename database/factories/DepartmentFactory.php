@@ -28,6 +28,7 @@ class DepartmentFactory extends Factory
             'abbreviation' => $abbreviation,
             'slug' => Str::slug($name),
             'minimum_years_to_degree' => 5,
+            'maximum_course_units_per_semester' => 24,
         ];
     }
 }

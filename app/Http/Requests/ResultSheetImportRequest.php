@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\AccountType;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -13,7 +14,8 @@ class ResultSheetImportRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user() !== null;
+        return $this->user()?->account_type === AccountType::Staff
+            && $this->user()?->staffProfile !== null;
     }
 
     /**
@@ -27,6 +29,9 @@ class ResultSheetImportRequest extends FormRequest
             'entry_academic_session_id' => ['required', 'integer', 'exists:academic_sessions,id'],
             'academic_year_semester_id' => ['required', 'integer', 'exists:academic_year_semesters,id'],
             'action' => ['required', Rule::in(['draft', 'submit'])],
+            'source_file' => ['nullable', 'file', 'mimes:xlsx,xls,csv', 'max:10240'],
+            'column_mappings' => ['nullable', 'array'],
+            'column_mappings.*' => ['nullable', 'string', 'max:180'],
             'courses' => ['required', 'array', 'min:1', 'max:40'],
             'courses.*.course_offering_id' => ['required', 'integer', 'exists:course_offerings,id'],
             'courses.*.code' => ['required', 'string', 'max:30'],

@@ -1,6 +1,7 @@
 <?php
 
 use App\AccountType;
+use App\Models\AcademicSessionSemester;
 use App\Models\AcademicYear;
 use App\Models\AcademicYearSemester;
 use App\Models\Course;
@@ -34,11 +35,15 @@ test('database seeder creates predictable cpe academic records', function () {
         ->and($department->hod_staff_profile_id)->toBe($hod->staffProfile->id)
         ->and($department->studentSetAdvisorAssignments()->where('active_marker', 1)->count())->toBe(5)
         ->and(User::query()->where('email', 'like', 'student%@futo.edu')->count())->toBe(6)
-        ->and(Course::query()->count())->toBe(30)
-        ->and(CourseOffering::query()->count())->toBe(270)
+        ->and(Course::query()->count())->toBe(49)
+        ->and(CourseOffering::query()->count())->toBe(441)
         ->and($school->academicSessions()->count())->toBe(9)
+        ->and(AcademicSessionSemester::query()->count())->toBe(18)
         ->and($school->academicSessions()->where('name', '2025/2026')->whereDate('starts_on', '<=', today())->whereDate('ends_on', '>=', today())->exists())->toBeTrue()
-        ->and(Course::query()->where('code', 'CPE 301')->firstOrFail()->prerequisites()->where('code', 'CPE 202')->exists())->toBeTrue();
+        ->and(CourseOffering::query()
+            ->whereHas('course', fn ($query) => $query->where('code', 'CPE 301'))
+            ->whereHas('prerequisiteCourses', fn ($query) => $query->where('code', 'CPE 202'))
+            ->exists())->toBeTrue();
 
     $studentLevels = StudentProfile::query()
         ->with(['currentLevel', 'user'])
@@ -113,7 +118,7 @@ test('department visible academic years include minimum years and years with rec
     ]);
 });
 
-test('course prerequisites belong to reusable course records', function () {
+test('course prerequisites are versioned on each course offering', function () {
     $course = Course::factory()->create([
         'code' => 'CPE 402',
         'title' => 'Advanced Embedded Systems',
@@ -125,9 +130,21 @@ test('course prerequisites belong to reusable course records', function () {
         'slug' => 'cpe-301-microprocessor-systems',
     ]);
 
-    $course->addPrerequisite($prerequisite);
-    $course->addPrerequisite($prerequisite);
+    $firstOffering = CourseOffering::factory()->create([
+        'course_id' => $course->id,
+        'course_title' => $course->title,
+        'credit_units' => $course->credit_units,
+    ]);
+    $secondOffering = CourseOffering::factory()->create([
+        'course_id' => $course->id,
+        'course_title' => $course->title,
+        'credit_units' => $course->credit_units,
+    ]);
 
-    expect($course->prerequisites)->toHaveCount(1)
-        ->and($course->prerequisites->first()->is($prerequisite))->toBeTrue();
+    $firstOffering->prerequisiteCourses()->sync([$prerequisite->id]);
+    $firstOffering->prerequisiteCourses()->sync([$prerequisite->id]);
+
+    expect($firstOffering->prerequisiteCourses)->toHaveCount(1)
+        ->and($firstOffering->prerequisiteCourses->first()->is($prerequisite))->toBeTrue()
+        ->and($secondOffering->prerequisiteCourses)->toBeEmpty();
 });

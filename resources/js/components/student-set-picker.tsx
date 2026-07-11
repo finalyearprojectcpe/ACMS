@@ -28,6 +28,7 @@ export type StudentSetPickerOption = {
     entrySession: DashboardAcademicSession | null;
     currentLevel: DashboardLevel | null;
     minimumYearsToDegree?: number | null;
+    isGraduated?: boolean;
     meta?: string;
     searchText?: string;
 };
@@ -48,6 +49,7 @@ type StudentSetPickerProps = {
     searchPlaceholder?: string;
     emptyLabel?: string;
     ariaLabel?: string;
+    disabled?: boolean;
     className?: string;
     contentClassName?: string;
 };
@@ -61,6 +63,7 @@ export function StudentSetPicker({
     searchPlaceholder = 'Search student sets...',
     emptyLabel = 'No set found.',
     ariaLabel = 'Select student set',
+    disabled = false,
     className,
     contentClassName,
 }: StudentSetPickerProps) {
@@ -75,7 +78,10 @@ export function StudentSetPicker({
     }
 
     return (
-        <Popover open={open} onOpenChange={setOpen}>
+        <Popover
+            open={disabled ? false : open}
+            onOpenChange={(nextOpen) => !disabled && setOpen(nextOpen)}
+        >
             <PopoverTrigger asChild>
                 <Button
                     type="button"
@@ -83,6 +89,7 @@ export function StudentSetPicker({
                     role="combobox"
                     aria-expanded={open}
                     aria-label={ariaLabel}
+                    disabled={disabled}
                     className={cn(
                         'w-full justify-between gap-3 px-3 text-left font-semibold',
                         className,
@@ -95,6 +102,7 @@ export function StudentSetPicker({
                             minimumYearsToDegree={
                                 selectedOption.minimumYearsToDegree
                             }
+                            isGraduated={selectedOption.isGraduated}
                             meta={selectedOption.meta}
                         />
                     ) : selectedAllOption ? (
@@ -152,6 +160,7 @@ export function StudentSetPicker({
                                         minimumYearsToDegree={
                                             option.minimumYearsToDegree
                                         }
+                                        isGraduated={option.isGraduated}
                                         meta={option.meta}
                                     />
                                 </CommandItem>

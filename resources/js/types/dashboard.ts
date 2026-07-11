@@ -21,6 +21,7 @@ export type DashboardLevel = {
     id: number;
     title: string;
     slug: string;
+    yearNumber: number;
 };
 
 export type DashboardStudent = {
@@ -198,7 +199,6 @@ export type DashboardSchoolAdmin = {
     nextAcademicSession: DashboardAcademicSession | null;
     academicSessions: DashboardAcademicSession[];
     faculties: DashboardSchoolAdminFaculty[];
-    pendingAccessCodes: DashboardFacultyHeadAccessCode[];
     settings: DashboardSchoolAdminSettings;
 };
 
@@ -328,7 +328,6 @@ export type DashboardFacultyHeadCourseOffering = {
     code: string;
     title: string;
     units: number;
-    departmentsCount: number;
     prerequisites: DashboardStaffCoursePrerequisite[];
 };
 
@@ -406,6 +405,7 @@ export type DashboardStaffDueSummary = {
     dueDate: string | null;
     paidCount: number;
     pendingCount: number;
+    waivedCount: number;
     collectedAmount: string;
     outstandingAmount: string;
     paymentAccount: DashboardPaymentAccount | null;
@@ -413,13 +413,23 @@ export type DashboardStaffDueSummary = {
 };
 
 export type DashboardStaffDueForm = {
+    mode: 'create' | 'edit';
     assignedSets: DashboardStudentSetContext[];
     paymentAccounts: DashboardPaymentAccount[];
     paymentSettingsUrl: string;
     defaults: {
         entryAcademicSessionId: number | null;
+        title: string;
+        description: string;
+        amountNaira: string;
         dueOn: string;
     };
+    due: {
+        id: number;
+        status: string;
+        canChangeSet: boolean;
+        canChangeAmount: boolean;
+    } | null;
 };
 
 export type DashboardStaffDueDetail = {
@@ -435,7 +445,26 @@ export type DashboardStaffDueStudent = {
     amount: string;
     status: string;
     paidAt: string | null;
+    waiverReason: string | null;
     receiptUrl: string | null;
+    receiptStatus: string | null;
+    receiptRetryUrl: string | null;
+    receiptEmailStatus: string | null;
+    receiptEmailRetryUrl: string | null;
+};
+
+export type DashboardStaffDueWaiverForm = {
+    due: {
+        id: number;
+        title: string;
+        amount: string;
+    };
+    assignment: {
+        id: number;
+        studentName: string;
+        studentAvatar: string | null;
+        registrationNumber: string;
+    };
 };
 
 export type DashboardStaffPaymentSettings = {
@@ -446,7 +475,6 @@ export type DashboardStaffPaymentSettings = {
 
 export type DashboardStaffPaymentAccountForm = {
     accounts: DashboardPaymentAccount[];
-    assignedSets: DashboardStudentSetContext[];
     bankOptions: DashboardPaystackBankOption[];
     bankOptionsError: string | null;
     dashboardUrl: string;
@@ -489,17 +517,37 @@ export type DashboardStaffStudents = {
     students: DashboardStaffStudent[];
 };
 
+export type DashboardStaffStudentForm = {
+    mode: 'create' | 'import';
+    department: DashboardDepartment;
+    assignedSets: DashboardStudentSetContext[];
+    suggestedAccessCode: string;
+};
+
 export type DashboardStudentSetContext = {
     entrySession: DashboardAcademicSession;
     currentLevel: DashboardLevel | null;
     advisorName: string | null;
     minimumYearsToDegree: number;
+    isGraduated: boolean;
+};
+
+export type DashboardHodSetAdvisorForm = {
+    set: DashboardStudentSetContext;
+    currentStaffProfileId: number | null;
+    staff: Array<{
+        id: number;
+        name: string;
+        email: string | null;
+        avatar: string | null;
+        unavailableReason: string | null;
+    }>;
 };
 
 export type DashboardStaffStudent = {
     id: number;
     fullName: string;
-    email: string;
+    email: string | null;
     registrationNumber: string;
     avatar: string | null;
     currentLevel: DashboardLevel | null;
@@ -507,13 +555,15 @@ export type DashboardStaffStudent = {
     advisorName: string;
     pendingCarryovers: string[];
     levelGpas: DashboardStaffStudentLevelGpa[];
-    cgpa: string;
+    cgpa: string | null;
     profileUrl: string;
+    accountStatus: string;
+    accessCode: string | null;
 };
 
 export type DashboardStaffStudentLevelGpa = {
     level: string;
-    gpa: string;
+    gpa: string | null;
 };
 
 export type DashboardHod = {
@@ -524,16 +574,12 @@ export type DashboardHod = {
         activeStaff: number;
         pendingSignups: number;
         setsWithoutAdvisors: number;
-        resultsAwaitingReview: number;
-        missingResults: number;
         studentsWithCarryovers: number;
     };
     staff: DashboardHodStaff[];
     students: DashboardStaffStudent[];
     levels: DashboardLevel[];
     setAdvisors: DashboardHodSetAdvisor[];
-    resultSubmissions: DashboardHodResultSubmission[];
-    carryoverSummaries: DashboardStaffHomeCarryoverSummary[];
     academicSessions: DashboardAcademicSession[];
     courseOfferings: DashboardHodCourseOfferings;
     studentResults: DashboardHodStudentResults;
@@ -571,15 +617,6 @@ export type DashboardHodSetAdvisor = {
     studentsCount: number;
 };
 
-export type DashboardHodResultSubmission = {
-    id: string;
-    level: string;
-    semester: string;
-    course: string;
-    status: string;
-    submittedAt: string;
-};
-
 export type DashboardHodCourseOfferings = {
     academicSession: DashboardAcademicSession | null;
     level: DashboardLevel | null;
@@ -597,11 +634,6 @@ export type DashboardHodStaffForm = {
 };
 
 export type DashboardHodStudentResults = {
-    averageCgpa: string;
-    studentsCount: number;
-    carryoverStudents: number;
-    pendingSubmissions: number;
-    sets: DashboardAcademicSession[];
     resultSheets: DashboardResultSheet[];
     approvalSheets: DashboardResultSheet[];
 };
@@ -637,6 +669,8 @@ export type DashboardResultSheetDetail = {
     mode: 'view' | 'review';
     canReview: boolean;
     canEdit: boolean;
+    revisionNumber: number;
+    sourceFileUrl: string | null;
     returnSection: string;
     returnLabel: string;
 };
@@ -715,7 +749,7 @@ export type DashboardStudentRecord = {
     department: DashboardDepartment | null;
     entrySession: DashboardAcademicSession | null;
     courseAdvisor: string;
-    cgpa: string;
+    cgpa: string | null;
     levelGpas: DashboardStaffStudentLevelGpa[];
     semesters: DashboardStudentRecordSemester[];
 };
@@ -739,7 +773,7 @@ export type DashboardStudentRecordSemester = {
     id: string;
     level: DashboardLevel;
     semester: DashboardStaffCourseSemester;
-    gpa: string;
+    gpa: string | null;
     totalUnits: number;
     courses: DashboardStudentResultCourse[];
 };
@@ -770,8 +804,7 @@ export type DashboardStaffCourseOffering = {
     code: string;
     title: string;
     units: number;
-    isMandatory: boolean;
-    courseType: string;
+    category: 'faculty' | 'departmental' | 'elective';
     prerequisites: DashboardStaffCoursePrerequisite[];
     canEdit: boolean;
 };
@@ -792,7 +825,7 @@ export type DashboardStaffCourseOfferingForm = {
         code: string;
         title: string;
         creditUnits: number;
-        isMandatory: boolean;
+        category: 'departmental' | 'elective';
         prerequisiteCourseIds: number[];
     } | null;
     prefill: {
@@ -829,7 +862,7 @@ export type DashboardStudentProfile = {
     email: string;
     avatar: string | null;
     registrationNumber: string;
-    cgpa: string;
+    cgpa: string | null;
     faculty: DashboardFaculty | null;
     department: DashboardDepartment | null;
     currentLevel: DashboardLevel | null;
@@ -837,12 +870,12 @@ export type DashboardStudentProfile = {
 };
 
 export type DashboardStudentHome = {
-    cgpa: string;
+    cgpa: string | null;
     currentSemester: {
         name: string;
         level: string;
         session: string;
-    };
+    } | null;
     courseAdvisor: string;
     totalCourseUnits: number;
     levels: DashboardLevel[];
@@ -877,7 +910,7 @@ export type DashboardStudentHomeResit = {
 
 export type DashboardStudentResults = {
     level: DashboardLevel;
-    averageGpa: string;
+    averageGpa: string | null;
     totalUnits: number;
     failedCourses: number;
     totalCourses: number;
@@ -887,7 +920,7 @@ export type DashboardStudentResults = {
 export type DashboardStudentResultSemester = {
     name: string;
     slug: string;
-    gpa: string;
+    gpa: string | null;
     totalUnits: number;
     courses: DashboardStudentResultCourse[];
 };
@@ -914,7 +947,9 @@ export type DashboardStudentDue = {
     description: string | null;
     amount: string;
     dueDate: string | null;
-    paymentUrl: string;
+    paymentUrl: string | null;
+    paymentActionLabel: string;
+    paymentUnavailableReason: string | null;
 };
 
 export type DashboardStudentPaidDue = {
@@ -923,7 +958,11 @@ export type DashboardStudentPaidDue = {
     description: string | null;
     amount: string;
     paidAt: string;
-    receiptUrl: string;
+    receiptUrl: string | null;
+    receiptStatus: string | null;
+    receiptRetryUrl: string | null;
+    receiptEmailStatus: string | null;
+    receiptEmailRetryUrl: string | null;
 };
 
 export type DashboardStudentCourseRegistration = {
@@ -1013,7 +1052,7 @@ export type DashboardCourseRegistrationReview =
         carryoverUnits: number;
         feedbackNote: string | null;
         canReview: boolean;
-};
+    };
 
 export type DashboardContext = {
     role: DashboardRole;
@@ -1039,8 +1078,10 @@ export type DashboardContext = {
     facultyHeadCourseOfferingForm: DashboardFacultyHeadCourseOfferingForm | null;
     hod: DashboardHod | null;
     hodStaffForm: DashboardHodStaffForm | null;
+    hodSetAdvisorForm: DashboardHodSetAdvisorForm | null;
     staffHome: DashboardStaffHome | null;
     staffStudents: DashboardStaffStudents | null;
+    staffStudentForm: DashboardStaffStudentForm | null;
     staffCourseSchedules: DashboardStaffCourseSchedules | null;
     staffCourseOfferingForm: DashboardStaffCourseOfferingForm | null;
     staffCourseRegistration: DashboardStaffCourseRegistration | null;
@@ -1049,6 +1090,7 @@ export type DashboardContext = {
     staffDues: DashboardStaffDues | null;
     staffDueForm: DashboardStaffDueForm | null;
     staffDueDetail: DashboardStaffDueDetail | null;
+    staffDueWaiverForm: DashboardStaffDueWaiverForm | null;
     staffPaymentSettings: DashboardStaffPaymentSettings | null;
     staffPaymentAccountForm: DashboardStaffPaymentAccountForm | null;
     staffSettings: DashboardStaffSettings | null;

@@ -79,8 +79,8 @@ export function StaffResultsDashboard({ results }: StaffResultsDashboardProps) {
                         Result Management
                     </h1>
                     <p className="mt-1 text-sm text-muted-foreground">
-                        Import, review, and follow result sheets for the
-                        student sets assigned to you.
+                        Import, review, and follow result sheets for the student
+                        sets assigned to you.
                     </p>
                 </div>
                 <Button asChild>

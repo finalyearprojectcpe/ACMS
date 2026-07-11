@@ -23,6 +23,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'due_on',
     'status',
     'published_at',
+    'archived_at',
 ])]
 class Due extends Model
 {
@@ -99,6 +100,7 @@ class Due extends Model
         return [
             'due_on' => 'date',
             'published_at' => 'datetime',
+            'archived_at' => 'datetime',
         ];
     }
 }

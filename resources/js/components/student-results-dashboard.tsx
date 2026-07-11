@@ -27,7 +27,7 @@ export function StudentResultsDashboard({
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <SummaryBlock
                     label="Average GPA"
-                    value={results.averageGpa}
+                    value={results.averageGpa ?? 'Not available'}
                     detail={results.level.title}
                 />
                 <SummaryBlock
@@ -107,7 +107,7 @@ function SemesterResultsCard({
                 <div className="text-right">
                     <div className="text-xs text-muted-foreground">GPA</div>
                     <div className="text-lg font-semibold tabular-nums">
-                        {semester.gpa}
+                        {semester.gpa ?? 'Not available'}
                     </div>
                 </div>
             </CardHeader>

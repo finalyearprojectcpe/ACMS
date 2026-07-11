@@ -1,6 +1,6 @@
 import { Link, router } from '@inertiajs/react';
 import {
-    RiArrowLeftLine,
+    RiDownload2Line,
     RiFileExcel2Line,
     RiSendPlaneLine,
 } from '@remixicon/react';
@@ -9,9 +9,7 @@ import { useState } from 'react';
 import {
     createResultSheetImport,
     reviewResultSheet,
-    section as dashboardSection,
 } from '@/actions/App/Http/Controllers/DashboardController';
-import { ActionLink } from '@/components/action-link';
 import { qualifiedSemesterLabel } from '@/components/qualified-semester';
 import { ResultMatrixTable } from '@/components/result-matrix-table';
 import {
@@ -71,15 +69,7 @@ export function ResultSheetDetailDashboard({
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
-                    <ActionLink
-                        href={dashboardSection({
-                            section: detail.returnSection,
-                        })}
-                        icon={<RiArrowLeftLine className="size-4" />}
-                    >
-                        {detail.returnLabel}
-                    </ActionLink>
-                    <h1 className="mt-3 text-xl font-semibold tracking-normal">
+                    <h1 className="text-xl font-semibold tracking-normal">
                         {title}
                     </h1>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -94,14 +84,24 @@ export function ResultSheetDetailDashboard({
                     </div>
                 </div>
 
-                {detail.canEdit ? (
+                {detail.canEdit || detail.sourceFileUrl ? (
                     <div className="flex flex-wrap items-center gap-2">
-                        <Button asChild variant="outline">
-                            <Link href={createResultSheetImport()}>
-                                <RiFileExcel2Line />
-                                Replace Spreadsheet
-                            </Link>
-                        </Button>
+                        {detail.sourceFileUrl ? (
+                            <Button asChild variant="outline">
+                                <a href={detail.sourceFileUrl}>
+                                    <RiDownload2Line />
+                                    Download Source
+                                </a>
+                            </Button>
+                        ) : null}
+                        {detail.canEdit ? (
+                            <Button asChild variant="outline">
+                                <Link href={createResultSheetImport()}>
+                                    <RiFileExcel2Line />
+                                    Replace Spreadsheet
+                                </Link>
+                            </Button>
+                        ) : null}
                     </div>
                 ) : null}
             </div>

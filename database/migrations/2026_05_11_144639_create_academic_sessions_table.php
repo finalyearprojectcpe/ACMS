@@ -24,6 +24,7 @@ return new class extends Migration
             $table->unique(['school_id', 'starts_on', 'ends_on'], 'academic_sessions_school_dates_unique');
             $table->index(['school_id', 'starts_on', 'ends_on']);
         });
+
     }
 
     /**

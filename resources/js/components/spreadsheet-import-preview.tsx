@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import * as XLSX from 'xlsx';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -47,6 +46,7 @@ export type SpreadsheetImportBatch = {
     totalRows: number;
     batchSize: number;
     isFinalBatch: boolean;
+    mappings: Record<string, string>;
 };
 
 export type SpreadsheetImportCallbacks = {
@@ -132,6 +132,7 @@ export function SpreadsheetImportPreview({
     );
 
     async function parseFile(file: File) {
+        const XLSX = await import('xlsx');
         const workbook = XLSX.read(await file.arrayBuffer(), {
             type: 'array',
         });
@@ -203,6 +204,22 @@ export function SpreadsheetImportPreview({
             totalRows,
             batchSize: normalizedBatchSize,
             isFinalBatch: currentBatchNumber === totalBatches,
+            mappings: Object.fromEntries(
+                fields.map((field) => {
+                    const columnIndex = Number.parseInt(
+                        mapping[field.key] ?? '',
+                        10,
+                    );
+
+                    return [
+                        field.key,
+                        Number.isInteger(columnIndex)
+                            ? (headers[columnIndex] ??
+                              `Column ${columnIndex + 1}`)
+                            : 'Unmapped',
+                    ];
+                }),
+            ),
         };
 
         if (!importKey) {

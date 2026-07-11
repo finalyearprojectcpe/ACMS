@@ -13,7 +13,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
-#[Fillable(['faculty_id', 'name', 'abbreviation', 'slug', 'minimum_years_to_degree', 'hod_staff_profile_id'])]
+#[Fillable(['faculty_id', 'name', 'abbreviation', 'slug', 'minimum_years_to_degree', 'maximum_course_units_per_semester', 'hod_staff_profile_id'])]
 class Department extends Model
 {
     /** @use HasFactory<DepartmentFactory> */
@@ -21,6 +21,7 @@ class Department extends Model
 
     protected $attributes = [
         'minimum_years_to_degree' => 5,
+        'maximum_course_units_per_semester' => 24,
     ];
 
     /**
@@ -100,7 +101,7 @@ class Department extends Model
      */
     public function visibleAcademicYears(): Collection
     {
-        $minimumAcademicYearIds = range(1, (int) $this->minimum_years_to_degree);
+        $minimumAcademicYearNumbers = range(1, (int) $this->minimum_years_to_degree);
         $recordAcademicYearIds = $this->studentProfiles()
             ->pluck('current_academic_year_id')
             ->merge(
@@ -112,8 +113,11 @@ class Department extends Model
             );
 
         return AcademicYear::query()
-            ->whereIn('id', collect($minimumAcademicYearIds)->merge($recordAcademicYearIds)->unique()->values())
-            ->orderBy('id')
+            ->where(function ($query) use ($minimumAcademicYearNumbers, $recordAcademicYearIds): void {
+                $query->whereIn('year_number', $minimumAcademicYearNumbers)
+                    ->orWhereIn('id', $recordAcademicYearIds);
+            })
+            ->orderBy('year_number')
             ->get();
     }
 
@@ -236,6 +240,7 @@ class Department extends Model
     {
         return [
             'minimum_years_to_degree' => 'integer',
+            'maximum_course_units_per_semester' => 'integer',
         ];
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Actions\RecordResultSheetRevisionAction;
 use App\Models\AcademicSession;
 use App\Models\AcademicYear;
 use App\Models\AcademicYearSemester;
@@ -12,20 +13,29 @@ use App\Models\ResultSheet;
 use App\Models\ResultSheetCourse;
 use App\Models\StaffProfile;
 use App\Models\StudentProfile;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class ResultSheetImporter
 {
-    public function __construct(private readonly GpaCalculator $gpaCalculator) {}
+    public function __construct(
+        private readonly GpaCalculator $gpaCalculator,
+        private readonly AcademicContextService $academicContext,
+        private readonly RecordResultSheetRevisionAction $recordRevision,
+    ) {}
 
     /**
      * @param  array{
      *     entry_academic_session_id: int,
      *     academic_year_semester_id: int,
      *     action: string,
+     *     source_file?: UploadedFile|null,
+     *     column_mappings?: array<string, mixed>,
      *     courses: array<int, array{course_offering_id: int, code: string, title: string, credit_units: int}>,
      *     rows: array<int, array{row_number?: int, registration_number: string, grades: array<string, string|null>}>
      * }  $data
@@ -37,111 +47,173 @@ class ResultSheetImporter
         $courses = $this->normalizeCourses($data['courses']);
         $rows = $this->normalizeRows($data['rows']);
         $students = $this->studentsForRows($department, $rows);
+        $sourceFile = $this->storeSourceFile($department, $data['source_file'] ?? null);
 
-        return DB::transaction(function () use ($department, $staffProfile, $data, $courses, $rows, $students): ResultSheet {
-            $sheet = ResultSheet::query()
-                ->where('department_id', $department->id)
-                ->where('entry_academic_session_id', $data['entry_academic_session_id'])
-                ->where('academic_session_id', $data['academic_session_id'])
-                ->where('academic_year_semester_id', $data['academic_year_semester_id'])
-                ->lockForUpdate()
-                ->first();
+        try {
+            return DB::transaction(function () use ($department, $staffProfile, $data, $courses, $rows, $students, $sourceFile): ResultSheet {
+                $sheet = ResultSheet::query()
+                    ->where('department_id', $department->id)
+                    ->where('entry_academic_session_id', $data['entry_academic_session_id'])
+                    ->where('academic_session_id', $data['academic_session_id'])
+                    ->where('academic_year_semester_id', $data['academic_year_semester_id'])
+                    ->lockForUpdate()
+                    ->first();
 
-            if ($sheet instanceof ResultSheet && ! $sheet->canBeEditedByAdvisor()) {
-                throw ValidationException::withMessages([
-                    'sheet' => 'This result sheet has already been submitted for review. The HOD has to return it before you can change it.',
-                ]);
-            }
-
-            $status = $data['action'] === 'submit'
-                ? ResultSheet::StatusSubmitted
-                : ResultSheet::StatusDraft;
-
-            $sheet = ResultSheet::query()->updateOrCreate(
-                [
-                    'department_id' => $department->id,
-                    'entry_academic_session_id' => $data['entry_academic_session_id'],
-                    'academic_session_id' => $data['academic_session_id'],
-                    'academic_year_semester_id' => $data['academic_year_semester_id'],
-                ],
-                [
-                    'school_id' => $department->faculty?->school_id,
-                    'created_by_user_id' => $sheet?->created_by_user_id ?? $staffProfile->user_id,
-                    'submitted_by_user_id' => $status === ResultSheet::StatusSubmitted ? $staffProfile->user_id : null,
-                    'reviewed_by_user_id' => null,
-                    'status' => $status,
-                    'correction_note' => null,
-                    'submitted_at' => $status === ResultSheet::StatusSubmitted ? now() : null,
-                    'approved_at' => null,
-                    'returned_at' => null,
-                ],
-            );
-
-            $sheet->courses()->delete();
-            $sheet->studentResults()->delete();
-
-            $courseRows = $this->createSheetCourses($sheet, $department, $courses);
-
-            foreach ($rows as $row) {
-                /** @var StudentProfile $student */
-                $student = $students->get($row['registration_number']);
-                $gradedCourses = [];
-
-                foreach ($courseRows as $courseCode => $sheetCourse) {
-                    $grade = $row['grades'][$courseCode] ?? null;
-
-                    if (! is_string($grade) || $grade === '') {
-                        continue;
-                    }
-
-                    $gradedCourses[] = [
-                        'credit_units' => (int) $sheetCourse->credit_units,
-                        'grade' => $grade,
-                    ];
-                }
-
-                if ($gradedCourses === []) {
+                if ($sheet instanceof ResultSheet && ! $sheet->canBeEditedByAdvisor()) {
                     throw ValidationException::withMessages([
-                        'rows' => "Row {$row['row_number']} has no grades. Add at least one grade or remove the row.",
+                        'sheet' => 'This result sheet has already been submitted for review. The HOD has to return it before you can change it.',
                     ]);
                 }
 
-                $summary = $this->gpaCalculator->semesterSummary($gradedCourses);
-                $studentResult = $sheet->studentResults()->create([
-                    'student_profile_id' => $student->id,
-                    'total_units' => $summary['total_units'],
-                    'total_grade_points' => $summary['total_grade_points'],
-                    'gpa' => $summary['gpa'],
-                ]);
+                $status = $data['action'] === 'submit'
+                    ? ResultSheet::StatusSubmitted
+                    : ResultSheet::StatusDraft;
 
-                foreach ($courseRows as $courseCode => $sheetCourse) {
-                    $grade = $row['grades'][$courseCode] ?? null;
+                $sheet = ResultSheet::query()->updateOrCreate(
+                    [
+                        'department_id' => $department->id,
+                        'entry_academic_session_id' => $data['entry_academic_session_id'],
+                        'academic_session_id' => $data['academic_session_id'],
+                        'academic_year_semester_id' => $data['academic_year_semester_id'],
+                    ],
+                    [
+                        'school_id' => $department->faculty?->school_id,
+                        'created_by_user_id' => $sheet?->created_by_user_id ?? $staffProfile->user_id,
+                        'submitted_by_user_id' => $status === ResultSheet::StatusSubmitted ? $staffProfile->user_id : null,
+                        'reviewed_by_user_id' => null,
+                        'status' => $status,
+                        'correction_note' => null,
+                        'submitted_at' => $status === ResultSheet::StatusSubmitted ? now() : null,
+                        'approved_at' => null,
+                        'returned_at' => null,
+                    ],
+                );
 
-                    if (! is_string($grade) || $grade === '') {
-                        continue;
+                $sheet->courses()->delete();
+                $sheet->studentResults()->delete();
+
+                $courseRows = $this->createSheetCourses($sheet, $department, $courses);
+
+                foreach ($rows as $row) {
+                    /** @var StudentProfile $student */
+                    $student = $students->get($row['registration_number']);
+                    $gradedCourses = [];
+
+                    foreach ($courseRows as $courseCode => $sheetCourse) {
+                        $grade = $row['grades'][$courseCode] ?? null;
+
+                        if (! is_string($grade) || $grade === '') {
+                            continue;
+                        }
+
+                        $gradedCourses[] = [
+                            'credit_units' => (int) $sheetCourse->credit_units,
+                            'grade' => $grade,
+                        ];
                     }
 
-                    $gradePoint = $this->gpaCalculator->gradePoint($grade);
+                    if ($gradedCourses === []) {
+                        throw ValidationException::withMessages([
+                            'rows' => "Row {$row['row_number']} has no grades. Add at least one grade or remove the row.",
+                        ]);
+                    }
 
-                    $studentResult->courseResults()->create([
-                        'result_sheet_course_id' => $sheetCourse->id,
-                        'grade' => $grade,
-                        'grade_point' => $gradePoint,
-                        'quality_points' => (int) $sheetCourse->credit_units * $gradePoint,
+                    $summary = $this->gpaCalculator->semesterSummary($gradedCourses);
+                    $studentResult = $sheet->studentResults()->create([
+                        'student_profile_id' => $student->id,
+                        'total_units' => $summary['total_units'],
+                        'total_grade_points' => $summary['total_grade_points'],
+                        'gpa' => $summary['gpa'],
                     ]);
+
+                    foreach ($courseRows as $courseCode => $sheetCourse) {
+                        $grade = $row['grades'][$courseCode] ?? null;
+
+                        if (! is_string($grade) || $grade === '') {
+                            continue;
+                        }
+
+                        $gradePoint = $this->gpaCalculator->gradePoint($grade);
+
+                        $studentResult->courseResults()->create([
+                            'result_sheet_course_id' => $sheetCourse->id,
+                            'grade' => $grade,
+                            'grade_point' => $gradePoint,
+                            'quality_points' => (int) $sheetCourse->credit_units * $gradePoint,
+                        ]);
+                    }
                 }
+
+                $this->recordRevision->execute(
+                    $sheet,
+                    $staffProfile->user,
+                    $status === ResultSheet::StatusSubmitted ? 'submitted' : 'draft_saved',
+                    $sourceFile ?? [],
+                    is_array($data['column_mappings'] ?? null) ? $data['column_mappings'] : [],
+                );
+
+                return $sheet->fresh([
+                    'academicSession',
+                    'entryAcademicSession',
+                    'academicYearSemester.academicYear',
+                    'academicYearSemester.semester',
+                    'courses.courseOffering.academicYearSemester',
+                    'studentResults.courseResults',
+                    'studentResults.studentProfile.user',
+                    'revisions',
+                ]);
+            });
+        } catch (Throwable $throwable) {
+            if ($sourceFile !== null) {
+                Storage::disk($sourceFile['disk'])->delete($sourceFile['path']);
             }
 
-            return $sheet->fresh([
-                'academicSession',
-                'entryAcademicSession',
-                'academicYearSemester.academicYear',
-                'academicYearSemester.semester',
-                'courses.courseOffering.academicYearSemester',
-                'studentResults.courseResults',
-                'studentResults.studentProfile.user',
+            throw $throwable;
+        }
+    }
+
+    /**
+     * @return array{disk: string, path: string, name: string, checksum: string}|null
+     */
+    private function storeSourceFile(Department $department, mixed $sourceFile): ?array
+    {
+        if (! $sourceFile instanceof UploadedFile) {
+            return null;
+        }
+
+        $disk = config('filesystems.result_import_disk', 'local');
+
+        if (! is_string($disk) || $disk === '') {
+            $disk = 'local';
+        }
+
+        $checksum = hash_file('sha256', $sourceFile->getRealPath());
+
+        if (! is_string($checksum)) {
+            throw ValidationException::withMessages([
+                'source_file' => 'The spreadsheet could not be read. Choose the file again and retry.',
             ]);
-        });
+        }
+        $extension = $sourceFile->extension() ?: 'xlsx';
+        $directory = 'schools/'.$department->faculty?->school_id.'/result-imports';
+        $path = Storage::disk($disk)->putFileAs(
+            $directory,
+            $sourceFile,
+            Str::uuid().'.'.$extension,
+        );
+
+        if (! is_string($path) || $path === '') {
+            throw ValidationException::withMessages([
+                'source_file' => 'The spreadsheet could not be stored. Try the upload again.',
+            ]);
+        }
+
+        return [
+            'disk' => $disk,
+            'path' => $path,
+            'name' => $sourceFile->getClientOriginalName(),
+            'checksum' => $checksum,
+        ];
     }
 
     /**
@@ -198,11 +270,14 @@ class ResultSheetImporter
             ->find($data['academic_year_semester_id'] ?? null);
         $entryAcademicSession = AcademicSession::query()
             ->find($data['entry_academic_session_id'] ?? null);
-        $academicSession = $this->academicSessionForStudentSetLevel(
-            $department,
-            $entryAcademicSession,
-            $academicYearSemester?->academicYear,
-        );
+        $academicYear = $academicYearSemester?->academicYear;
+        $academicSession = $entryAcademicSession instanceof AcademicSession && $academicYear instanceof AcademicYear
+            ? $this->academicContext->sessionForSetYear(
+                $department,
+                $entryAcademicSession,
+                $academicYear,
+            )
+            : null;
 
         if (! $academicSession instanceof AcademicSession) {
             throw ValidationException::withMessages([
@@ -211,39 +286,6 @@ class ResultSheetImporter
         }
 
         return $academicSession;
-    }
-
-    private function academicSessionForStudentSetLevel(
-        Department $department,
-        ?AcademicSession $entryAcademicSession,
-        ?AcademicYear $level,
-    ): ?AcademicSession {
-        if (! $entryAcademicSession instanceof AcademicSession || ! $level instanceof AcademicYear) {
-            return null;
-        }
-
-        $department->loadMissing('faculty.school');
-        $school = $department->faculty?->school;
-
-        if ($school === null) {
-            return null;
-        }
-
-        $sessions = $school->academicSessions()
-            ->oldest('starts_on')
-            ->get()
-            ->values();
-
-        $entryIndex = $sessions->search(fn (AcademicSession $academicSession): bool => (int) $academicSession->id === (int) $entryAcademicSession->id);
-
-        if ($entryIndex === false) {
-            return null;
-        }
-
-        $targetIndex = (int) $entryIndex + max((int) $level->id - 1, 0);
-        $academicSession = $sessions->get($targetIndex);
-
-        return $academicSession instanceof AcademicSession ? $academicSession : null;
     }
 
     /**
@@ -356,8 +398,8 @@ class ResultSheetImporter
                 $sheetCourse = $sheet->courses()->create([
                     'course_offering_id' => $offering->id,
                     'course_code' => $offering->course->code,
-                    'course_title' => $offering->course->title,
-                    'credit_units' => (int) $offering->course->credit_units,
+                    'course_title' => $offering->course_title,
+                    'credit_units' => (int) $offering->credit_units,
                     'sort_order' => $index + 1,
                 ]);
 

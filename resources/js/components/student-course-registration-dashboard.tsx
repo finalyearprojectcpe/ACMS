@@ -1,10 +1,7 @@
 import { router } from '@inertiajs/react';
 import {
-    RiAddLine,
     RiArrowDownSLine,
-    RiCloseLine,
     RiErrorWarningLine,
-    RiSearchLine,
     RiSendPlaneLine,
     RiSave3Line,
 } from '@remixicon/react';
@@ -26,20 +23,13 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardFooter,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
     Collapsible,
     CollapsibleContent,
     CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import { Input } from '@/components/ui/input';
 import {
     Table,
     TableBody,
@@ -51,7 +41,6 @@ import {
 import { cn } from '@/lib/utils';
 import type {
     DashboardCourseRegistrationCourse,
-    DashboardCourseRegistrationGroup,
     DashboardCourseRegistrationSource,
     DashboardCourseRegistrationSummary,
     DashboardStudentCourseRegistration,
@@ -72,7 +61,6 @@ export function StudentCourseRegistrationDashboard({
     const [selectedCourses, setSelectedCourses] = useState<
         DashboardCourseRegistrationCourse[]
     >(registration.selectedCourses);
-    const [previousQuery, setPreviousQuery] = useState('');
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
     const selectedKeys = useMemo(
         () => new Set(selectedCourses.map(courseKey)),
@@ -95,17 +83,25 @@ export function StudentCourseRegistrationDashboard({
     );
     const isDirty =
         selectedCourses.length !== registration.selectedCourses.length ||
-        selectedCourses.some((course) => !initialSelectedKeys.has(courseKey(course)));
-    const currentGroups = registration.courseGroups.filter(
-        (group) => !previousCourseSources.has(group.key),
-    );
-    const previousGroups = registration.courseGroups
+        selectedCourses.some(
+            (course) => !initialSelectedKeys.has(courseKey(course)),
+        );
+    const allCurrentCourses = registration.courseGroups
+        .filter((group) => !previousCourseSources.has(group.key))
+        .flatMap((group) => group.courses);
+    const allPreviousCourses = registration.courseGroups
         .filter((group) => previousCourseSources.has(group.key))
-        .map((group) => ({
-            ...group,
-            courses: filterCourses(group.courses, previousQuery),
-        }))
-        .filter((group) => group.courses.length > 0 || previousQuery === '');
+        .flatMap((group) => group.courses);
+    const displayCourses = isLocked
+        ? selectedCourses.filter(
+              (course) => !previousCourseSources.has(course.source),
+          )
+        : allCurrentCourses;
+    const displayPreviousCourses = isLocked
+        ? selectedCourses.filter((course) =>
+              previousCourseSources.has(course.source),
+          )
+        : allPreviousCourses;
 
     function toggleCourse(course: DashboardCourseRegistrationCourse) {
         if (isLocked || !course.selectable) {
@@ -113,39 +109,14 @@ export function StudentCourseRegistrationDashboard({
         }
 
         setSelectedCourses((courses) =>
-            courses.some((selected) => courseKey(selected) === courseKey(course))
+            courses.some(
+                (selected) => courseKey(selected) === courseKey(course),
+            )
                 ? courses.filter(
                       (selected) => courseKey(selected) !== courseKey(course),
                   )
                 : [...courses, course],
         );
-    }
-
-    function selectCurrentSetCourses() {
-        if (isLocked) {
-            return;
-        }
-
-        setSelectedCourses((courses) => {
-            const currentSetCourses = registration.availableCourses.filter(
-                (course) =>
-                    course.source === 'current_set' && course.selectable,
-            );
-            const existingKeys = new Set(courses.map(courseKey));
-
-            return [
-                ...courses,
-                ...currentSetCourses.filter(
-                    (course) => !existingKeys.has(courseKey(course)),
-                ),
-            ];
-        });
-    }
-
-    function clearSelection() {
-        if (!isLocked) {
-            setSelectedCourses([]);
-        }
     }
 
     function submit(action: 'save' | 'submit') {
@@ -164,24 +135,86 @@ export function StudentCourseRegistrationDashboard({
 
     return (
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-            <div className="grid gap-3 sm:grid-cols-3">
-                <SummaryBlock
-                    label="Maximum Units"
-                    value={registration.maximumCourseUnits}
-                    detail={`${selectedUnits} units selected`}
-                />
-                <SummaryBlock
-                    label="Course Adviser"
-                    value={registration.advisorName}
-                    detail="Reviews submitted registration"
-                    compact
-                />
-                <SummaryBlock
-                    label="Status"
-                    value={registration.reviewStatus}
-                    detail="Current registration state"
-                    compact
-                />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <h1 className="text-lg font-semibold tracking-normal">
+                        <QualifiedSemester
+                            level={registration.currentSemester.level}
+                            semester={registration.currentSemester.name}
+                        />{' '}
+                        Course Registration
+                    </h1>
+                    <div className="text-xs text-muted-foreground">
+                        {registration.currentSemester.session} Session
+                    </div>
+                </div>
+                {!isLocked && (
+                    <div className="flex flex-wrap items-center gap-3">
+                        <span className="text-sm text-muted-foreground">
+                            <span className="font-semibold text-foreground tabular-nums">
+                                {selectedUnits}
+                            </span>{' '}
+                            / {registration.maximumCourseUnits} units
+                        </span>
+                        <div className="flex gap-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={
+                                    selectedCourses.length === 0 ||
+                                    exceedsMaximum ||
+                                    !isDirty
+                                }
+                                onClick={() => submit('save')}
+                            >
+                                <RiSave3Line />
+                                Save Draft
+                            </Button>
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        disabled={
+                                            selectedCourses.length === 0 ||
+                                            exceedsMaximum ||
+                                            selectedBlockReasons.length > 0
+                                        }
+                                    >
+                                        <RiSendPlaneLine />
+                                        Submit for Review
+                                    </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>
+                                            Send course registration for review?
+                                        </AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            Your course adviser will review the{' '}
+                                            <span className="font-medium text-foreground">
+                                                {selectedUnits} selected units
+                                            </span>
+                                            . You can make changes again if this
+                                            is returned for correction.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>
+                                            Keep Editing
+                                        </AlertDialogCancel>
+                                        <AlertDialogAction
+                                            onClick={() => submit('submit')}
+                                        >
+                                            Send for Review
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {registration.feedbackNote ? (
@@ -199,7 +232,10 @@ export function StudentCourseRegistrationDashboard({
             ) : null}
 
             {selectedBlockReasons.length > 0 ? (
-                <Notice tone="danger" title="Some selected courses cannot be submitted yet">
+                <Notice
+                    tone="danger"
+                    title="Some selected courses cannot be submitted yet"
+                >
                     <ul className="mt-1 list-inside list-disc">
                         {selectedBlockReasons.slice(0, 3).map((reason) => (
                             <li key={reason}>{reason}</li>
@@ -209,169 +245,52 @@ export function StudentCourseRegistrationDashboard({
             ) : null}
 
             <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
-                <CardHeader className="flex flex-col gap-3 border-b border-border lg:flex-row lg:items-start lg:justify-between">
+                <CardHeader className="flex flex-col gap-2 border-b border-border sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                        <CardTitle>
-                            <QualifiedSemester
-                                level={registration.currentSemester.level}
-                                semester={registration.currentSemester.name}
-                            />{' '}
-                            Course Registration
-                        </CardTitle>
-                        <div className="mt-1 text-xs text-muted-foreground">
-                            {registration.currentSemester.session} Session
+                        <CardTitle>Current Semester Courses</CardTitle>
+                        <div className="text-xs text-muted-foreground">
+                            {isLocked
+                                ? 'Courses included in this registration.'
+                                : 'Toggle courses on or off to build your registration.'}
                         </div>
                     </div>
-                    <div className="flex flex-col gap-2 sm:flex-row">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            disabled={isLocked}
-                            onClick={selectCurrentSetCourses}
-                        >
-                            <RiAddLine />
-                            Select Current Set Courses
-                        </Button>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            disabled={isLocked || selectedCourses.length === 0}
-                            onClick={clearSelection}
-                        >
-                            <RiCloseLine />
-                            Clear Selection
-                        </Button>
+                    <div className="flex items-center gap-2">
+                        <StatusBadge status={registration.reviewStatus} />
+                        <span className="text-sm text-muted-foreground">
+                            <span className="font-semibold text-foreground tabular-nums">
+                                {selectedUnits}
+                            </span>{' '}
+                            / {registration.maximumCourseUnits} units
+                        </span>
                     </div>
                 </CardHeader>
                 <CardContent className="p-0">
-                    <SelectedCoursesTable
-                        courses={selectedCourses}
-                        isLocked={isLocked}
-                        onRemove={toggleCourse}
-                    />
-                </CardContent>
-                <CardFooter className="flex flex-col items-stretch justify-between gap-3 border-t border-border sm:flex-row sm:items-center">
-                    <div className="text-xs text-muted-foreground">
-                        <span className="font-semibold text-foreground tabular-nums">
-                            {selectedUnits}
-                        </span>{' '}
-                        selected units
-                    </div>
-                    <div className="flex flex-col gap-2 sm:flex-row">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            disabled={
-                                isLocked ||
-                                selectedCourses.length === 0 ||
-                                exceedsMaximum ||
-                                !isDirty
-                            }
-                            onClick={() => submit('save')}
-                        >
-                            <RiSave3Line />
-                            Save Draft
-                        </Button>
-                        <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                                <Button
-                                    type="button"
-                                    disabled={
-                                        isLocked ||
-                                        selectedCourses.length === 0 ||
-                                        exceedsMaximum ||
-                                        selectedBlockReasons.length > 0
-                                    }
-                                >
-                                    <RiSendPlaneLine />
-                                    Submit for Review
-                                </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>
-                                        Send course registration for review?
-                                    </AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        Your course adviser will review the{' '}
-                                        <span className="font-medium text-foreground">
-                                            {selectedUnits} selected units
-                                        </span>
-                                        . You can make changes again if this is
-                                        returned for correction.
-                                    </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel>
-                                        Keep Editing
-                                    </AlertDialogCancel>
-                                    <AlertDialogAction
-                                        onClick={() => submit('submit')}
-                                    >
-                                        Send for Review
-                                    </AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
-                    </div>
-                </CardFooter>
-            </Card>
-
-            <div className="grid gap-4">
-                {currentGroups.map((group) => (
-                    <CourseGroupCard
-                        key={group.key}
-                        group={group}
+                    <CourseOptionsTable
+                        courses={displayCourses}
                         selectedKeys={selectedKeys}
                         isLocked={isLocked}
                         onToggleCourse={toggleCourse}
                     />
-                ))}
-            </div>
+                </CardContent>
+            </Card>
 
-            {registration.courseGroups.some((group) =>
-                previousCourseSources.has(group.key),
-            ) ? (
+            {displayPreviousCourses.length > 0 ? (
                 <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
-                    <CardHeader className="gap-3 border-b border-border">
-                        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-center">
-                            <div>
-                                <CardTitle>Previous Courses</CardTitle>
-                                <div className="mt-1 text-xs text-muted-foreground">
-                                    Search your previous required and failed
-                                    courses, then add the ones you are taking
-                                    now.
-                                </div>
-                            </div>
-                            <div className="relative">
-                                <RiSearchLine className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                                <Input
-                                    value={previousQuery}
-                                    onChange={(event) =>
-                                        setPreviousQuery(event.target.value)
-                                    }
-                                    placeholder="Search previous courses"
-                                    className="pl-9"
-                                />
-                            </div>
+                    <CardHeader className="border-b border-border">
+                        <CardTitle>Carryover & Outstanding Courses</CardTitle>
+                        <div className="text-xs text-muted-foreground">
+                            {isLocked
+                                ? 'Carryover and outstanding courses included in this registration.'
+                                : 'Courses from previous semesters that still need to be satisfied.'}
                         </div>
                     </CardHeader>
-                    <CardContent className="grid gap-4 p-4">
-                        {previousGroups.length > 0 ? (
-                            previousGroups.map((group) => (
-                                <CourseGroupTable
-                                    key={group.key}
-                                    group={group}
-                                    selectedKeys={selectedKeys}
-                                    isLocked={isLocked}
-                                    onToggleCourse={toggleCourse}
-                                />
-                            ))
-                        ) : (
-                            <div className="py-6 text-sm text-muted-foreground">
-                                No previous courses match your search.
-                            </div>
-                        )}
+                    <CardContent className="p-0">
+                        <CourseOptionsTable
+                            courses={displayPreviousCourses}
+                            selectedKeys={selectedKeys}
+                            isLocked={isLocked}
+                            onToggleCourse={toggleCourse}
+                        />
                     </CardContent>
                 </Card>
             ) : null}
@@ -383,152 +302,6 @@ export function StudentCourseRegistrationDashboard({
                     onOpenChange={setIsHistoryOpen}
                 />
             ) : null}
-        </div>
-    );
-}
-
-function SelectedCoursesTable({
-    courses,
-    isLocked,
-    onRemove,
-}: {
-    courses: DashboardCourseRegistrationCourse[];
-    isLocked: boolean;
-    onRemove: (course: DashboardCourseRegistrationCourse) => void;
-}) {
-    return (
-        <Table className="text-sm">
-            <TableHeader>
-                <TableRow>
-                    <TableHead className="w-[20%] px-4">Course</TableHead>
-                    <TableHead>Title</TableHead>
-                    <TableHead className="hidden w-[18%] md:table-cell">
-                        Source
-                    </TableHead>
-                    <TableHead className="w-[10%] text-center">Units</TableHead>
-                    <TableHead className="w-[10%] pr-4 text-right">
-                        Action
-                    </TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                {courses.length > 0 ? (
-                    courses.map((course) => (
-                        <TableRow key={courseKey(course)} className="odd:bg-muted/25">
-                            <TableCell className="px-4 font-semibold">
-                                {course.code}
-                            </TableCell>
-                            <TableCell>
-                                <div className="font-medium">
-                                    {course.title}
-                                </div>
-                                <CourseWarnings course={course} />
-                            </TableCell>
-                            <TableCell className="hidden md:table-cell">
-                                <SourceBadge course={course} />
-                            </TableCell>
-                            <TableCell className="text-center font-semibold tabular-nums">
-                                {course.units}
-                            </TableCell>
-                            <TableCell className="pr-4 text-right">
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    disabled={isLocked}
-                                    onClick={() => onRemove(course)}
-                                    aria-label={`Remove ${course.code}`}
-                                >
-                                    <RiCloseLine />
-                                </Button>
-                            </TableCell>
-                        </TableRow>
-                    ))
-                ) : (
-                    <TableRow>
-                        <TableCell
-                            colSpan={5}
-                            className="px-4 py-8 text-muted-foreground"
-                        >
-                            No courses selected yet.
-                        </TableCell>
-                    </TableRow>
-                )}
-            </TableBody>
-        </Table>
-    );
-}
-
-function CourseGroupCard({
-    group,
-    isLocked,
-    onToggleCourse,
-    selectedKeys,
-}: {
-    group: DashboardCourseRegistrationGroup;
-    isLocked: boolean;
-    onToggleCourse: (course: DashboardCourseRegistrationCourse) => void;
-    selectedKeys: Set<string>;
-}) {
-    return (
-        <Card
-            className={cn(
-                'border bg-background shadow-sm ring-1',
-                group.key === 'carryover'
-                    ? 'border-red-200 ring-red-200/80 dark:border-red-500/30 dark:ring-red-500/20'
-                    : 'border-border ring-border/70',
-            )}
-        >
-            <CardHeader className="border-b border-border">
-                <CardTitle>{group.title}</CardTitle>
-                <div className="text-xs text-muted-foreground">
-                    {group.detail}
-                </div>
-            </CardHeader>
-            <CardContent className="p-0">
-                <CourseOptionsTable
-                    courses={group.courses}
-                    selectedKeys={selectedKeys}
-                    isLocked={isLocked}
-                    onToggleCourse={onToggleCourse}
-                />
-            </CardContent>
-        </Card>
-    );
-}
-
-function CourseGroupTable({
-    group,
-    isLocked,
-    onToggleCourse,
-    selectedKeys,
-}: {
-    group: DashboardCourseRegistrationGroup;
-    isLocked: boolean;
-    onToggleCourse: (course: DashboardCourseRegistrationCourse) => void;
-    selectedKeys: Set<string>;
-}) {
-    return (
-        <div
-            className={cn(
-                'border bg-background',
-                group.key === 'carryover'
-                    ? 'border-red-200 dark:border-red-500/30'
-                    : 'border-border',
-            )}
-        >
-            <div className="border-b border-border px-4 py-3">
-                <div className="font-semibold">{group.title}</div>
-                <div className="mt-0.5 text-xs text-muted-foreground">
-                    {group.detail}
-                </div>
-            </div>
-            <CourseOptionsTable
-                courses={group.courses}
-                selectedKeys={selectedKeys}
-                isLocked={isLocked}
-                onToggleCourse={onToggleCourse}
-            />
         </div>
     );
 }
@@ -548,7 +321,9 @@ function CourseOptionsTable({
         <Table className="text-sm">
             <TableHeader>
                 <TableRow>
-                    <TableHead className="w-12 px-4">Take</TableHead>
+                    {!isLocked && (
+                        <TableHead className="w-12 px-4">Take</TableHead>
+                    )}
                     <TableHead className="w-[18%]">Course</TableHead>
                     <TableHead>Title</TableHead>
                     <TableHead className="w-[10%] text-center">Units</TableHead>
@@ -561,51 +336,69 @@ function CourseOptionsTable({
                 </TableRow>
             </TableHeader>
             <TableBody>
-                {courses.map((course) => {
-                    const selected = selectedKeys.has(courseKey(course));
+                {courses.length === 0 ? (
+                    <TableRow>
+                        <TableCell
+                            colSpan={isLocked ? 5 : 6}
+                            className="px-4 py-8 text-center text-muted-foreground"
+                        >
+                            {isLocked
+                                ? 'No courses in this registration.'
+                                : 'No courses available.'}
+                        </TableCell>
+                    </TableRow>
+                ) : (
+                    courses.map((course) => {
+                        const selected = selectedKeys.has(courseKey(course));
 
-                    return (
-                        <TableRow key={courseKey(course)} className="odd:bg-muted/25">
-                            <TableCell className="px-4">
-                                <Checkbox
-                                    checked={selected}
-                                    disabled={
-                                        isLocked || !course.selectable
-                                    }
-                                    aria-label={`Select ${course.code}`}
-                                    onCheckedChange={() =>
-                                        onToggleCourse(course)
-                                    }
-                                />
-                            </TableCell>
-                            <TableCell className="font-semibold">
-                                {course.code}
-                            </TableCell>
-                            <TableCell>
-                                <div className="min-w-0">
-                                    <div className="font-medium">
-                                        {course.title}
-                                    </div>
-                                    {course.originSemester ? (
-                                        <div className="text-xs text-muted-foreground">
-                                            From {course.originSemester}
+                        return (
+                            <TableRow
+                                key={courseKey(course)}
+                                className="odd:bg-muted/25"
+                            >
+                                {!isLocked && (
+                                    <TableCell className="px-4">
+                                        <Checkbox
+                                            checked={selected}
+                                            disabled={!course.selectable}
+                                            aria-label={`Select ${course.code}`}
+                                            onCheckedChange={() =>
+                                                onToggleCourse(course)
+                                            }
+                                        />
+                                    </TableCell>
+                                )}
+                                <TableCell className="font-semibold">
+                                    {course.code}
+                                </TableCell>
+                                <TableCell>
+                                    <div className="min-w-0">
+                                        <div className="font-medium">
+                                            {course.title}
                                         </div>
-                                    ) : null}
-                                    <CourseWarnings course={course} />
-                                </div>
-                            </TableCell>
-                            <TableCell className="text-center font-semibold tabular-nums">
-                                {course.units}
-                            </TableCell>
-                            <TableCell className="hidden md:table-cell">
-                                {course.category}
-                            </TableCell>
-                            <TableCell className="pr-4 text-right">
-                                <SourceBadge course={course} />
-                            </TableCell>
-                        </TableRow>
-                    );
-                })}
+                                        {course.originSemester ? (
+                                            <div className="text-xs text-muted-foreground">
+                                                From {course.originSemester}
+                                            </div>
+                                        ) : null}
+                                        {!isLocked && (
+                                            <CourseWarnings course={course} />
+                                        )}
+                                    </div>
+                                </TableCell>
+                                <TableCell className="text-center font-semibold tabular-nums">
+                                    {course.units}
+                                </TableCell>
+                                <TableCell className="hidden md:table-cell">
+                                    {course.category}
+                                </TableCell>
+                                <TableCell className="pr-4 text-right">
+                                    <SourceBadge course={course} />
+                                </TableCell>
+                            </TableRow>
+                        );
+                    })
+                )}
             </TableBody>
         </Table>
     );
@@ -698,7 +491,10 @@ function ReadonlyCoursesTable({
             </TableHeader>
             <TableBody>
                 {courses.map((course) => (
-                    <TableRow key={courseKey(course)} className="odd:bg-muted/25">
+                    <TableRow
+                        key={courseKey(course)}
+                        className="odd:bg-muted/25"
+                    >
                         <TableCell className="px-4 font-semibold">
                             {course.code}
                         </TableCell>
@@ -732,44 +528,6 @@ function CourseWarnings({
             <RiErrorWarningLine className="mt-0.5 size-3.5 shrink-0" />
             <span>{course.blockReasons.join(' ')}</span>
         </div>
-    );
-}
-
-function SummaryBlock({
-    compact = false,
-    detail,
-    label,
-    value,
-}: {
-    compact?: boolean;
-    detail: string;
-    label: string;
-    value: string | number;
-}) {
-    return (
-        <Card
-            size="sm"
-            className="border border-border bg-background shadow-sm ring-1 ring-border/70"
-        >
-            <CardHeader>
-                <CardTitle className="text-xs text-muted-foreground">
-                    {label}
-                </CardTitle>
-            </CardHeader>
-            <CardContent>
-                <div
-                    className={cn(
-                        'truncate font-semibold tracking-normal tabular-nums',
-                        compact ? 'text-lg' : 'text-2xl',
-                    )}
-                >
-                    {value}
-                </div>
-                <div className="mt-1 text-xs text-muted-foreground">
-                    {detail}
-                </div>
-            </CardContent>
-        </Card>
     );
 }
 
@@ -847,22 +605,4 @@ function statusBadgeClass(status: string): string {
 
 function courseKey(course: DashboardCourseRegistrationCourse): string {
     return `${course.source}-${course.courseOfferingId}`;
-}
-
-function filterCourses(
-    courses: DashboardCourseRegistrationCourse[],
-    query: string,
-): DashboardCourseRegistrationCourse[] {
-    const normalized = query.trim().toLowerCase();
-
-    if (!normalized) {
-        return courses;
-    }
-
-    return courses.filter((course) =>
-        [course.code, course.title, course.category, course.sourceLabel]
-            .join(' ')
-            .toLowerCase()
-            .includes(normalized),
-    );
 }

@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\School;
+use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -29,6 +30,12 @@ class ResolveCurrentSchool
 
             if ($school !== null) {
                 $request->attributes->set('school', $school);
+
+                $user = $request->user();
+
+                if ($user instanceof User && (int) $user->school_id !== (int) $school->id) {
+                    abort(403, 'This account does not belong to the school on this address.');
+                }
             }
         }
 

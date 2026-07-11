@@ -11,6 +11,21 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // Dates each semester inside a school session and controls its course-registration window.
+        Schema::create('academic_session_semesters', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('academic_session_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('semester_id')->constrained()->restrictOnDelete();
+            $table->date('starts_on');
+            $table->date('ends_on');
+            $table->dateTime('registration_opens_at')->nullable();
+            $table->dateTime('registration_closes_at')->nullable();
+            $table->timestamps();
+
+            $table->unique(['academic_session_id', 'semester_id']);
+            $table->index(['starts_on', 'ends_on']);
+        });
+
         // Stores concrete academic-year semester slots such as 300 Level Harmattan.
         Schema::create('academic_year_semesters', function (Blueprint $table) {
             $table->id();
@@ -29,5 +44,6 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('academic_year_semesters');
+        Schema::dropIfExists('academic_session_semesters');
     }
 };

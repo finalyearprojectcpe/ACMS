@@ -11,14 +11,14 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Stores prerequisite course catalog relationships used to validate course selections.
-        Schema::create('course_prerequisites', function (Blueprint $table) {
+        // Versions prerequisite rules with the offering whose registration they control.
+        Schema::create('course_offering_prerequisites', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('course_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('course_offering_id')->constrained()->cascadeOnDelete();
             $table->foreignId('prerequisite_course_id')->constrained('courses')->cascadeOnDelete();
             $table->timestamps();
 
-            $table->unique(['course_id', 'prerequisite_course_id']);
+            $table->unique(['course_offering_id', 'prerequisite_course_id'], 'course_offering_prerequisite_unique');
             $table->index('prerequisite_course_id');
         });
     }
@@ -28,6 +28,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('course_prerequisites');
+        Schema::dropIfExists('course_offering_prerequisites');
     }
 };

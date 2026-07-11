@@ -17,6 +17,7 @@ return new class extends Migration
             $table->string('name');
             $table->string('abbreviation', 20)->unique();
             $table->string('slug')->unique();
+            $table->string('timezone')->default('Africa/Lagos');
             $table->timestamps();
         });
     }

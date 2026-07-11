@@ -1,7 +1,6 @@
 <?php
 
 use App\AccountType;
-use App\Models\ApprovalRequest;
 use App\Models\EmailDelivery;
 use App\Models\ImportBatch;
 use App\Models\User;
@@ -55,8 +54,7 @@ test('demo users are seeded with profiles and can login', function () {
         ->and(User::query()->where('email', 'hod.mce@futo.edu')->firstOrFail()->activated_at)->toBeNull()
         ->and(User::query()->where('email', 'epe.staff2@futo.edu')->firstOrFail()->access_code)->toBe('SESET-EPE-STAFF2')
         ->and(EmailDelivery::query()->where('school_id', $faculty->school_id)->count())->toBeGreaterThanOrEqual(4)
-        ->and(ImportBatch::query()->where('school_id', $faculty->school_id)->count())->toBeGreaterThanOrEqual(3)
-        ->and(ApprovalRequest::query()->where('school_id', $faculty->school_id)->count())->toBeGreaterThanOrEqual(4);
+        ->and(ImportBatch::query()->where('school_id', $faculty->school_id)->count())->toBeGreaterThanOrEqual(3);
 
     $response = $this->post(route('login.store'), [
         'email' => 'staff1@futo.edu',

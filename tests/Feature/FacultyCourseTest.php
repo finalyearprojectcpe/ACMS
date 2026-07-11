@@ -1,5 +1,6 @@
 <?php
 
+use App\CourseCategory;
 use App\Models\AcademicSession;
 use App\Models\AcademicYear;
 use App\Models\AcademicYearSemester;
@@ -83,7 +84,7 @@ function createFacultyCourseOffering(
         'course_id' => $course->id,
         'academic_session_id' => $academicSession->id,
         'academic_year_semester_id' => yearSemester($academicYearSlug, $semesterSlug)->id,
-        'is_mandatory' => true,
+        'category' => CourseCategory::Faculty,
     ]);
 }
 
@@ -119,7 +120,6 @@ test('faculty heads can view faculty courses', function () {
         ->where('dashboard.facultyHeadCourses.semesters.0.level.slug', '100-level')
         ->where('dashboard.facultyHeadCourses.semesters.0.semester.slug', 'harmattan')
         ->where('dashboard.facultyHeadCourses.semesters.0.offerings.0.code', 'GST 101')
-        ->where('dashboard.facultyHeadCourses.semesters.0.offerings.0.departmentsCount', 1)
         ->etc());
 });
 
@@ -161,10 +161,10 @@ test('faculty heads can create faculty courses with faculty prerequisites', func
         ->where('course_id', $course->id)
         ->firstOrFail();
 
-    expect($course->title)->toBe('Use of English II')
-        ->and($course->credit_units)->toBe(2)
-        ->and($course->prerequisites()->whereKey($prerequisiteOffering->course_id)->exists())->toBeTrue()
-        ->and($offering->is_mandatory)->toBeTrue();
+    expect($offering->course_title)->toBe('Use of English II')
+        ->and($offering->credit_units)->toBe(2)
+        ->and($offering->prerequisiteCourses()->whereKey($prerequisiteOffering->course_id)->exists())->toBeTrue()
+        ->and($offering->category)->toBe(CourseCategory::Faculty);
 });
 
 test('faculty heads can delete faculty course offerings', function () {
@@ -190,9 +190,9 @@ test('faculty heads can delete faculty course offerings', function () {
         'section' => 'sessions-courses',
         'academic_session' => $context['academicSession']->id,
     ]));
-    $response->assertSessionHas('success', 'Faculty course removed.');
+    $response->assertSessionHas('success', 'Faculty course removed from this session. The course remains in the school catalog and past results are unchanged.');
 
-    expect(CourseOffering::query()->whereKey($offering->id)->exists())->toBeFalse()
+    expect(CourseOffering::query()->whereKey($offering->id)->value('archived_at'))->not->toBeNull()
         ->and(Course::query()->whereKey($course->id)->exists())->toBeTrue();
 });
 
@@ -427,7 +427,7 @@ test('staff course schedules show faculty courses as read only', function () {
     $response->assertInertia(fn (Assert $page) => $page
         ->component('dashboard')
         ->where('dashboard.staffCourseSchedules.semesters.0.offerings.0.code', 'GST 101')
-        ->where('dashboard.staffCourseSchedules.semesters.0.offerings.0.courseType', 'Faculty Course')
+        ->where('dashboard.staffCourseSchedules.semesters.0.offerings.0.category', 'faculty')
         ->where('dashboard.staffCourseSchedules.semesters.0.offerings.0.canEdit', false)
         ->etc());
 });
@@ -490,7 +490,7 @@ test('faculty courses reject department owned prerequisites', function () {
         'course_id' => $departmentCourse->id,
         'academic_session_id' => $context['academicSession']->id,
         'academic_year_semester_id' => yearSemester('100-level', 'harmattan')->id,
-        'is_mandatory' => true,
+        'category' => CourseCategory::Departmental,
     ]);
 
     $response = $this->actingAs($context['facultyHeadUser'])->post(route('dashboard.sessions-courses.store', [

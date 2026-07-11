@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\AcademicSession;
 use App\Models\AcademicYear;
 use App\Models\AcademicYearSemester;
 use App\Models\Semester;
@@ -20,6 +21,7 @@ class AcademicStructureSeeder extends Seeder
                 [
                     'name' => "{$level}00 Level",
                     'slug' => "{$level}00-level",
+                    'year_number' => $level,
                 ],
             );
         }
@@ -32,7 +34,7 @@ class AcademicStructureSeeder extends Seeder
         }
 
         AcademicYear::query()
-            ->orderBy('id')
+            ->orderBy('year_number')
             ->each(function (AcademicYear $academicYear): void {
                 Semester::query()
                     ->orderBy('sort_order')
@@ -43,6 +45,10 @@ class AcademicStructureSeeder extends Seeder
                         ]);
                     });
             });
+
+        AcademicSession::query()
+            ->with('semesterInstances')
+            ->each(fn (AcademicSession $academicSession) => $academicSession->syncDefaultSemesterInstances());
     }
 
     /**

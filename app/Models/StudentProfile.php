@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\StudentStatus;
 use Database\Factories\StudentProfileFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -9,7 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['school_id', 'user_id', 'department_id', 'current_academic_year_id', 'entry_academic_session_id', 'registration_number'])]
+#[Fillable(['school_id', 'user_id', 'department_id', 'current_academic_year_id', 'entry_academic_session_id', 'registration_number', 'status'])]
 class StudentProfile extends Model
 {
     /** @use HasFactory<StudentProfileFactory> */
@@ -93,5 +94,15 @@ class StudentProfile extends Model
     public function courseRegistrations(): HasMany
     {
         return $this->hasMany(CourseRegistration::class);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'status' => StudentStatus::class,
+        ];
     }
 }

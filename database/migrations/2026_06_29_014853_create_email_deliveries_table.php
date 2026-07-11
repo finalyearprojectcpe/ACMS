@@ -19,7 +19,9 @@ return new class extends Migration
             $table->string('recipient_email');
             $table->string('subject');
             $table->string('mailer')->default('cloudflare');
+            $table->string('purpose_key')->nullable()->unique();
             $table->string('status')->default('queued');
+            $table->unsignedSmallInteger('attempts')->default(0);
             $table->string('provider_message_id')->nullable();
             $table->text('error')->nullable();
             $table->json('metadata')->nullable();

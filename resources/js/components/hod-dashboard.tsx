@@ -11,12 +11,14 @@ import { useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 
 import {
+    editStudentSetAdvisor,
     importHodStaff,
     section as dashboardSection,
     showResultSheet,
     showResultSheetApproval,
     storeImportedHodStaff,
     updateHodPassword,
+    updateStudentSetAdvisor,
 } from '@/actions/App/Http/Controllers/DashboardController';
 import { ActionLink } from '@/components/action-link';
 import { CopyableValue } from '@/components/copyable-value';
@@ -31,6 +33,7 @@ import {
 } from '@/components/dashboard-charts';
 import { GradeDisplay } from '@/components/grade-display';
 import { PersonCell } from '@/components/person-cell';
+import { PersonPicker } from '@/components/person-picker';
 import { ProfilePhotoSettingsCard } from '@/components/profile-photo-settings-card';
 import {
     QualifiedSemester,
@@ -94,6 +97,7 @@ import type {
     DashboardHodSetAdvisor,
     DashboardHodStaff,
     DashboardHodStaffForm,
+    DashboardHodSetAdvisorForm,
     DashboardStaffStudent,
     DashboardStudentRecord,
     DashboardStudentRecordSemester,
@@ -1275,6 +1279,7 @@ export function HodStaffImport({ form }: { form: DashboardHodStaffForm }) {
                 start_row: batch.startRow,
                 total_rows: batch.totalRows,
                 batch_size: batch.batchSize,
+                mappings: batch.mappings,
                 rows,
             },
             {
@@ -1334,6 +1339,91 @@ export function HodStaffImport({ form }: { form: DashboardHodStaffForm }) {
     );
 }
 
+export function HodSetAdvisorForm({
+    form: advisorForm,
+}: {
+    form: DashboardHodSetAdvisorForm;
+}) {
+    const form = useForm({
+        staff_profile_id: advisorForm.currentStaffProfileId?.toString() ?? '',
+    });
+    const backRoute = dashboardSection({ section: 'staff' });
+
+    function submit(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        form.submit(
+            updateStudentSetAdvisor({
+                entryAcademicSession: advisorForm.set.entrySession.id,
+            }),
+        );
+    }
+
+    return (
+        <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+            <div className="flex items-start justify-between gap-4">
+                <PageSummary
+                    title="Assign Course Adviser"
+                    detail="Choose the staff member responsible for this student set."
+                />
+                <ActionLink href={backRoute}>Back to Staff</ActionLink>
+            </div>
+            <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
+                <CardForm onSubmit={submit}>
+                    <CardHeader className="border-b border-border">
+                        <CardTitle>
+                            <StudentSetLabel
+                                entrySession={advisorForm.set.entrySession}
+                                currentLevel={advisorForm.set.currentLevel}
+                                minimumYearsToDegree={
+                                    advisorForm.set.minimumYearsToDegree
+                                }
+                                isGraduated={advisorForm.set.isGraduated}
+                            />
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-5">
+                        <Field
+                            data-invalid={Boolean(form.errors.staff_profile_id)}
+                        >
+                            <FieldLabel>Course Adviser</FieldLabel>
+                            <PersonPicker
+                                value={form.data.staff_profile_id}
+                                options={advisorForm.staff.map((staff) => ({
+                                    value: staff.id.toString(),
+                                    name: staff.name,
+                                    secondary: staff.email,
+                                    avatar: staff.avatar,
+                                    unavailableReason: staff.unavailableReason,
+                                }))}
+                                onValueChange={(value) =>
+                                    form.setData('staff_profile_id', value)
+                                }
+                                placeholder="Search department staff"
+                            />
+                            <FieldError>
+                                {form.errors.staff_profile_id}
+                            </FieldError>
+                        </Field>
+                    </CardContent>
+                    <CardFooter className="flex justify-end gap-2 border-t border-border">
+                        <Button asChild type="button" variant="outline">
+                            <Link href={backRoute}>Cancel</Link>
+                        </Button>
+                        <Button
+                            type="submit"
+                            disabled={
+                                form.processing || !form.data.staff_profile_id
+                            }
+                        >
+                            Save Course Adviser
+                        </Button>
+                    </CardFooter>
+                </CardForm>
+            </Card>
+        </div>
+    );
+}
+
 export function StudentRecordDashboard({
     record,
 }: {
@@ -1371,10 +1461,10 @@ export function StudentRecordDashboard({
                     </div>
 
                     <Button variant="outline" asChild className="w-fit">
-                        <Link href={record.statementUrl}>
+                        <a href={record.statementUrl}>
                             <RiFileExcel2Line className="size-4" />
                             Download Statement
-                        </Link>
+                        </a>
                     </Button>
                 </div>
             </div>
@@ -1382,7 +1472,7 @@ export function StudentRecordDashboard({
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <MetricBlock
                     label="CGPA"
-                    value={record.cgpa}
+                    value={record.cgpa ?? 'Not available'}
                     detail="Cumulative performance"
                 />
                 <MetricBlock
@@ -1603,7 +1693,7 @@ function StudentsTable({
                                     />
                                 </TableCell>
                                 <TableCell className="text-center font-semibold tabular-nums">
-                                    {student.cgpa}
+                                    {student.cgpa ?? '-'}
                                 </TableCell>
                                 <TableCell className="pr-4 text-right">
                                     <ActionLink href={student.profileUrl}>
@@ -1637,8 +1727,11 @@ function SetAdvisorTable({
                 <TableRow>
                     <TableHead className="w-[30%] px-4">Entry Set</TableHead>
                     <TableHead>Course Adviser</TableHead>
-                    <TableHead className="w-[18%] pr-4 text-center">
+                    <TableHead className="w-[14%] text-center">
                         Students
+                    </TableHead>
+                    <TableHead className="w-24 pr-4 text-right">
+                        Action
                     </TableHead>
                 </TableRow>
             </TableHeader>
@@ -1681,6 +1774,16 @@ function SetAdvisorTable({
                         <TableCell className="pr-4 text-center font-medium tabular-nums">
                             {advisor.studentsCount}
                         </TableCell>
+                        <TableCell className="pr-4 text-right">
+                            <ActionLink
+                                href={editStudentSetAdvisor({
+                                    entryAcademicSession:
+                                        advisor.entrySession.id,
+                                })}
+                            >
+                                {advisor.advisor ? 'Replace' : 'Assign'}
+                            </ActionLink>
+                        </TableCell>
                     </TableRow>
                 ))}
             </TableBody>
@@ -1691,7 +1794,7 @@ function SetAdvisorTable({
 function LevelGpaTable({
     rows,
 }: {
-    rows: Array<{ level: string; gpa: string }>;
+    rows: Array<{ level: string; gpa: string | null }>;
 }) {
     return (
         <Table className="text-sm">
@@ -1712,7 +1815,7 @@ function LevelGpaTable({
                                 {row.level}
                             </TableCell>
                             <TableCell className="pr-4 text-right font-semibold tabular-nums">
-                                {row.gpa}
+                                {row.gpa ?? '-'}
                             </TableCell>
                         </TableRow>
                     ))
@@ -1750,9 +1853,6 @@ function StudentRecordSemesterCard({
                             <TableHead className="w-20 text-center">
                                 Units
                             </TableHead>
-                            <TableHead className="w-20 text-center">
-                                Score
-                            </TableHead>
                             <TableHead className="w-20 pr-4 text-center">
                                 Grade
                             </TableHead>
@@ -1774,9 +1874,6 @@ function StudentRecordSemesterCard({
                                 </TableCell>
                                 <TableCell className="text-center font-medium tabular-nums">
                                     {course.units}
-                                </TableCell>
-                                <TableCell className="text-center font-medium tabular-nums">
-                                    {course.score}
                                 </TableCell>
                                 <TableCell className="pr-4 text-center">
                                     <GradeDisplay grade={course.grade} />

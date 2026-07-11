@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\AccountStatus;
 use App\AccountType;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -14,7 +15,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Storage;
 
-#[Fillable(['school_id', 'name', 'email', 'profile_photo_path', 'password', 'access_code', 'access_code_used_at', 'activated_at', 'account_type'])]
+#[Fillable(['school_id', 'name', 'email', 'profile_photo_path', 'password', 'access_code', 'access_code_used_at', 'activated_at', 'disabled_at', 'status', 'account_type'])]
 #[Hidden(['password', 'access_code', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -30,8 +31,10 @@ class User extends Authenticatable
     {
         return [
             'account_type' => AccountType::class,
+            'status' => AccountStatus::class,
             'access_code_used_at' => 'datetime',
             'activated_at' => 'datetime',
+            'disabled_at' => 'datetime',
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];

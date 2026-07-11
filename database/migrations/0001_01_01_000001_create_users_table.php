@@ -24,6 +24,8 @@ return new class extends Migration
             $table->string('access_code')->nullable();
             $table->timestamp('access_code_used_at')->nullable();
             $table->timestamp('activated_at')->nullable();
+            $table->timestamp('disabled_at')->nullable();
+            $table->string('status')->default('pending');
             $table->string('account_type')->default(AccountType::Student->value);
             $table->rememberToken();
             $table->timestamps();
@@ -32,10 +34,14 @@ return new class extends Migration
             $table->index(['school_id', 'account_type']);
         });
 
+        // Stores school-scoped password reset tokens because the same email can exist at different schools.
         Schema::create('password_reset_tokens', function (Blueprint $table) {
-            $table->string('email')->primary();
+            $table->foreignId('school_id')->constrained()->cascadeOnDelete();
+            $table->string('email');
             $table->string('token');
             $table->timestamp('created_at')->nullable();
+
+            $table->primary(['school_id', 'email']);
         });
 
         Schema::create('sessions', function (Blueprint $table) {
@@ -46,6 +52,14 @@ return new class extends Migration
             $table->longText('payload');
             $table->integer('last_activity')->index();
         });
+
+        Schema::table('schools', function (Blueprint $table) {
+            $table->foreignId('administrator_user_id')
+                ->nullable()
+                ->after('timezone')
+                ->constrained('users')
+                ->nullOnDelete();
+        });
     }
 
     /**
@@ -53,6 +67,10 @@ return new class extends Migration
      */
     public function down(): void
     {
+        Schema::table('schools', function (Blueprint $table) {
+            $table->dropConstrainedForeignId('administrator_user_id');
+        });
+
         Schema::dropIfExists('users');
         Schema::dropIfExists('password_reset_tokens');
         Schema::dropIfExists('sessions');

@@ -1,19 +1,46 @@
-import { Link, useForm } from '@inertiajs/react';
+import { Link, router, useForm, usePoll } from '@inertiajs/react';
 import {
     RiAddLine,
+    RiArchiveLine,
     RiBankCardLine,
+    RiDownload2Line,
+    RiEditLine,
     RiErrorWarningLine,
+    RiHistoryLine,
     RiSave3Line,
     RiSendPlaneLine,
 } from '@remixicon/react';
+import { useEffect } from 'react';
 import type { FormEvent } from 'react';
 
-import { storeStaffDue } from '@/actions/App/Http/Controllers/DashboardController';
+import {
+    archiveStaffDue,
+    createStudentDueWaiver,
+    editStaffDue,
+    exportStaffDue,
+    restoreStaffDue,
+    restoreStudentDue,
+    storeStaffDue,
+    updateStaffDue,
+    waiveStudentDue,
+} from '@/actions/App/Http/Controllers/DashboardController';
 import { ActionLink } from '@/components/action-link';
 import { CopyableValue } from '@/components/copyable-value';
 import { PersonCell } from '@/components/person-cell';
+import { ReceiptAction } from '@/components/receipt-action';
 import { StudentSetPicker } from '@/components/student-set-picker';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -42,9 +69,9 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import type {
-    DashboardPaymentAccount,
     DashboardStaffDueDetail,
     DashboardStaffDueForm,
+    DashboardStaffDueWaiverForm,
     DashboardStaffDues,
 } from '@/types';
 
@@ -221,9 +248,9 @@ export function StaffDueFormDashboard({
     const dueForm = useForm<StaffDueFormData>({
         entry_academic_session_id:
             form.defaults.entryAcademicSessionId?.toString() ?? '',
-        title: '',
-        description: '',
-        amount_naira: '',
+        title: form.defaults.title,
+        description: form.defaults.description,
+        amount_naira: form.defaults.amountNaira,
         due_on: form.defaults.dueOn,
     });
 
@@ -232,29 +259,43 @@ export function StaffDueFormDashboard({
             ...data,
             action,
         }));
-        dueForm.submit(storeStaffDue(), {
-            onFinish: () => dueForm.transform((data) => data),
-        });
+        dueForm.submit(
+            form.mode === 'edit' && form.due
+                ? updateStaffDue(form.due.id)
+                : storeStaffDue(),
+            {
+                onFinish: () => dueForm.transform((data) => data),
+            },
+        );
     }
 
     function preventSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
     }
 
-    const selectedPaymentAccount = paymentAccountForSet(
-        form.paymentAccounts,
-        dueForm.data.entry_academic_session_id,
-    );
+    const selectedPaymentAccount = form.paymentAccounts[0] ?? null;
     const canPublish = Boolean(selectedPaymentAccount);
+    const publishedAmountChanged =
+        form.mode === 'edit' &&
+        form.due?.status === 'Published' &&
+        Number(dueForm.data.amount_naira) !== Number(form.defaults.amountNaira);
+    const updatedAmount = new Intl.NumberFormat('en-NG', {
+        style: 'currency',
+        currency: 'NGN',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+    }).format(Number(dueForm.data.amount_naira) || 0);
 
     return (
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
             <div className="min-w-0">
                 <h1 className="text-xl font-semibold tracking-normal">
-                    Create Due
+                    {form.mode === 'edit' ? 'Edit Due' : 'Create Due'}
                 </h1>
                 <p className="mt-1 text-sm text-muted-foreground">
-                    Publish when students should see the due on their dashboard.
+                    {form.mode === 'edit'
+                        ? 'Update the due details students and staff use.'
+                        : 'Publish when students should see the due on their dashboard.'}
                 </p>
             </div>
 
@@ -329,6 +370,10 @@ export function StaffDueFormDashboard({
                                     meta: set.advisorName ?? undefined,
                                 }))}
                                 ariaLabel="Student set"
+                                disabled={
+                                    form.mode === 'edit' &&
+                                    !form.due?.canChangeSet
+                                }
                             />
                             <FieldError>
                                 {dueForm.errors.entry_academic_session_id}
@@ -392,6 +437,10 @@ export function StaffDueFormDashboard({
                                         )
                                     }
                                     placeholder="15000"
+                                    disabled={
+                                        form.mode === 'edit' &&
+                                        !form.due?.canChangeAmount
+                                    }
                                 />
                                 <FieldError>
                                     {dueForm.errors.amount_naira}
@@ -419,24 +468,79 @@ export function StaffDueFormDashboard({
                         </FieldGroup>
                     </CardContent>
                     <CardFooter className="justify-end gap-2 bg-muted/20">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            disabled={dueForm.processing}
-                            onClick={() => submit('draft')}
-                        >
-                            <RiSave3Line />
-                            Save Draft
-                        </Button>
-                        <Button
-                            type="button"
-                            disabled={dueForm.processing || !canPublish}
-                            aria-disabled={!canPublish}
-                            onClick={() => submit('publish')}
-                        >
-                            <RiSendPlaneLine />
-                            Publish
-                        </Button>
+                        {form.mode === 'edit' &&
+                        form.due?.status === 'Published' ? (
+                            publishedAmountChanged ? (
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button
+                                            type="button"
+                                            disabled={dueForm.processing}
+                                        >
+                                            <RiSave3Line />
+                                            Save Changes
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>
+                                                Change this due to{' '}
+                                                {updatedAmount}?
+                                            </AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                Students who still owe this due
+                                                will see the new amount.
+                                                Completed payments and their
+                                                receipts will keep the exact
+                                                amount already paid.
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel>
+                                                Keep Current Amount
+                                            </AlertDialogCancel>
+                                            <AlertDialogAction
+                                                onClick={() => submit('draft')}
+                                            >
+                                                Change Due Amount
+                                            </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            ) : (
+                                <Button
+                                    type="button"
+                                    disabled={dueForm.processing}
+                                    onClick={() => submit('draft')}
+                                >
+                                    <RiSave3Line />
+                                    Save Changes
+                                </Button>
+                            )
+                        ) : (
+                            <>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    disabled={dueForm.processing}
+                                    onClick={() => submit('draft')}
+                                >
+                                    <RiSave3Line />
+                                    {form.mode === 'edit'
+                                        ? 'Save Changes'
+                                        : 'Save Draft'}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    disabled={dueForm.processing || !canPublish}
+                                    aria-disabled={!canPublish}
+                                    onClick={() => submit('publish')}
+                                >
+                                    <RiSendPlaneLine />
+                                    Publish
+                                </Button>
+                            </>
+                        )}
                     </CardFooter>
                 </CardForm>
             </Card>
@@ -449,6 +553,28 @@ export function StaffDueDetailDashboard({
 }: {
     detail: DashboardStaffDueDetail;
 }) {
+    const isArchived = detail.due.status === 'Archived';
+    const hasReceiptWork = detail.students.some(
+        (student) =>
+            ['pending', 'processing'].includes(student.receiptStatus ?? '') ||
+            ['queued', 'processing'].includes(student.receiptEmailStatus ?? ''),
+    );
+    const { start: startReceiptPoll, stop: stopReceiptPoll } = usePoll(
+        3000,
+        {},
+        { autoStart: false },
+    );
+
+    useEffect(() => {
+        if (hasReceiptWork) {
+            startReceiptPoll();
+        } else {
+            stopReceiptPoll();
+        }
+
+        return stopReceiptPoll;
+    }, [hasReceiptWork, startReceiptPoll, stopReceiptPoll]);
+
     return (
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -463,11 +589,29 @@ export function StaffDueDetailDashboard({
                         {detail.due.set} · {detail.due.amount}
                     </p>
                 </div>
+                <div className="flex flex-wrap items-center gap-3">
+                    <Button variant="outline" asChild>
+                        <a href={exportStaffDue(detail.due.id).url}>
+                            <RiDownload2Line />
+                            Export Payments
+                        </a>
+                    </Button>
+                    {!isArchived ? (
+                        <Button variant="outline" asChild>
+                            <Link href={editStaffDue(detail.due.id)}>
+                                <RiEditLine />
+                                Edit Due
+                            </Link>
+                        </Button>
+                    ) : null}
+                    <DueLifecycleAction due={detail.due} />
+                </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 <MetricCard label="Paid" value={detail.due.paidCount} />
                 <MetricCard label="Pending" value={detail.due.pendingCount} />
+                <MetricCard label="Waived" value={detail.due.waivedCount} />
                 <MetricCard
                     label="Collected"
                     value={detail.due.collectedAmount}
@@ -500,7 +644,7 @@ export function StaffDueDetailDashboard({
                                         Status
                                     </TableHead>
                                     <TableHead className="w-[16%] pr-4 text-right">
-                                        Receipt
+                                        Action
                                     </TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -532,22 +676,54 @@ export function StaffDueDetailDashboard({
                                                 {student.amount}
                                             </TableCell>
                                             <TableCell className="text-center">
-                                                <PaymentStatusBadge
-                                                    status={student.status}
-                                                />
+                                                <div className="grid justify-items-center gap-1">
+                                                    <PaymentStatusBadge
+                                                        status={student.status}
+                                                    />
+                                                    {student.waiverReason ? (
+                                                        <span className="max-w-40 truncate text-xs text-muted-foreground">
+                                                            {
+                                                                student.waiverReason
+                                                            }
+                                                        </span>
+                                                    ) : null}
+                                                </div>
                                             </TableCell>
                                             <TableCell className="pr-4 text-right">
-                                                {student.receiptUrl ? (
+                                                {student.receiptStatus ? (
+                                                    <ReceiptAction
+                                                        receipt={student}
+                                                    />
+                                                ) : student.status ===
+                                                      'Pending' &&
+                                                  !isArchived ? (
                                                     <ActionLink
-                                                        href={
-                                                            student.receiptUrl
-                                                        }
+                                                        href={createStudentDueWaiver(
+                                                            {
+                                                                due: detail.due
+                                                                    .id,
+                                                                studentDueAssignment:
+                                                                    student.id,
+                                                            },
+                                                        )}
                                                     >
-                                                        Download
+                                                        Waive
                                                     </ActionLink>
+                                                ) : student.status ===
+                                                      'Waived' &&
+                                                  !isArchived ? (
+                                                    <RestoreStudentDueAction
+                                                        dueId={detail.due.id}
+                                                        assignmentId={
+                                                            student.id
+                                                        }
+                                                        studentName={
+                                                            student.studentName
+                                                        }
+                                                    />
                                                 ) : (
                                                     <span className="text-xs text-muted-foreground">
-                                                        Not paid
+                                                        No action
                                                     </span>
                                                 )}
                                             </TableCell>
@@ -564,6 +740,204 @@ export function StaffDueDetailDashboard({
                 </CardContent>
             </Card>
         </div>
+    );
+}
+
+export function StaffDueWaiverFormDashboard({
+    form,
+}: {
+    form: DashboardStaffDueWaiverForm;
+}) {
+    const waiverForm = useForm({ reason: '' });
+
+    function submit(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        waiverForm.submit(
+            waiveStudentDue({
+                due: form.due.id,
+                studentDueAssignment: form.assignment.id,
+            }),
+        );
+    }
+
+    return (
+        <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+            <div className="min-w-0">
+                <h1 className="text-xl font-semibold tracking-normal">
+                    Waive Payment Requirement
+                </h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                    Record that this student does not need to pay this due.
+                </p>
+            </div>
+
+            <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
+                <CardForm onSubmit={submit}>
+                    <CardHeader className="border-b border-border">
+                        <CardTitle>{form.due.title}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="grid gap-5 p-5">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                            <PersonCell
+                                name={form.assignment.studentName}
+                                avatar={form.assignment.studentAvatar}
+                            />
+                            <CopyableValue
+                                value={form.assignment.registrationNumber}
+                                className="h-9 w-fit"
+                                valueClassName="text-xs"
+                            />
+                        </div>
+                        <div className="flex items-center justify-between gap-4 border-y border-border py-3 text-sm">
+                            <span className="text-muted-foreground">
+                                Payment being waived
+                            </span>
+                            <span className="font-semibold tabular-nums">
+                                {form.due.amount}
+                            </span>
+                        </div>
+                        <Field data-invalid={Boolean(waiverForm.errors.reason)}>
+                            <FieldLabel htmlFor="waiver-reason">
+                                Reason (Optional)
+                            </FieldLabel>
+                            <Textarea
+                                id="waiver-reason"
+                                value={waiverForm.data.reason}
+                                onChange={(event) =>
+                                    waiverForm.setData(
+                                        'reason',
+                                        event.target.value,
+                                    )
+                                }
+                                placeholder="Scholarship, duplicate charge, or another clear reason"
+                                rows={3}
+                            />
+                            <FieldError>{waiverForm.errors.reason}</FieldError>
+                        </Field>
+                    </CardContent>
+                    <CardFooter className="justify-end bg-muted/20">
+                        <Button
+                            type="submit"
+                            variant="destructive"
+                            disabled={waiverForm.processing}
+                        >
+                            Waive Payment Requirement
+                        </Button>
+                    </CardFooter>
+                </CardForm>
+            </Card>
+        </div>
+    );
+}
+
+function DueLifecycleAction({ due }: { due: DashboardStaffDueDetail['due'] }) {
+    const isArchived = due.status === 'Archived';
+
+    function confirm() {
+        router.patch(
+            (isArchived ? restoreStaffDue(due.id) : archiveStaffDue(due.id))
+                .url,
+        );
+    }
+
+    return (
+        <AlertDialog>
+            <AlertDialogTrigger asChild>
+                <Button variant={isArchived ? 'outline' : 'destructive'}>
+                    {isArchived ? <RiHistoryLine /> : <RiArchiveLine />}
+                    {isArchived ? 'Restore Due' : 'Archive Due'}
+                </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>
+                        {isArchived
+                            ? `Restore ${due.title}?`
+                            : `Archive ${due.title}?`}
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                        {isArchived ? (
+                            <>
+                                Students who still owe{' '}
+                                <span className="font-medium text-foreground">
+                                    {due.title}
+                                </span>{' '}
+                                will be able to pay it again. Completed payments
+                                and receipts stay unchanged.
+                            </>
+                        ) : (
+                            <>
+                                Students will no longer be able to start a new
+                                payment for{' '}
+                                <span className="font-medium text-foreground">
+                                    {due.title}
+                                </span>
+                                . Completed payments and receipts stay
+                                available.
+                            </>
+                        )}
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                        variant={isArchived ? 'default' : 'destructive'}
+                        onClick={confirm}
+                    >
+                        {isArchived ? 'Restore Due' : 'Archive Due'}
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    );
+}
+
+function RestoreStudentDueAction({
+    dueId,
+    assignmentId,
+    studentName,
+}: {
+    dueId: number;
+    assignmentId: number;
+    studentName: string;
+}) {
+    return (
+        <AlertDialog>
+            <AlertDialogTrigger asChild>
+                <button type="button" className="text-xs font-medium text-link">
+                    Restore
+                </button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>
+                        Restore this payment requirement?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                        <span className="font-medium text-foreground">
+                            {studentName}
+                        </span>{' '}
+                        will owe this due again and can complete payment from
+                        the student dashboard.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Keep Waived</AlertDialogCancel>
+                    <AlertDialogAction
+                        onClick={() =>
+                            router.patch(
+                                restoreStudentDue({
+                                    due: dueId,
+                                    studentDueAssignment: assignmentId,
+                                }).url,
+                            )
+                        }
+                    >
+                        Restore Requirement
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
     );
 }
 
@@ -597,7 +971,9 @@ function DueStatusBadge({ status }: { status: string }) {
     const className =
         status === 'Published'
             ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-400/30 dark:bg-green-400/10 dark:text-green-300'
-            : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300';
+            : status === 'Archived'
+              ? 'border-border bg-muted text-muted-foreground'
+              : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300';
 
     return (
         <Badge variant="outline" className={className}>
@@ -607,41 +983,17 @@ function DueStatusBadge({ status }: { status: string }) {
 }
 
 function PaymentStatusBadge({ status }: { status: string }) {
+    const className =
+        status === 'Paid'
+            ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-400/30 dark:bg-green-400/10 dark:text-green-300'
+            : status === 'Waived'
+              ? 'border-border bg-muted text-muted-foreground'
+              : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300';
+
     return (
-        <Badge
-            variant="outline"
-            className={
-                status === 'Paid'
-                    ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-400/30 dark:bg-green-400/10 dark:text-green-300'
-                    : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300'
-            }
-        >
+        <Badge variant="outline" className={className}>
             {status}
         </Badge>
-    );
-}
-
-function paymentAccountForSet(
-    accounts: DashboardPaymentAccount[],
-    entryAcademicSessionId: string,
-): DashboardPaymentAccount | null {
-    const setId = Number(entryAcademicSessionId);
-    const setAccount = accounts.find(
-        (account) =>
-            account.status === 'Active' &&
-            account.entryAcademicSessionId === setId,
-    );
-
-    if (setAccount) {
-        return setAccount;
-    }
-
-    return (
-        accounts.find(
-            (account) =>
-                account.status === 'Active' &&
-                account.entryAcademicSessionId === null,
-        ) ?? null
     );
 }
 

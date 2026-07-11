@@ -40,6 +40,8 @@ class ImportFacultyHodsRequest extends FormRequest
             'start_row' => ['nullable', 'integer', 'min:1'],
             'total_rows' => ['nullable', 'integer', 'min:1'],
             'batch_size' => ['nullable', 'integer', 'min:1', 'max:200'],
+            'mappings' => ['nullable', 'array'],
+            'mappings.*' => ['nullable', 'string', 'max:255'],
             'rows' => ['required', 'array', 'min:1', 'max:200'],
             'rows.*.department' => ['required', 'string', 'max:255'],
             'rows.*.name' => ['nullable', 'string', 'max:255'],

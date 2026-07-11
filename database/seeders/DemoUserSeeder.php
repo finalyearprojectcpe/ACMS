@@ -2,15 +2,14 @@
 
 namespace Database\Seeders;
 
+use App\AccountStatus;
 use App\AccountType;
+use App\CourseCategory;
 use App\Models\AcademicSession;
 use App\Models\AcademicYear;
 use App\Models\AcademicYearSemester;
-use App\Models\ApprovalRequest;
 use App\Models\Course;
 use App\Models\CourseOffering;
-use App\Models\CourseRegistration;
-use App\Models\CourseRegistrationItem;
 use App\Models\Department;
 use App\Models\Due;
 use App\Models\DuePayment;
@@ -87,7 +86,6 @@ class DemoUserSeeder extends Seeder
             fn (AcademicSession $academicSession) => $this->seedCourses($faculty, $department, $academicSession),
         );
         $this->seedResultSheets($faculty, $department, $staffProfiles);
-        $this->seedCourseRegistrations($faculty, $department, $staffProfiles);
         $this->seedDues($department, $staffProfiles);
         $this->seedFacultyHeadDemoData($faculty, $facultyHead);
     }
@@ -111,6 +109,8 @@ class DemoUserSeeder extends Seeder
                 'access_code' => $isActivated ? null : ($staff['access_code'] ?? Str::upper(Str::random(8))),
                 'access_code_used_at' => null,
                 'activated_at' => $isActivated ? now() : null,
+                'disabled_at' => null,
+                'status' => $isActivated ? AccountStatus::Active : AccountStatus::Pending,
             ],
         );
 
@@ -127,8 +127,6 @@ class DemoUserSeeder extends Seeder
             ->whereIn('abbreviation', ['EEE', 'ECE', 'MCE', 'TCE', 'EPE'])
             ->get()
             ->keyBy('abbreviation');
-        $departmentStaff = collect();
-
         foreach ($this->facultyDepartmentDemoData() as $departmentCode => $departmentData) {
             $department = $departments->get($departmentCode);
 
@@ -142,11 +140,10 @@ class DemoUserSeeder extends Seeder
                 $hodProfile = $this->seedStaffProfile($department, $departmentData['hod']);
 
                 $department->assignHeadOfDepartment($hodProfile);
-                $departmentStaff->push($hodProfile);
             }
 
             foreach ($departmentData['staff'] as $staff) {
-                $departmentStaff->push($this->seedStaffProfile($department, $staff));
+                $this->seedStaffProfile($department, $staff);
             }
 
             foreach ($departmentData['students'] as $student) {
@@ -156,7 +153,6 @@ class DemoUserSeeder extends Seeder
 
         $this->seedFacultyHeadEmailDeliveries($faculty);
         $this->seedFacultyHeadImports($faculty, $facultyHead);
-        $this->seedFacultyHeadApprovals($faculty, $facultyHead, $departmentStaff);
     }
 
     private function seedFacultyHeadEmailDeliveries(Faculty $faculty): void
@@ -221,36 +217,6 @@ class DemoUserSeeder extends Seeder
                     ],
                 );
             }
-        }
-    }
-
-    /**
-     * @param  Collection<int, StaffProfile>  $departmentStaff
-     */
-    private function seedFacultyHeadApprovals(Faculty $faculty, StaffProfile $facultyHead, Collection $departmentStaff): void
-    {
-        $requesterIds = $departmentStaff
-            ->pluck('user_id')
-            ->filter()
-            ->values();
-
-        foreach ($this->facultyHeadApprovalRequests() as $index => $approval) {
-            ApprovalRequest::query()->updateOrCreate(
-                [
-                    'school_id' => $faculty->school_id,
-                    'type' => $approval['type'],
-                    'notes' => $approval['notes'],
-                ],
-                [
-                    'requester_user_id' => $requesterIds->get($index),
-                    'reviewer_user_id' => $facultyHead->user_id,
-                    'status' => $approval['status'],
-                    'submitted_at' => now()->subDays($approval['submitted_days_ago']),
-                    'reviewed_at' => isset($approval['reviewed_days_ago'])
-                        ? now()->subDays($approval['reviewed_days_ago'])
-                        : null,
-                ],
-            );
         }
     }
 
@@ -440,41 +406,6 @@ class DemoUserSeeder extends Seeder
     }
 
     /**
-     * @return array<int, array{type: string, status: string, notes: string, submitted_days_ago: int, reviewed_days_ago?: int}>
-     */
-    private function facultyHeadApprovalRequests(): array
-    {
-        return [
-            [
-                'type' => 'hod_import_review',
-                'status' => 'approved',
-                'notes' => 'Reviewed SESET HOD provisioning sheet.',
-                'submitted_days_ago' => 10,
-                'reviewed_days_ago' => 9,
-            ],
-            [
-                'type' => 'staff_access_code_import',
-                'status' => 'pending',
-                'notes' => 'New staff access codes for EPE and ECE.',
-                'submitted_days_ago' => 3,
-            ],
-            [
-                'type' => 'course_catalog_update',
-                'status' => 'pending',
-                'notes' => 'EEE requested course catalog changes for 300L.',
-                'submitted_days_ago' => 2,
-            ],
-            [
-                'type' => 'student_profile_corrections',
-                'status' => 'rejected',
-                'notes' => 'TCE spreadsheet missing required email values.',
-                'submitted_days_ago' => 1,
-                'reviewed_days_ago' => 1,
-            ],
-        ];
-    }
-
-    /**
      * @param  array{name: string, email: string, registration_number: string, level: string}  $student
      */
     private function seedStudent(Department $department, array $student): void
@@ -493,6 +424,8 @@ class DemoUserSeeder extends Seeder
                 'access_code' => null,
                 'access_code_used_at' => null,
                 'activated_at' => now(),
+                'disabled_at' => null,
+                'status' => AccountStatus::Active,
             ],
         );
 
@@ -504,6 +437,7 @@ class DemoUserSeeder extends Seeder
                 'current_academic_year_id' => AcademicYear::query()->where('slug', $student['level'])->value('id'),
                 'entry_academic_session_id' => $entryAcademicSession?->id,
                 'registration_number' => $student['registration_number'],
+                'status' => 'active',
             ],
         );
     }
@@ -550,18 +484,35 @@ class DemoUserSeeder extends Seeder
             $owner = $offering['owner'] === 'faculty' ? $faculty : $department;
             $academicYearSemester = $this->academicYearSemester($offering['level'], $offering['semester']);
 
+            $course = $courses->get($offering['code']);
+            $category = match (true) {
+                $owner instanceof Faculty => CourseCategory::Faculty,
+                ($offering['is_elective'] ?? false) => CourseCategory::Elective,
+                default => CourseCategory::Departmental,
+            };
+
             $owner->courseOfferings()->updateOrCreate(
                 [
-                    'course_id' => $courses->get($offering['code'])->id,
+                    'course_id' => $course->id,
                     'academic_session_id' => $academicSession->id,
                     'academic_year_semester_id' => $academicYearSemester->id,
                 ],
-                ['is_mandatory' => $offering['is_mandatory'] ?? true],
+                [
+                    'course_title' => $course->title,
+                    'credit_units' => $course->credit_units,
+                    'category' => $category,
+                    'archived_at' => null,
+                ],
             );
         }
 
         foreach ($this->coursePrerequisites() as $courseCode => $prerequisiteCode) {
-            $courses->get($courseCode)->addPrerequisite($courses->get($prerequisiteCode));
+            CourseOffering::query()
+                ->where('academic_session_id', $academicSession->id)
+                ->where('course_id', $courses->get($courseCode)->id)
+                ->each(fn (CourseOffering $offering) => $offering->prerequisiteCourses()->sync([
+                    $courses->get($prerequisiteCode)->id,
+                ]));
         }
     }
 
@@ -586,11 +537,13 @@ class DemoUserSeeder extends Seeder
                 continue;
             }
 
-            $currentLevelId = (int) $setStudents->max('current_academic_year_id');
+            $currentYearNumber = (int) $setStudents->max(
+                fn (StudentProfile $studentProfile): int => (int) $studentProfile->currentAcademicYear?->year_number,
+            );
 
-            for ($levelId = 1; $levelId <= $currentLevelId; $levelId++) {
-                $level = AcademicYear::query()->find($levelId);
-                $academicSession = $this->academicSessionForEntryLevel($faculty->school, $entryAcademicSession, $levelId);
+            for ($yearNumber = 1; $yearNumber <= $currentYearNumber; $yearNumber++) {
+                $level = AcademicYear::query()->where('year_number', $yearNumber)->first();
+                $academicSession = $this->academicSessionForEntryLevel($faculty->school, $entryAcademicSession, $yearNumber);
 
                 if (! $level instanceof AcademicYear || ! $academicSession instanceof AcademicSession) {
                     continue;
@@ -614,7 +567,7 @@ class DemoUserSeeder extends Seeder
                         $faculty,
                         $department,
                         $staffProfiles,
-                        $setStudents->filter(fn (StudentProfile $studentProfile): bool => (int) $studentProfile->current_academic_year_id >= $levelId)->values(),
+                        $setStudents->filter(fn (StudentProfile $studentProfile): bool => (int) $studentProfile->currentAcademicYear?->year_number >= $yearNumber)->values(),
                         $entryAcademicSession,
                         $academicSession,
                         $level,
@@ -645,12 +598,14 @@ class DemoUserSeeder extends Seeder
                 continue;
             }
 
-            $level = AcademicYear::query()->find((int) $students->max('current_academic_year_id'));
+            $level = $students
+                ->sortByDesc(fn (StudentProfile $studentProfile): int => (int) $studentProfile->currentAcademicYear?->year_number)
+                ->first()?->currentAcademicYear;
             $levelName = $level?->name ?? 'Current Level';
             $advisor = $this->advisorForEntrySession($staffProfiles, $entryAcademicSession)
                 ?? $staffProfiles->first();
             $paymentAccount = $advisor instanceof StaffProfile
-                ? $this->seedPaymentAccount($department, $advisor, $entryAcademicSession, $levelName)
+                ? $this->seedPaymentAccount($department, $advisor)
                 : null;
 
             foreach ($this->duesForLevel($levelName) as $index => $dueData) {
@@ -725,203 +680,34 @@ class DemoUserSeeder extends Seeder
         }
     }
 
-    /**
-     * @param  Collection<string, StaffProfile>  $staffProfiles
-     */
-    private function seedCourseRegistrations(Faculty $faculty, Department $department, Collection $staffProfiles): void
-    {
-        $currentAcademicSession = $this->academicSessionByName($faculty->school, '2025/2026');
-        $harmattan = Semester::query()->where('slug', 'harmattan')->firstOrFail();
-        $rain = Semester::query()->where('slug', 'rain')->firstOrFail();
-        $students = $department->studentProfiles()
-            ->with(['currentAcademicYear', 'entryAcademicSession'])
-            ->get();
-
-        foreach ($students as $student) {
-            if (! $student->currentAcademicYear instanceof AcademicYear || ! $student->entryAcademicSession instanceof AcademicSession) {
-                continue;
-            }
-
-            $status = match ($student->registration_number) {
-                '2025000001', '2022000004' => CourseRegistration::StatusSubmitted,
-                '2023000003' => CourseRegistration::StatusReturned,
-                '2024000002', '2021000005' => CourseRegistration::StatusApproved,
-                default => CourseRegistration::StatusDraft,
-            };
-
-            $this->seedCourseRegistration(
-                $faculty,
-                $department,
-                $staffProfiles,
-                $student,
-                $currentAcademicSession,
-                $student->currentAcademicYear,
-                $harmattan,
-                $status,
-                $student->registration_number === '2023000003',
-            );
-
-            $previousLevel = AcademicYear::query()
-                ->where('id', (int) $student->currentAcademicYear->id - 1)
-                ->first();
-
-            if ($previousLevel instanceof AcademicYear) {
-                $previousAcademicSession = $this->academicSessionForEntryLevel(
-                    $faculty->school,
-                    $student->entryAcademicSession,
-                    (int) $previousLevel->id,
-                );
-
-                if ($previousAcademicSession instanceof AcademicSession) {
-                    $this->seedCourseRegistration(
-                        $faculty,
-                        $department,
-                        $staffProfiles,
-                        $student,
-                        $previousAcademicSession,
-                        $previousLevel,
-                        $rain,
-                        CourseRegistration::StatusApproved,
-                    );
-                }
-            }
-        }
-    }
-
-    /**
-     * @param  Collection<string, StaffProfile>  $staffProfiles
-     */
-    private function seedCourseRegistration(
-        Faculty $faculty,
-        Department $department,
-        Collection $staffProfiles,
-        StudentProfile $student,
-        AcademicSession $academicSession,
-        AcademicYear $level,
-        Semester $semester,
-        string $status,
-        bool $includeCarryover = false,
-    ): void {
-        $academicYearSemester = $this->academicYearSemester($level->slug, $semester->slug);
-        $advisor = $student->entryAcademicSession instanceof AcademicSession
-            ? $this->advisorForEntrySession($staffProfiles, $student->entryAcademicSession)
-            : null;
-        $isDraft = $status === CourseRegistration::StatusDraft;
-        $isReviewed = in_array($status, [CourseRegistration::StatusApproved, CourseRegistration::StatusReturned], true);
-
-        $registration = CourseRegistration::query()->updateOrCreate(
-            [
-                'student_profile_id' => $student->id,
-                'academic_session_id' => $academicSession->id,
-                'academic_year_semester_id' => $academicYearSemester->id,
-            ],
-            [
-                'school_id' => $faculty->school_id,
-                'department_id' => $department->id,
-                'reviewer_staff_profile_id' => $advisor?->id,
-                'status' => $status,
-                'feedback_note' => $status === CourseRegistration::StatusReturned
-                    ? 'Remove the extra elective and send the course registration again.'
-                    : null,
-                'submitted_at' => $isDraft ? null : now()->subDays($isReviewed ? 6 : 2),
-                'reviewed_at' => $isReviewed ? now()->subDays(3) : null,
-            ],
-        );
-
-        $registration->items()->delete();
-
-        $offerings = $this->courseOfferingsForResultSheet($faculty, $department, $academicSession, $academicYearSemester)
-            ->filter(fn (CourseOffering $offering): bool => (bool) $offering->is_mandatory
-                || crc32($student->registration_number.$offering->course->code) % 2 === 0)
-            ->values();
-
-        if ($includeCarryover) {
-            $carryoverOffering = $this->courseOfferingForCode($faculty, $department, $academicSession, 'CPE 204');
-
-            if ($carryoverOffering instanceof CourseOffering) {
-                $offerings->push($carryoverOffering);
-            }
-        }
-
-        $offerings
-            ->unique(fn (CourseOffering $offering): int => (int) $offering->id)
-            ->sortBy(fn (CourseOffering $offering): string => $offering->course->code)
-            ->values()
-            ->each(function (CourseOffering $offering) use ($department, $registration, $includeCarryover): void {
-                $isCarryover = $includeCarryover && $offering->course->code === 'CPE 204';
-
-                $registration->items()->create([
-                    'course_offering_id' => $offering->id,
-                    'source' => $isCarryover
-                        ? CourseRegistrationItem::SourceCarryover
-                        : ($offering->is_mandatory ? CourseRegistrationItem::SourceCurrentSet : CourseRegistrationItem::SourceElective),
-                    'category' => $this->courseRegistrationCategory($department, $offering),
-                    'course_code' => $offering->course->code,
-                    'course_title' => $offering->course->title,
-                    'credit_units' => (int) $offering->course->credit_units,
-                ]);
-            });
-    }
-
-    private function courseOfferingForCode(
-        Faculty $faculty,
-        Department $department,
-        AcademicSession $academicSession,
-        string $courseCode,
-    ): ?CourseOffering {
-        $query = CourseOffering::query()
-            ->with('course')
-            ->where('academic_session_id', $academicSession->id)
-            ->whereHas('course', fn ($query) => $query->where('code', $courseCode));
-
-        $this->whereDemoOfferingOwner($query, $faculty, $department);
-
-        return $query->first();
-    }
-
-    private function courseRegistrationCategory(Department $department, CourseOffering $offering): string
-    {
-        if (! $offering->is_mandatory) {
-            return 'Elective Course';
-        }
-
-        return $offering->owner_type === Department::class && (int) $offering->owner_id === (int) $department->id
-            ? 'Departmental Course'
-            : 'Faculty Course';
-    }
-
     private function seedPaymentAccount(
         Department $department,
         StaffProfile $staffProfile,
-        AcademicSession $entryAcademicSession,
-        string $levelName,
     ): PaymentAccount {
-        $accountNumber = sprintf('30%08d', $entryAcademicSession->id);
-        $accountCode = Str::of($department->abbreviation.'-'.$entryAcademicSession->name)
-            ->replace('/', '-')
-            ->upper()
-            ->toString();
+        $existingPaymentAccount = PaymentAccount::latestFor($staffProfile, $department);
 
-        return PaymentAccount::query()->updateOrCreate(
-            [
-                'department_id' => $department->id,
-                'staff_profile_id' => $staffProfile->id,
-                'entry_academic_session_id' => $entryAcademicSession->id,
-            ],
+        if ($existingPaymentAccount instanceof PaymentAccount) {
+            return $existingPaymentAccount;
+        }
+
+        $accountNumber = sprintf('30%08d', $staffProfile->id);
+
+        return PaymentAccount::query()->create(
             [
                 'school_id' => $department->faculty->school_id,
-                'provider' => PaymentAccount::ProviderPaystack,
-                'label' => "{$levelName} dues payout",
-                'business_name' => "{$department->abbreviation} {$levelName} Dues",
+                'department_id' => $department->id,
+                'staff_profile_id' => $staffProfile->id,
+                'entry_academic_session_id' => null,
+                'provider' => PaymentAccount::ProviderDemo,
+                'label' => 'Demo payout account',
+                'business_name' => "{$department->abbreviation} Student Dues",
                 'bank_code' => '058',
                 'bank_name' => 'Guaranty Trust Bank',
                 'account_number' => $accountNumber,
                 'account_number_last4' => substr($accountNumber, -4),
                 'account_name' => $staffProfile->user->name,
-                'paystack_subaccount_code' => "ACCT_DEMO_{$accountCode}",
-                'status' => PaymentAccount::StatusActive,
-                'verified_at' => now()->subDays(10),
-                'activated_at' => now()->subDays(10),
+                'paystack_subaccount_code' => null,
+                'status' => PaymentAccount::StatusDisabled,
                 'provider_payload' => [
                     'demo' => true,
                     'source' => 'DemoUserSeeder',
@@ -972,9 +758,9 @@ class DemoUserSeeder extends Seeder
             ->map(fn (CourseOffering $offering): array => [
                 'course_offering_id' => $offering->id,
                 'code' => $offering->course->code,
-                'title' => $offering->course->title,
-                'credit_units' => (int) $offering->course->credit_units,
-                'is_mandatory' => (bool) $offering->is_mandatory,
+                'title' => $offering->course_title,
+                'credit_units' => (int) $offering->credit_units,
+                'is_elective' => $offering->category === CourseCategory::Elective,
             ])
             ->merge($this->seededCarryoverCoursesForResultSheet($faculty, $department, $entryAcademicSession, $academicSession, $level, $semester))
             ->values()
@@ -1138,7 +924,7 @@ class DemoUserSeeder extends Seeder
     }
 
     /**
-     * @return array<int, array{course_offering_id: int, code: string, title: string, credit_units: int, is_mandatory: bool, carryover_registration_number: string}>
+     * @return array<int, array{course_offering_id: int, code: string, title: string, credit_units: int, is_elective: bool, carryover_registration_number: string}>
      */
     private function seededCarryoverCoursesForResultSheet(
         Faculty $faculty,
@@ -1177,16 +963,16 @@ class DemoUserSeeder extends Seeder
             [
                 'course_offering_id' => (int) $carryoverOffering->id,
                 'code' => $carryoverOffering->course->code,
-                'title' => $carryoverOffering->course->title,
-                'credit_units' => (int) $carryoverOffering->course->credit_units,
-                'is_mandatory' => false,
+                'title' => $carryoverOffering->course_title,
+                'credit_units' => (int) $carryoverOffering->credit_units,
+                'is_elective' => false,
                 'carryover_registration_number' => '2023000003',
             ],
         ];
     }
 
     /**
-     * @param  array{code: string, title: string, credit_units: int, is_mandatory: bool, carryover_registration_number?: string}  $course
+     * @param  array{code: string, title: string, credit_units: int, is_elective: bool, carryover_registration_number?: string}  $course
      */
     private function studentTakesSeededCourse(StudentProfile $student, array $course): bool
     {
@@ -1194,7 +980,7 @@ class DemoUserSeeder extends Seeder
             return $student->registration_number === $course['carryover_registration_number'];
         }
 
-        if ($course['is_mandatory']) {
+        if (! $course['is_elective']) {
             return true;
         }
 
@@ -1289,7 +1075,7 @@ class DemoUserSeeder extends Seeder
             ['code' => 'PHY 102', 'title' => 'General Physics II', 'credit_units' => 3],
             ['code' => 'CHM 102', 'title' => 'General Chemistry II', 'credit_units' => 3],
             ['code' => 'CPE 102', 'title' => 'Computer Workshop Practice', 'credit_units' => 2],
-            ['code' => 'MTH 207', 'title' => 'Engineering Mathematics III', 'credit_units' => 3],
+            ['code' => 'MTH 201', 'title' => 'Engineering Mathematics III', 'credit_units' => 3],
             ['code' => 'CPE 201', 'title' => 'Digital Logic Design', 'credit_units' => 3],
             ['code' => 'CPE 203', 'title' => 'Circuit Theory', 'credit_units' => 3],
             ['code' => 'EEE 201', 'title' => 'Electrical Machines I', 'credit_units' => 2],
@@ -1309,11 +1095,30 @@ class DemoUserSeeder extends Seeder
             ['code' => 'CPE 306', 'title' => 'Software Engineering', 'credit_units' => 3],
             ['code' => 'EEE 302', 'title' => 'Control Systems Engineering', 'credit_units' => 3],
             ['code' => 'CPE 308', 'title' => 'Computer Networks', 'credit_units' => 2],
+            ['code' => 'CPE 401', 'title' => 'Embedded Systems Design', 'credit_units' => 3],
+            ['code' => 'CPE 403', 'title' => 'Computer Networks', 'credit_units' => 3],
+            ['code' => 'CPE 405', 'title' => 'Control Systems Engineering', 'credit_units' => 2],
+            ['code' => 'CPE 407', 'title' => 'Digital Signal Processing', 'credit_units' => 3],
+            ['code' => 'CPE 409', 'title' => 'Engineering Economics', 'credit_units' => 2],
+            ['code' => 'CPE 402', 'title' => 'Computer Communications', 'credit_units' => 3],
+            ['code' => 'CPE 404', 'title' => 'Database Systems', 'credit_units' => 3],
+            ['code' => 'CPE 406', 'title' => 'Software Project Management', 'credit_units' => 2],
+            ['code' => 'CPE 408', 'title' => 'Artificial Intelligence', 'credit_units' => 3],
+            ['code' => 'EEE 402', 'title' => 'Power Electronics', 'credit_units' => 2],
+            ['code' => 'CPE 501', 'title' => 'Digital Systems Project', 'credit_units' => 3],
+            ['code' => 'CPE 503', 'title' => 'VLSI Design', 'credit_units' => 3],
+            ['code' => 'CPE 505', 'title' => 'Engineering Management', 'credit_units' => 2],
+            ['code' => 'CPE 507', 'title' => 'Advanced Computer Architecture', 'credit_units' => 3],
+            ['code' => 'CPE 509', 'title' => 'Final Year Project Seminar', 'credit_units' => 2],
+            ['code' => 'CPE 502', 'title' => 'Final Year Project', 'credit_units' => 6],
+            ['code' => 'CPE 504', 'title' => 'Distributed Systems', 'credit_units' => 3],
+            ['code' => 'CPE 506', 'title' => 'Network Security', 'credit_units' => 3],
+            ['code' => 'CPE 508', 'title' => 'Robotics and Automation', 'credit_units' => 2],
         ];
     }
 
     /**
-     * @return array<int, array{owner: string, code: string, level: string, semester: string, is_mandatory?: bool}>
+     * @return array<int, array{owner: string, code: string, level: string, semester: string, is_elective?: bool}>
      */
     private function courseOfferings(): array
     {
@@ -1328,7 +1133,7 @@ class DemoUserSeeder extends Seeder
             ['owner' => 'faculty', 'code' => 'PHY 102', 'level' => '100-level', 'semester' => 'rain'],
             ['owner' => 'faculty', 'code' => 'CHM 102', 'level' => '100-level', 'semester' => 'rain'],
             ['owner' => 'department', 'code' => 'CPE 102', 'level' => '100-level', 'semester' => 'rain'],
-            ['owner' => 'faculty', 'code' => 'MTH 207', 'level' => '200-level', 'semester' => 'harmattan'],
+            ['owner' => 'faculty', 'code' => 'MTH 201', 'level' => '200-level', 'semester' => 'harmattan'],
             ['owner' => 'department', 'code' => 'CPE 201', 'level' => '200-level', 'semester' => 'harmattan'],
             ['owner' => 'department', 'code' => 'CPE 203', 'level' => '200-level', 'semester' => 'harmattan'],
             ['owner' => 'faculty', 'code' => 'EEE 201', 'level' => '200-level', 'semester' => 'harmattan'],
@@ -1342,12 +1147,31 @@ class DemoUserSeeder extends Seeder
             ['owner' => 'department', 'code' => 'CPE 303', 'level' => '300-level', 'semester' => 'harmattan'],
             ['owner' => 'department', 'code' => 'CPE 305', 'level' => '300-level', 'semester' => 'harmattan'],
             ['owner' => 'faculty', 'code' => 'EEE 301', 'level' => '300-level', 'semester' => 'harmattan'],
-            ['owner' => 'faculty', 'code' => 'MTH 305', 'level' => '300-level', 'semester' => 'harmattan', 'is_mandatory' => false],
+            ['owner' => 'faculty', 'code' => 'MTH 305', 'level' => '300-level', 'semester' => 'harmattan'],
             ['owner' => 'department', 'code' => 'CPE 302', 'level' => '300-level', 'semester' => 'rain'],
             ['owner' => 'department', 'code' => 'CPE 304', 'level' => '300-level', 'semester' => 'rain'],
             ['owner' => 'department', 'code' => 'CPE 306', 'level' => '300-level', 'semester' => 'rain'],
             ['owner' => 'faculty', 'code' => 'EEE 302', 'level' => '300-level', 'semester' => 'rain'],
-            ['owner' => 'department', 'code' => 'CPE 308', 'level' => '300-level', 'semester' => 'rain', 'is_mandatory' => false],
+            ['owner' => 'department', 'code' => 'CPE 308', 'level' => '300-level', 'semester' => 'rain', 'is_elective' => true],
+            ['owner' => 'department', 'code' => 'CPE 401', 'level' => '400-level', 'semester' => 'harmattan'],
+            ['owner' => 'department', 'code' => 'CPE 403', 'level' => '400-level', 'semester' => 'harmattan'],
+            ['owner' => 'department', 'code' => 'CPE 405', 'level' => '400-level', 'semester' => 'harmattan'],
+            ['owner' => 'department', 'code' => 'CPE 407', 'level' => '400-level', 'semester' => 'harmattan'],
+            ['owner' => 'department', 'code' => 'CPE 409', 'level' => '400-level', 'semester' => 'harmattan', 'is_elective' => true],
+            ['owner' => 'department', 'code' => 'CPE 402', 'level' => '400-level', 'semester' => 'rain'],
+            ['owner' => 'department', 'code' => 'CPE 404', 'level' => '400-level', 'semester' => 'rain'],
+            ['owner' => 'department', 'code' => 'CPE 406', 'level' => '400-level', 'semester' => 'rain'],
+            ['owner' => 'department', 'code' => 'CPE 408', 'level' => '400-level', 'semester' => 'rain'],
+            ['owner' => 'faculty', 'code' => 'EEE 402', 'level' => '400-level', 'semester' => 'rain'],
+            ['owner' => 'department', 'code' => 'CPE 501', 'level' => '500-level', 'semester' => 'harmattan'],
+            ['owner' => 'department', 'code' => 'CPE 503', 'level' => '500-level', 'semester' => 'harmattan'],
+            ['owner' => 'department', 'code' => 'CPE 505', 'level' => '500-level', 'semester' => 'harmattan'],
+            ['owner' => 'department', 'code' => 'CPE 507', 'level' => '500-level', 'semester' => 'harmattan'],
+            ['owner' => 'department', 'code' => 'CPE 509', 'level' => '500-level', 'semester' => 'harmattan', 'is_elective' => true],
+            ['owner' => 'department', 'code' => 'CPE 502', 'level' => '500-level', 'semester' => 'rain'],
+            ['owner' => 'department', 'code' => 'CPE 504', 'level' => '500-level', 'semester' => 'rain'],
+            ['owner' => 'department', 'code' => 'CPE 506', 'level' => '500-level', 'semester' => 'rain'],
+            ['owner' => 'department', 'code' => 'CPE 508', 'level' => '500-level', 'semester' => 'rain'],
         ];
     }
 
@@ -1365,6 +1189,21 @@ class DemoUserSeeder extends Seeder
             'CPE 304' => 'CPE 202',
             'CPE 306' => 'CPE 305',
             'CPE 308' => 'CPE 204',
+            'CPE 401' => 'CPE 301',
+            'CPE 403' => 'CPE 308',
+            'CPE 405' => 'CPE 301',
+            'CPE 407' => 'CPE 301',
+            'CPE 402' => 'CPE 401',
+            'CPE 404' => 'CPE 304',
+            'CPE 406' => 'CPE 306',
+            'CPE 408' => 'CPE 202',
+            'CPE 501' => 'CPE 401',
+            'CPE 503' => 'CPE 407',
+            'CPE 507' => 'CPE 407',
+            'CPE 502' => 'CPE 501',
+            'CPE 504' => 'CPE 403',
+            'CPE 506' => 'CPE 403',
+            'CPE 508' => 'CPE 408',
         ];
     }
 }

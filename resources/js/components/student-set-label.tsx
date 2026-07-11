@@ -6,6 +6,7 @@ type StudentSetLabelProps = {
     entrySession: DashboardAcademicSession | null;
     currentLevel: DashboardLevel | null;
     minimumYearsToDegree?: number | null;
+    isGraduated?: boolean;
     className?: string;
 };
 
@@ -13,18 +14,25 @@ export function StudentSetLabel({
     entrySession,
     currentLevel,
     minimumYearsToDegree,
+    isGraduated,
     className,
 }: StudentSetLabelProps) {
     return (
         <div className={className}>
             <div className="font-medium text-foreground">
-                {entrySession === null ? 'No entry set' : `${entrySession.name} Set`}
+                {entrySession === null
+                    ? 'No entry set'
+                    : `${entrySession.name} Set`}
             </div>
             <Badge
                 variant="outline"
                 className="mt-1 border-border bg-muted/60 text-muted-foreground"
             >
-                {studentSetLevelText(currentLevel, minimumYearsToDegree)}
+                {studentSetLevelText(
+                    currentLevel,
+                    minimumYearsToDegree,
+                    isGraduated,
+                )}
             </Badge>
         </div>
     );
@@ -34,6 +42,7 @@ export function StudentSetChoiceLabel({
     entrySession,
     currentLevel,
     minimumYearsToDegree,
+    isGraduated,
     meta,
     className,
 }: StudentSetLabelProps & {
@@ -56,7 +65,11 @@ export function StudentSetChoiceLabel({
                     </span>
                 ) : null}
                 <span className="font-semibold text-muted-foreground">
-                    {studentSetLevelText(currentLevel, minimumYearsToDegree)}
+                    {studentSetLevelText(
+                        currentLevel,
+                        minimumYearsToDegree,
+                        isGraduated,
+                    )}
                 </span>
             </span>
         </span>
@@ -73,25 +86,32 @@ export function studentSetText({
     entrySession,
     currentLevel,
     minimumYearsToDegree,
+    isGraduated,
 }: {
     entrySession: DashboardAcademicSession | null;
     currentLevel: DashboardLevel | null;
     minimumYearsToDegree?: number | null;
+    isGraduated?: boolean;
 }): string {
-    return `${studentSetName(entrySession)} · ${studentSetLevelText(currentLevel, minimumYearsToDegree)}`;
+    return `${studentSetName(entrySession)} · ${studentSetLevelText(currentLevel, minimumYearsToDegree, isGraduated)}`;
 }
 
 export function studentSetLevelText(
     currentLevel: DashboardLevel | null,
     minimumYearsToDegree?: number | null,
+    isGraduated = false,
 ): string {
+    if (isGraduated) {
+        return 'Graduated';
+    }
+
     if (currentLevel === null) {
         return 'Level not set';
     }
 
     if (
         typeof minimumYearsToDegree === 'number' &&
-        currentLevel.id > minimumYearsToDegree
+        currentLevel.yearNumber > minimumYearsToDegree
     ) {
         return 'Graduated';
     }

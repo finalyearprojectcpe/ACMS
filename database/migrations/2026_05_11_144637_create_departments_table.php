@@ -19,6 +19,7 @@ return new class extends Migration
             $table->string('abbreviation', 10);
             $table->string('slug');
             $table->unsignedTinyInteger('minimum_years_to_degree')->default(5);
+            $table->unsignedTinyInteger('maximum_course_units_per_semester')->default(24);
             $table->foreignId('hod_staff_profile_id')->nullable()->index();
             $table->timestamps();
 

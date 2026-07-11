@@ -18,7 +18,10 @@ return new class extends Migration
             $table->foreignId('course_id')->constrained()->cascadeOnDelete();
             $table->foreignId('academic_session_id')->constrained()->cascadeOnDelete();
             $table->foreignId('academic_year_semester_id')->constrained()->restrictOnDelete();
-            $table->boolean('is_mandatory')->default(true);
+            $table->string('course_title');
+            $table->unsignedTinyInteger('credit_units');
+            $table->string('category');
+            $table->timestamp('archived_at')->nullable();
             $table->timestamps();
 
             $table->unique(
@@ -26,6 +29,7 @@ return new class extends Migration
                 'course_offerings_owner_course_session_year_semester_unique'
             );
             $table->index(['academic_session_id', 'academic_year_semester_id'], 'course_offerings_session_year_semester_index');
+            $table->index(['category', 'archived_at']);
         });
     }
 

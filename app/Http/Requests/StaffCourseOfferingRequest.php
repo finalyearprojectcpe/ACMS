@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\CourseCategory;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Str;
@@ -27,7 +28,7 @@ class StaffCourseOfferingRequest extends FormRequest
             'code' => ['required', 'string', 'max:20'],
             'title' => ['required', 'string', 'max:255'],
             'credit_units' => ['required', 'integer', 'min:1', 'max:10'],
-            'is_mandatory' => ['required', 'boolean'],
+            'category' => ['required', 'in:'.CourseCategory::Departmental->value.','.CourseCategory::Elective->value],
             'prerequisite_course_ids' => ['array'],
             'prerequisite_course_ids.*' => ['integer', 'exists:courses,id'],
         ];
@@ -38,7 +39,7 @@ class StaffCourseOfferingRequest extends FormRequest
         $this->merge([
             'code' => Str::of((string) $this->input('code'))->squish()->upper()->toString(),
             'title' => Str::of((string) $this->input('title'))->squish()->toString(),
-            'is_mandatory' => $this->boolean('is_mandatory'),
+            'category' => Str::lower((string) $this->input('category')),
         ]);
     }
 }

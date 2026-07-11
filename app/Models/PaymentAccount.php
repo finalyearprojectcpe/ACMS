@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'department_id',
     'staff_profile_id',
     'entry_academic_session_id',
+    'scope_key',
     'provider',
     'label',
     'business_name',
@@ -24,6 +25,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'account_name',
     'paystack_subaccount_code',
     'status',
+    'active_marker',
     'verified_at',
     'activated_at',
     'disabled_at',
@@ -35,15 +37,27 @@ class PaymentAccount extends Model
     use HasFactory;
 
     /** @var list<string> */
-    protected $hidden = ['account_number'];
+    protected $hidden = ['account_number', 'provider_payload'];
 
     public const string ProviderPaystack = 'paystack';
+
+    public const string ProviderDemo = 'demo';
 
     public const string StatusDraft = 'draft';
 
     public const string StatusActive = 'active';
 
     public const string StatusDisabled = 'disabled';
+
+    protected static function booted(): void
+    {
+        static::saving(function (PaymentAccount $paymentAccount): void {
+            $paymentAccount->scope_key = $paymentAccount->entry_academic_session_id === null
+                ? 'all-sets'
+                : 'set-'.$paymentAccount->entry_academic_session_id;
+            $paymentAccount->active_marker = $paymentAccount->status === self::StatusActive ? 1 : null;
+        });
+    }
 
     /**
      * @return BelongsTo<School, $this>
@@ -95,9 +109,32 @@ class PaymentAccount extends Model
 
     public function isActive(): bool
     {
-        return $this->status === self::StatusActive
+        return $this->provider === self::ProviderPaystack
+            && $this->status === self::StatusActive
             && is_string($this->paystack_subaccount_code)
-            && $this->paystack_subaccount_code !== '';
+            && $this->paystack_subaccount_code !== ''
+            && data_get($this->provider_payload, 'demo') !== true;
+    }
+
+    public static function currentFor(StaffProfile $staffProfile, Department $department): ?self
+    {
+        return self::query()
+            ->where('department_id', $department->id)
+            ->where('staff_profile_id', $staffProfile->id)
+            ->latest('updated_at')
+            ->latest('id')
+            ->get()
+            ->first(fn (self $paymentAccount): bool => $paymentAccount->isActive());
+    }
+
+    public static function latestFor(StaffProfile $staffProfile, Department $department): ?self
+    {
+        return self::query()
+            ->where('department_id', $department->id)
+            ->where('staff_profile_id', $staffProfile->id)
+            ->latest('updated_at')
+            ->latest('id')
+            ->first();
     }
 
     /**
@@ -111,6 +148,7 @@ class PaymentAccount extends Model
             'activated_at' => 'datetime',
             'disabled_at' => 'datetime',
             'provider_payload' => 'array',
+            'active_marker' => 'integer',
         ];
     }
 }
