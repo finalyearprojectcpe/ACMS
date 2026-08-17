@@ -557,7 +557,9 @@ export function StaffDueDetailDashboard({
     const hasReceiptWork = detail.students.some(
         (student) =>
             ['pending', 'processing'].includes(student.receiptStatus ?? '') ||
-            ['queued', 'processing'].includes(student.receiptEmailStatus ?? ''),
+            ['queued', 'processing', 'delayed'].includes(
+                student.receiptEmailStatus ?? '',
+            ),
     );
     const { start: startReceiptPoll, stop: stopReceiptPoll } = usePoll(
         3000,

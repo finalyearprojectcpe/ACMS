@@ -65,11 +65,11 @@ use App\Models\StudentSemesterResult;
 use App\Models\User;
 use App\Services\AcademicContextService;
 use App\Services\AcademicPerformanceService;
-use App\Services\CloudflareEmailService;
 use App\Services\CourseRegistrationPlanner;
 use App\Services\DueAssignmentService;
 use App\Services\DuePaymentService;
 use App\Services\DueReceiptService;
+use App\Services\EmailDeliveryService;
 use App\Services\PaystackException;
 use App\Services\PaystackService;
 use App\Services\PaystackWebhookService;
@@ -183,7 +183,7 @@ class DashboardController extends Controller
 
     public function storeFacultyHod(
         AssignFacultyHodRequest $request,
-        CloudflareEmailService $cloudflareEmailService,
+        EmailDeliveryService $emailDeliveryService,
     ): RedirectResponse {
         $user = $this->authorizedFacultyHeadUser($request);
         $faculty = $this->facultyForFacultyHead($user);
@@ -205,7 +205,7 @@ class DashboardController extends Controller
         });
 
         if ($emailDelivery instanceof EmailDelivery) {
-            $cloudflareEmailService->sendAccessCode(
+            $emailDeliveryService->sendAccessCode(
                 $emailDelivery,
                 (string) ($emailDelivery->metadata['access_code'] ?? ''),
             );
@@ -218,7 +218,7 @@ class DashboardController extends Controller
 
     public function storeImportedFacultyHods(
         ImportFacultyHodsRequest $request,
-        CloudflareEmailService $cloudflareEmailService,
+        EmailDeliveryService $emailDeliveryService,
     ): RedirectResponse {
         $user = $this->authorizedFacultyHeadUser($request);
         $faculty = $this->facultyForFacultyHead($user);
@@ -305,7 +305,7 @@ class DashboardController extends Controller
         });
 
         foreach ($result['deliveries'] as $emailDelivery) {
-            $cloudflareEmailService->sendAccessCode(
+            $emailDeliveryService->sendAccessCode(
                 $emailDelivery,
                 (string) ($emailDelivery->metadata['access_code'] ?? ''),
             );
@@ -332,7 +332,7 @@ class DashboardController extends Controller
 
     public function storeFacultyStaff(
         StoreFacultyStaffRequest $request,
-        CloudflareEmailService $cloudflareEmailService,
+        EmailDeliveryService $emailDeliveryService,
     ): RedirectResponse {
         $user = $this->authorizedFacultyHeadUser($request);
         $faculty = $this->facultyForFacultyHead($user);
@@ -357,7 +357,7 @@ class DashboardController extends Controller
         });
 
         if ($emailDelivery instanceof EmailDelivery) {
-            $cloudflareEmailService->sendAccessCode(
+            $emailDeliveryService->sendAccessCode(
                 $emailDelivery,
                 (string) ($emailDelivery->metadata['access_code'] ?? ''),
             );
@@ -380,7 +380,7 @@ class DashboardController extends Controller
 
     public function storeImportedFacultyStaff(
         ImportFacultyStaffRequest $request,
-        CloudflareEmailService $cloudflareEmailService,
+        EmailDeliveryService $emailDeliveryService,
     ): RedirectResponse {
         $user = $this->authorizedFacultyHeadUser($request);
         $faculty = $this->facultyForFacultyHead($user);
@@ -461,7 +461,7 @@ class DashboardController extends Controller
         });
 
         foreach ($result['deliveries'] as $emailDelivery) {
-            $cloudflareEmailService->sendAccessCode(
+            $emailDeliveryService->sendAccessCode(
                 $emailDelivery,
                 (string) ($emailDelivery->metadata['access_code'] ?? ''),
             );
@@ -488,7 +488,7 @@ class DashboardController extends Controller
 
     public function storeImportedHodStaff(
         ImportHodStaffRequest $request,
-        CloudflareEmailService $cloudflareEmailService,
+        EmailDeliveryService $emailDeliveryService,
     ): RedirectResponse {
         $user = $this->authorizedHodUser($request);
         $department = $this->departmentForHod($user);
@@ -572,7 +572,7 @@ class DashboardController extends Controller
         });
 
         foreach ($result['deliveries'] as $emailDelivery) {
-            $cloudflareEmailService->sendAccessCode(
+            $emailDeliveryService->sendAccessCode(
                 $emailDelivery,
                 (string) ($emailDelivery->metadata['access_code'] ?? ''),
             );
@@ -940,7 +940,7 @@ class DashboardController extends Controller
 
     public function storeSchoolFacultyHead(
         SchoolFacultyHeadRequest $request,
-        CloudflareEmailService $cloudflareEmailService,
+        EmailDeliveryService $emailDeliveryService,
     ): RedirectResponse {
         $user = $this->authorizedSchoolAdminUser($request);
         $validated = $request->validated();
@@ -983,7 +983,7 @@ class DashboardController extends Controller
         });
 
         if ($emailDelivery instanceof EmailDelivery) {
-            $cloudflareEmailService->sendAccessCode(
+            $emailDeliveryService->sendAccessCode(
                 $emailDelivery,
                 (string) ($emailDelivery->metadata['access_code'] ?? ''),
             );
@@ -1011,7 +1011,7 @@ class DashboardController extends Controller
     public function storeSchoolAdminTransfer(
         StoreSchoolAdminTransferRequest $request,
         CreateSchoolAdminTransferAction $createSchoolAdminTransfer,
-        CloudflareEmailService $cloudflareEmailService,
+        EmailDeliveryService $emailDeliveryService,
     ): RedirectResponse {
         $user = $this->authorizedSchoolAdminUser($request);
         $validated = $request->validated();
@@ -1021,7 +1021,7 @@ class DashboardController extends Controller
             $validated['name'] ?? null,
         );
 
-        $cloudflareEmailService->sendOwnershipTransferInvitation(
+        $emailDeliveryService->sendOwnershipTransferInvitation(
             $result['emailDelivery'],
             (string) ($result['emailDelivery']->metadata['access_code'] ?? ''),
             (string) ($result['emailDelivery']->metadata['invite_url'] ?? ''),
@@ -1259,7 +1259,7 @@ class DashboardController extends Controller
     public function storeFacultyHeadTransfer(
         StoreFacultyHeadTransferRequest $request,
         CreateFacultyHeadTransferAction $createFacultyHeadTransfer,
-        CloudflareEmailService $cloudflareEmailService,
+        EmailDeliveryService $emailDeliveryService,
     ): RedirectResponse {
         $user = $this->authorizedFacultyHeadUser($request);
         $validated = $request->validated();
@@ -1269,7 +1269,7 @@ class DashboardController extends Controller
             $validated['name'] ?? null,
         );
 
-        $cloudflareEmailService->sendFacultyHeadTransferInvitation(
+        $emailDeliveryService->sendFacultyHeadTransferInvitation(
             $result['emailDelivery'],
             (string) ($result['emailDelivery']->metadata['access_code'] ?? ''),
             (string) ($result['emailDelivery']->metadata['invite_url'] ?? ''),
@@ -2878,7 +2878,7 @@ class DashboardController extends Controller
 
         abort_unless($user instanceof User && $this->userCanViewDuePayment($user, $duePayment), 404);
         abort_unless($duePayment->receipt_status === DuePayment::ReceiptStatusReady, 404);
-        $delivery = $receipts->queueEmail($duePayment);
+        $delivery = $receipts->queueEmail($duePayment, newSendCycle: true);
 
         return back()->with(
             $delivery instanceof EmailDelivery ? 'success' : 'error',

@@ -12,7 +12,7 @@ use Illuminate\Support\Str;
 
 class PasswordResetService
 {
-    public function __construct(private readonly CloudflareEmailService $emailService) {}
+    public function __construct(private readonly EmailDeliveryService $emailService) {}
 
     public function requestReset(School $school, string $email): void
     {
@@ -40,7 +40,7 @@ class PasswordResetService
             'user_id' => $user->id,
             'recipient_email' => $email,
             'subject' => 'Reset your GradeManager password',
-            'mailer' => 'cloudflare',
+            'mailer' => 'resend',
             'status' => 'queued',
             'metadata' => [],
         ]);

@@ -1,7 +1,8 @@
 <?php
 
 use App\Jobs\GenerateDuePaymentReceipt;
-use App\Jobs\SendCloudflareEmail;
+use App\Jobs\SendEmailDelivery;
+use App\Mail\DuePaymentReceiptMail;
 use App\Models\AcademicSession;
 use App\Models\AcademicYear;
 use App\Models\Department;
@@ -12,14 +13,15 @@ use App\Models\StaffProfile;
 use App\Models\StudentDueAssignment;
 use App\Models\StudentProfile;
 use App\Models\User;
-use App\Services\CloudflareEmailService;
 use App\Services\DueAssignmentService;
 use App\Services\DuePaymentService;
 use App\Services\DueReceiptService;
+use App\Services\EmailDeliveryService;
 use App\Services\ReceiptPdfService;
 use App\Services\ReceiptUrlService;
+use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -52,27 +54,23 @@ test('confirmed Paystack payments queue, store, email, verify, and download PDF 
         ->and(Storage::disk('local')->get($payment->receipt_path))->toStartWith('%PDF')
         ->and($payment->receiptEmailDelivery)->not->toBeNull()
         ->and($payment->receiptEmailDelivery->metadata['attachment']['path'])->toBe($payment->receipt_path);
-    Queue::assertPushed(SendCloudflareEmail::class);
+    Queue::assertPushed(SendEmailDelivery::class);
 
-    Config::set('services.cloudflare_email.endpoint', 'https://email.example.test/send');
-    Config::set('services.cloudflare_email.token', 'cloudflare-test-token');
-    Http::preventStrayRequests();
-    Http::fake([
-        'https://email.example.test/send' => Http::response(['id' => 'receipt-message-123']),
-    ]);
+    Config::set('services.resend.key', 're_test_key');
+    Mail::fake();
 
-    app(CloudflareEmailService::class)->deliver($payment->receiptEmailDelivery);
+    app(EmailDeliveryService::class)->deliver($payment->receiptEmailDelivery);
 
-    Http::assertSent(function ($request) use ($payment): bool {
-        $attachment = $request->data()['attachments'][0] ?? [];
+    Mail::assertSent(DuePaymentReceiptMail::class, function (DuePaymentReceiptMail $mail) use ($payment): bool {
         $recipient = $payment->studentProfile->user->email;
 
-        return $request->data()['to'] === $recipient
-            && $request->data()['metadata']['template'] === 'due_payment_receipt'
-            && ! array_key_exists('attachment', $request->data()['metadata'])
-            && $attachment['filename'] === 'receipt-'.$payment->receipt_number.'.pdf'
-            && str_starts_with(base64_decode($attachment['content_base64']), '%PDF')
-            && $recipient !== null;
+        return $recipient !== null
+            && $mail->hasTo($recipient)
+            && $mail->hasAttachment(
+                Attachment::fromStorageDisk('local', (string) $payment->receipt_path)
+                    ->as('receipt-'.$payment->receipt_number.'.pdf')
+                    ->withMime('application/pdf'),
+            );
     });
 
     $download = $this->actingAs($fixture['studentUser'])->get(route('dashboard.dues.payments.receipt', [

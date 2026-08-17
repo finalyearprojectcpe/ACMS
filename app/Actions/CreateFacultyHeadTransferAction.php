@@ -95,7 +95,7 @@ class CreateFacultyHeadTransferAction
                 'user_id' => $recipient->id,
                 'recipient_email' => $recipientEmail,
                 'subject' => 'GradeManager faculty head transfer invite',
-                'mailer' => 'cloudflare',
+                'mailer' => 'resend',
                 'status' => 'queued',
                 'metadata' => [
                     'access_code' => $accessCode,

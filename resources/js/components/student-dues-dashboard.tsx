@@ -27,7 +27,9 @@ export function StudentDuesDashboard({ dues }: StudentDuesDashboardProps) {
     const hasReceiptWork = dues.paid.some(
         (due) =>
             ['pending', 'processing'].includes(due.receiptStatus ?? '') ||
-            ['queued', 'processing'].includes(due.receiptEmailStatus ?? ''),
+            ['queued', 'processing', 'delayed'].includes(
+                due.receiptEmailStatus ?? '',
+            ),
     );
     const { start: startReceiptPoll, stop: stopReceiptPoll } = usePoll(
         3000,

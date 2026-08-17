@@ -171,7 +171,7 @@ class DemoUserSeeder extends Seeder
                 ],
                 [
                     'user_id' => $user?->id,
-                    'mailer' => 'cloudflare',
+                    'mailer' => 'resend',
                     'status' => $delivery['status'],
                     'provider_message_id' => $delivery['provider_message_id'] ?? null,
                     'error' => $delivery['error'] ?? null,

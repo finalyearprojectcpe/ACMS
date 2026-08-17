@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\DB;
 class DueReceiptService
 {
     public function __construct(
-        private readonly CloudflareEmailService $cloudflareEmail,
+        private readonly EmailDeliveryService $emailDelivery,
         private readonly ReceiptUrlService $receiptUrls,
     ) {}
 
@@ -52,7 +52,7 @@ class DueReceiptService
         return $payment->refresh();
     }
 
-    public function queueEmail(DuePayment $payment): ?EmailDelivery
+    public function queueEmail(DuePayment $payment, bool $newSendCycle = false): ?EmailDelivery
     {
         $payment->loadMissing(['assignment.due', 'school', 'studentProfile.user']);
         $recipient = $payment->studentProfile->user->email;
@@ -68,7 +68,7 @@ class DueReceiptService
                 'user_id' => $payment->studentProfile->user_id,
                 'recipient_email' => $recipient,
                 'subject' => 'Payment Receipt - '.$payment->assignment->due->title,
-                'mailer' => 'cloudflare',
+                'mailer' => 'resend',
                 'status' => 'queued',
             ],
         );
@@ -79,7 +79,7 @@ class DueReceiptService
         ])->save();
         $payment->forceFill(['receipt_email_delivery_id' => $delivery->id])->save();
 
-        return $this->cloudflareEmail->sendDuePaymentReceipt(
+        return $this->emailDelivery->sendDuePaymentReceipt(
             $delivery,
             dueName: $payment->assignment->due->title,
             amount: sprintf('NGN %s', number_format($payment->amount_kobo / 100, 2)),
@@ -87,6 +87,7 @@ class DueReceiptService
             downloadUrl: $this->receiptUrls->temporaryDownloadUrl($payment),
             disk: (string) $payment->receipt_disk,
             path: $payment->receipt_path,
+            newSendCycle: $newSendCycle,
         );
     }
 }

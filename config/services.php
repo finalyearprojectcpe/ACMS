@@ -22,11 +22,6 @@ return [
         'key' => env('RESEND_API_KEY'),
     ],
 
-    'cloudflare_email' => [
-        'endpoint' => env('CLOUDFLARE_EMAIL_ENDPOINT'),
-        'token' => env('CLOUDFLARE_EMAIL_TOKEN'),
-    ],
-
     'paystack' => [
         'base_url' => env('PAYSTACK_BASE_URL', 'https://api.paystack.co'),
         'dashboard_url' => env('PAYSTACK_DASHBOARD_URL', 'https://dashboard.paystack.com'),

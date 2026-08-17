@@ -60,7 +60,7 @@ class CreateSchoolAdminTransferAction
                 'user_id' => null,
                 'recipient_email' => $recipientEmail,
                 'subject' => 'GradeManager ownership transfer invite',
-                'mailer' => 'cloudflare',
+                'mailer' => 'resend',
                 'status' => 'queued',
                 'metadata' => [
                     'access_code' => $accessCode,

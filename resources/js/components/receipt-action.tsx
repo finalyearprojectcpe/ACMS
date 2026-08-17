@@ -1,5 +1,9 @@
 import { Link } from '@inertiajs/react';
-import { RiCheckboxCircleLine, RiMailLine } from '@remixicon/react';
+import {
+    RiCheckboxCircleLine,
+    RiErrorWarningLine,
+    RiMailLine,
+} from '@remixicon/react';
 
 import { DownloadLink } from '@/components/download-link';
 import { Spinner } from '@/components/ui/spinner';
@@ -36,7 +40,9 @@ export function ReceiptAction({ receipt }: { receipt: ReceiptActionData }) {
                 </span>
             )}
 
-            {receipt.receiptEmailStatus === 'sent' ? (
+            {['sent', 'delivered'].includes(
+                receipt.receiptEmailStatus ?? '',
+            ) ? (
                 <span className="inline-flex items-center gap-1 text-muted-foreground">
                     <RiCheckboxCircleLine className="size-3.5 text-green-600 dark:text-green-400" />
                     Receipt emailed
@@ -47,6 +53,18 @@ export function ReceiptAction({ receipt }: { receipt: ReceiptActionData }) {
                 <span className="inline-flex items-center gap-1.5 text-muted-foreground">
                     <Spinner className="size-3.5" />
                     Sending email
+                </span>
+            ) : receipt.receiptEmailStatus === 'delayed' ? (
+                <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400">
+                    <RiErrorWarningLine className="size-3.5" />
+                    Email delivery delayed
+                </span>
+            ) : ['bounced', 'suppressed', 'complained'].includes(
+                  receipt.receiptEmailStatus ?? '',
+              ) ? (
+                <span className="inline-flex items-center gap-1 text-destructive">
+                    <RiErrorWarningLine className="size-3.5" />
+                    Email not delivered
                 </span>
             ) : receipt.receiptEmailRetryUrl ? (
                 <Link

@@ -24,8 +24,9 @@ class EmailDeliveryFactory extends Factory
             'user_id' => User::factory(),
             'recipient_email' => fake()->safeEmail(),
             'subject' => fake()->sentence(4),
-            'mailer' => 'cloudflare',
+            'mailer' => 'resend',
             'status' => 'queued',
+            'idempotency_key' => 'email-delivery/'.fake()->uuid(),
             'metadata' => [],
         ];
     }
