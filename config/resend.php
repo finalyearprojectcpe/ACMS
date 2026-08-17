@@ -14,18 +14,7 @@ return [
 
     'api_key' => env('RESEND_API_KEY'),
 
-    /*
-    |--------------------------------------------------------------------------
-    | Resend Domain
-    |--------------------------------------------------------------------------
-    |
-    | This is the subdomain where the package routes will be accessible from.
-    | If the setting is null, Resend will reside under the same domain as your
-    | application. Otherwise, this value will be used as the subdomain.
-    |
-    */
-
-    'domain' => env('RESEND_DOMAIN') ?: null,
+    'domain' => null,
 
     /*
     |--------------------------------------------------------------------------
