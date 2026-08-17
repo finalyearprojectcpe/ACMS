@@ -62,7 +62,11 @@ class GenerateDuePaymentReceipt implements ShouldBeUnique, ShouldQueue
         ])->save();
 
         if ($payment->status === DuePayment::StatusSuccess) {
-            $receipts->queueEmail($payment);
+            try {
+                $receipts->queueEmail($payment);
+            } catch (Throwable $exception) {
+                report($exception);
+            }
         }
     }
 

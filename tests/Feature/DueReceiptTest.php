@@ -94,6 +94,34 @@ test('confirmed Paystack payments queue, store, email, verify, and download PDF 
             ->etc());
 });
 
+test('a generated receipt remains ready when its email cannot be queued', function () {
+    Queue::fake();
+    Storage::fake('local');
+    Config::set('filesystems.due_receipt_disk', 'local');
+    $fixture = createDueReceiptFixture();
+
+    $payment = app(DuePaymentService::class)->recordPaystackData(
+        $fixture['payment'],
+        successfulPaystackData($fixture),
+    );
+    $receipts = Mockery::mock(DueReceiptService::class);
+    $receipts->shouldReceive('queueEmail')
+        ->once()
+        ->andThrow(new RuntimeException('Email queue unavailable.'));
+
+    (new GenerateDuePaymentReceipt($payment->id))->handle(
+        app(ReceiptPdfService::class),
+        $receipts,
+    );
+
+    $payment->refresh();
+
+    expect($payment->receipt_status)->toBe(DuePayment::ReceiptStatusReady)
+        ->and($payment->receipt_path)->not->toBeNull()
+        ->and(Storage::disk('local')->exists($payment->receipt_path))->toBeTrue()
+        ->and($payment->receipt_generation_error)->toBeNull();
+});
+
 test('a late completion keeps the exact older checkout amount after a due amount changes', function () {
     Queue::fake();
     $fixture = createDueReceiptFixture();
