@@ -14,12 +14,12 @@ return new class extends Migration
         // Stores a student's semester course registration for adviser review and approval.
         Schema::create('course_registrations', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('department_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('advisor_profile_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('student_set_id')->constrained()->cascadeOnDelete();
             $table->foreignId('student_profile_id')->constrained()->cascadeOnDelete();
             $table->foreignId('academic_session_id')->constrained()->cascadeOnDelete();
             $table->foreignId('academic_year_semester_id')->constrained()->restrictOnDelete();
-            $table->foreignId('reviewer_staff_profile_id')->nullable()->constrained('staff_profiles')->nullOnDelete();
+            $table->foreignId('reviewer_advisor_profile_id')->nullable()->constrained('advisor_profiles')->nullOnDelete();
             $table->string('status')->default('draft');
             $table->text('feedback_note')->nullable();
             $table->timestamp('submitted_at')->nullable();
@@ -30,8 +30,8 @@ return new class extends Migration
                 ['student_profile_id', 'academic_session_id', 'academic_year_semester_id'],
                 'course_registrations_student_session_year_semester_unique'
             );
-            $table->index(['department_id', 'academic_session_id', 'status'], 'course_registrations_department_session_status_index');
-            $table->index(['reviewer_staff_profile_id', 'status'], 'course_registrations_reviewer_status_index');
+            $table->index(['student_set_id', 'academic_session_id', 'status'], 'course_registrations_set_session_status_index');
+            $table->index(['reviewer_advisor_profile_id', 'status'], 'course_registrations_reviewer_status_index');
         });
 
         // Stores the individual courses selected on a student's registration, including current, carryover, and outstanding requirement rows.

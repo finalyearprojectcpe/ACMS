@@ -54,7 +54,7 @@ class DueReceiptService
 
     public function queueEmail(DuePayment $payment, bool $newSendCycle = false): ?EmailDelivery
     {
-        $payment->loadMissing(['assignment.due', 'school', 'studentProfile.user']);
+        $payment->loadMissing(['assignment.due', 'studentProfile.user']);
         $recipient = $payment->studentProfile->user->email;
 
         if (! is_string($recipient) || $recipient === '' || $payment->receipt_path === null) {
@@ -64,7 +64,7 @@ class DueReceiptService
         $delivery = EmailDelivery::query()->firstOrCreate(
             ['purpose_key' => 'due-receipt-'.$payment->id],
             [
-                'school_id' => $payment->school_id,
+                'advisor_profile_id' => $payment->advisor_profile_id,
                 'user_id' => $payment->studentProfile->user_id,
                 'recipient_email' => $recipient,
                 'subject' => 'Payment Receipt - '.$payment->assignment->due->title,

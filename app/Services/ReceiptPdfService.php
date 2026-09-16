@@ -18,8 +18,8 @@ class ReceiptPdfService
     public function generate(DuePayment $payment): string
     {
         $payment->loadMissing([
-            'assignment.due.department',
-            'school',
+            'assignment.due',
+            'advisorProfile',
             'studentProfile.user',
         ]);
 
@@ -35,7 +35,11 @@ class ReceiptPdfService
             margin: 8,
         ))->build()->getDataUri();
         $seller = new Party([
-            'name' => $payment->school->name,
+            'name' => $payment->advisorProfile->institution_name
+                ?: $payment->advisorProfile->programme_name,
+            'custom_fields' => [
+                'Programme' => $payment->advisorProfile->programme_name,
+            ],
         ]);
         $buyer = new Party([
             'name' => $student->user->name,

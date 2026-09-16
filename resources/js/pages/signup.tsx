@@ -9,10 +9,10 @@ export default function SignupPage({
     activation,
 }: {
     accountType: AccountType;
-    activation: SignupActivation;
+    activation: SignupActivation | null;
 }) {
     const title =
-        accountType === 'student' ? 'Student account' : 'Staff account';
+        accountType === 'student' ? 'Student account' : 'Course adviser account';
 
     return (
         <>

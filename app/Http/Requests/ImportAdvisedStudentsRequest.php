@@ -13,7 +13,8 @@ class ImportAdvisedStudentsRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->staffProfile !== null;
+        return $this->user()?->account_type === \App\AccountType::Adviser
+            && $this->user()?->advisorProfile !== null;
     }
 
     /**
@@ -22,11 +23,11 @@ class ImportAdvisedStudentsRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'entry_academic_session_id' => [
+            'student_set_id' => [
                 'required',
                 'integer',
-                Rule::exists('academic_sessions', 'id')
-                    ->where('school_id', $this->user()?->school_id ?? 0),
+                Rule::exists('student_sets', 'id')
+                    ->where('advisor_profile_id', $this->user()?->advisorProfile?->id ?? 0),
             ],
             'file_name' => ['nullable', 'string', 'max:255'],
             'import_key' => ['nullable', 'string', 'max:80'],
@@ -79,11 +80,11 @@ class ImportAdvisedStudentsRequest extends FormRequest
     {
         return [function (Validator $validator): void {
             $rows = collect($this->input('rows', []));
-            $schoolId = $this->user()?->school_id;
-            $existingRegistrationNumbers = $schoolId === null
+            $advisorProfileId = $this->user()?->advisorProfile?->id;
+            $existingRegistrationNumbers = $advisorProfileId === null
                 ? collect()
                 : StudentProfile::query()
-                    ->where('school_id', $schoolId)
+                    ->where('advisor_profile_id', $advisorProfileId)
                     ->whereIn('registration_number', $rows->pluck('registrationNumber'))
                     ->pluck('registration_number')
                     ->flip();
@@ -99,7 +100,7 @@ class ImportAdvisedStudentsRequest extends FormRequest
                 if ($existingRegistrationNumbers->has($registrationNumber)) {
                     $validator->errors()->add(
                         "rows.{$index}.registrationNumber",
-                        'A student with this registration number already exists in this school.',
+                        'A student with this registration number already exists in your workspace.',
                     );
                 }
 

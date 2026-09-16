@@ -21,7 +21,7 @@ abstract class GradeManagerMail extends Mailable
             subject: $this->delivery->subject,
             metadata: [
                 'delivery_id' => $this->delivery->id,
-                'school_id' => $this->delivery->school_id,
+                'advisor_profile_id' => $this->delivery->advisor_profile_id,
                 'email_type' => (string) data_get($this->delivery->metadata, 'template', 'transactional'),
             ],
         );

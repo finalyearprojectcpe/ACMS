@@ -10,11 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
-    'school_id',
-    'department_id',
-    'staff_profile_id',
-    'entry_academic_session_id',
-    'scope_key',
+    'advisor_profile_id',
     'provider',
     'label',
     'business_name',
@@ -52,43 +48,14 @@ class PaymentAccount extends Model
     protected static function booted(): void
     {
         static::saving(function (PaymentAccount $paymentAccount): void {
-            $paymentAccount->scope_key = $paymentAccount->entry_academic_session_id === null
-                ? 'all-sets'
-                : 'set-'.$paymentAccount->entry_academic_session_id;
             $paymentAccount->active_marker = $paymentAccount->status === self::StatusActive ? 1 : null;
         });
     }
 
-    /**
-     * @return BelongsTo<School, $this>
-     */
-    public function school(): BelongsTo
+    /** @return BelongsTo<AdvisorProfile, $this> */
+    public function advisorProfile(): BelongsTo
     {
-        return $this->belongsTo(School::class);
-    }
-
-    /**
-     * @return BelongsTo<Department, $this>
-     */
-    public function department(): BelongsTo
-    {
-        return $this->belongsTo(Department::class);
-    }
-
-    /**
-     * @return BelongsTo<StaffProfile, $this>
-     */
-    public function staffProfile(): BelongsTo
-    {
-        return $this->belongsTo(StaffProfile::class);
-    }
-
-    /**
-     * @return BelongsTo<AcademicSession, $this>
-     */
-    public function entryAcademicSession(): BelongsTo
-    {
-        return $this->belongsTo(AcademicSession::class, 'entry_academic_session_id');
+        return $this->belongsTo(AdvisorProfile::class);
     }
 
     /**
@@ -116,22 +83,20 @@ class PaymentAccount extends Model
             && data_get($this->provider_payload, 'demo') !== true;
     }
 
-    public static function currentFor(StaffProfile $staffProfile, Department $department): ?self
+    public static function currentFor(AdvisorProfile $advisorProfile): ?self
     {
         return self::query()
-            ->where('department_id', $department->id)
-            ->where('staff_profile_id', $staffProfile->id)
+            ->where('advisor_profile_id', $advisorProfile->id)
             ->latest('updated_at')
             ->latest('id')
             ->get()
             ->first(fn (self $paymentAccount): bool => $paymentAccount->isActive());
     }
 
-    public static function latestFor(StaffProfile $staffProfile, Department $department): ?self
+    public static function latestFor(AdvisorProfile $advisorProfile): ?self
     {
         return self::query()
-            ->where('department_id', $department->id)
-            ->where('staff_profile_id', $staffProfile->id)
+            ->where('advisor_profile_id', $advisorProfile->id)
             ->latest('updated_at')
             ->latest('id')
             ->first();

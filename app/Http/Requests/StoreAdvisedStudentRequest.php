@@ -3,7 +3,6 @@
 namespace App\Http\Requests;
 
 use App\Models\StudentProfile;
-use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Str;
@@ -13,7 +12,8 @@ class StoreAdvisedStudentRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->staffProfile !== null;
+        return $this->user()?->account_type === \App\AccountType::Adviser
+            && $this->user()?->advisorProfile !== null;
     }
 
     /**
@@ -21,21 +21,19 @@ class StoreAdvisedStudentRequest extends FormRequest
      */
     public function rules(): array
     {
-        $user = $this->user();
+        $advisorProfileId = $this->user()?->advisorProfile?->id ?? 0;
 
         return [
-            'entry_academic_session_id' => [
+            'student_set_id' => [
                 'required',
                 'integer',
-                Rule::exists('academic_sessions', 'id')
-                    ->where('school_id', $user instanceof User ? $user->school_id : 0),
+                Rule::exists('student_sets', 'id')->where('advisor_profile_id', $advisorProfileId),
             ],
             'registration_number' => [
                 'required',
                 'string',
                 'regex:/^(19|20)\d{6,18}$/',
-                Rule::unique(StudentProfile::class, 'registration_number')
-                    ->where('school_id', $user instanceof User ? $user->school_id : 0),
+                Rule::unique(StudentProfile::class, 'registration_number')->where('advisor_profile_id', $advisorProfileId),
             ],
             'access_code' => ['nullable', 'string', 'min:6', 'max:64'],
         ];
@@ -53,7 +51,7 @@ class StoreAdvisedStudentRequest extends FormRequest
     {
         return [
             'registration_number.regex' => 'Enter a numeric registration number beginning with the student entry year, for example 2021001234.',
-            'registration_number.unique' => 'A student with this registration number already exists in this school.',
+            'registration_number.unique' => 'A student with this registration number already exists in your workspace.',
         ];
     }
 }

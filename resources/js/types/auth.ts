@@ -1,4 +1,4 @@
-export type AccountType = 'school_admin' | 'student' | 'staff';
+export type AccountType = 'adviser' | 'student';
 
 export type SignupActivation = {
     step: 'verify' | 'complete';

@@ -1,9 +1,11 @@
-export type DashboardRole =
-    | 'school_admin'
-    | 'student'
-    | 'staff'
-    | 'hod'
-    | 'faculty_head';
+export type DashboardRole = 'student' | 'staff';
+
+export type DashboardProgramme = {
+    id: number;
+    name: string;
+    abbreviation: string;
+    minimumYearsToDegree: number;
+};
 
 export type DashboardDepartment = {
     id?: number;
@@ -505,13 +507,13 @@ export type DashboardStaffSettings = {
         email: string | null;
         avatar: string | null;
     };
-    department: DashboardDepartment | null;
-    faculty: DashboardFaculty | null;
+    institution: string | null;
+    programme: DashboardProgramme;
     assignedSets: DashboardStudentSetContext[];
 };
 
 export type DashboardStaffStudents = {
-    department: DashboardDepartment | null;
+    programme: DashboardProgramme;
     assignedSets: DashboardStudentSetContext[];
     totalStudents: number;
     students: DashboardStaffStudent[];
@@ -519,12 +521,14 @@ export type DashboardStaffStudents = {
 
 export type DashboardStaffStudentForm = {
     mode: 'create' | 'import';
-    department: DashboardDepartment;
+    programme: DashboardProgramme;
     assignedSets: DashboardStudentSetContext[];
     suggestedAccessCode: string;
 };
 
 export type DashboardStudentSetContext = {
+    id: number;
+    name: string;
     entrySession: DashboardAcademicSession;
     currentLevel: DashboardLevel | null;
     advisorName: string | null;
@@ -551,6 +555,7 @@ export type DashboardStaffStudent = {
     registrationNumber: string;
     avatar: string | null;
     currentLevel: DashboardLevel | null;
+    studentSet: DashboardStudentSetContext;
     entrySession: DashboardAcademicSession | null;
     advisorName: string;
     pendingCarryovers: string[];
@@ -745,9 +750,9 @@ export type DashboardStaffResultImportForm = {
 export type DashboardStudentRecord = {
     student: DashboardStaffStudent;
     statementUrl: string;
-    faculty: DashboardFaculty | null;
-    department: DashboardDepartment | null;
-    entrySession: DashboardAcademicSession | null;
+    institution: string | null;
+    programme: DashboardProgramme;
+    entrySession: DashboardAcademicSession;
     courseAdvisor: string;
     cgpa: string | null;
     levelGpas: DashboardStaffStudentLevelGpa[];
@@ -1064,6 +1069,7 @@ export type DashboardContext = {
     levels: DashboardLevel[];
     courseScheduleLevels: DashboardLevel[];
     advisedSets: DashboardStudentSetContext[];
+    programme: DashboardProgramme | null;
     department: DashboardDepartment | null;
     faculty: DashboardFaculty | null;
     schoolAdmin: DashboardSchoolAdmin | null;

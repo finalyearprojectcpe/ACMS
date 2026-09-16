@@ -11,14 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Stores the one current Paystack payout account used for all dues managed by each staff adviser.
+        // Stores the current Paystack payout account used for dues managed by each course adviser.
         Schema::create('payment_accounts', function (Blueprint $table): void {
             $table->id();
-            $table->foreignId('school_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('department_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('staff_profile_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('entry_academic_session_id')->nullable()->constrained('academic_sessions')->nullOnDelete();
-            $table->string('scope_key');
+            $table->foreignId('advisor_profile_id')->constrained()->cascadeOnDelete();
             $table->string('provider')->default('paystack');
             $table->string('label');
             $table->string('business_name');
@@ -36,19 +32,16 @@ return new class extends Migration
             $table->json('provider_payload')->nullable();
             $table->timestamps();
 
-            $table->index(['staff_profile_id', 'status']);
-            $table->index(['department_id', 'entry_academic_session_id', 'status'], 'payment_accounts_department_set_status_index');
-            $table->unique('staff_profile_id');
+            $table->index(['advisor_profile_id', 'status']);
+            $table->unique('advisor_profile_id');
         });
 
-        // Stores dues created by course advisers for a student set in a department.
+        // Stores dues created by a course adviser for one of their student sets.
         Schema::create('dues', function (Blueprint $table): void {
             $table->id();
-            $table->foreignId('school_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('department_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('entry_academic_session_id')->constrained('academic_sessions')->restrictOnDelete();
+            $table->foreignId('advisor_profile_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('student_set_id')->constrained()->restrictOnDelete();
             $table->foreignId('academic_session_id')->constrained()->restrictOnDelete();
-            $table->foreignId('created_by_staff_profile_id')->nullable()->constrained('staff_profiles')->nullOnDelete();
             $table->foreignId('payment_account_id')->nullable()->constrained()->restrictOnDelete();
             $table->string('title');
             $table->string('description')->nullable();
@@ -60,8 +53,8 @@ return new class extends Migration
             $table->timestamp('archived_at')->nullable();
             $table->timestamps();
 
-            $table->index(['department_id', 'entry_academic_session_id', 'status']);
-            $table->index(['school_id', 'academic_session_id']);
+            $table->index(['student_set_id', 'status']);
+            $table->index(['advisor_profile_id', 'academic_session_id']);
         });
 
         // Tracks whether each student in the set has paid, still owes, or was waived for a due.
@@ -88,7 +81,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('student_due_assignment_id')->constrained()->cascadeOnDelete();
             $table->foreignId('student_profile_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('school_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('advisor_profile_id')->constrained()->cascadeOnDelete();
             $table->foreignId('payment_account_id')->nullable()->constrained()->restrictOnDelete();
             $table->string('provider')->default('paystack');
             $table->string('reference')->unique();
@@ -117,7 +110,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['student_profile_id', 'status']);
-            $table->index(['school_id', 'created_at']);
+            $table->index(['advisor_profile_id', 'created_at']);
             $table->unique(['student_due_assignment_id', 'active_marker'], 'due_payments_one_active_checkout');
         });
 

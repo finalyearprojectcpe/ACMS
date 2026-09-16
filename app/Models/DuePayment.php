@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[Fillable([
     'student_due_assignment_id',
     'student_profile_id',
-    'school_id',
+    'advisor_profile_id',
     'payment_account_id',
     'provider',
     'reference',
@@ -90,11 +90,11 @@ class DuePayment extends Model
     }
 
     /**
-     * @return BelongsTo<School, $this>
+     * @return BelongsTo<AdvisorProfile, $this>
      */
-    public function school(): BelongsTo
+    public function advisorProfile(): BelongsTo
     {
-        return $this->belongsTo(School::class);
+        return $this->belongsTo(AdvisorProfile::class);
     }
 
     /**

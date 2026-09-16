@@ -50,8 +50,7 @@ function SingleStudentForm({
     onboarding: DashboardStaffStudentForm;
 }) {
     const form = useForm({
-        entry_academic_session_id:
-            onboarding.assignedSets[0]?.entrySession.id.toString() ?? '',
+        student_set_id: onboarding.assignedSets[0]?.id.toString() ?? '',
         registration_number: '',
         access_code: onboarding.suggestedAccessCode,
     });
@@ -65,7 +64,7 @@ function SingleStudentForm({
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
             <PageHeading
                 title="Add One Student"
-                detail={`Add a student to a set you advise in ${onboarding.department.abbreviation}.`}
+                detail={`Add a student to a ${onboarding.programme.abbreviation} set.`}
             />
 
             <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
@@ -77,28 +76,28 @@ function SingleStudentForm({
                         <FieldGroup>
                             <Field
                                 data-invalid={Boolean(
-                                    form.errors.entry_academic_session_id,
+                                    form.errors.student_set_id,
                                 )}
                             >
                                 <FieldLabel>Student Set</FieldLabel>
                                 <StudentSetPicker
-                                    value={form.data.entry_academic_session_id}
+                                    value={form.data.student_set_id}
                                     onValueChange={(value) =>
                                         form.setData(
-                                            'entry_academic_session_id',
+                                            'student_set_id',
                                             value,
                                         )
                                     }
                                     options={onboarding.assignedSets.map(
                                         (set) => ({
-                                            value: set.entrySession.id.toString(),
+                                            value: set.id.toString(),
                                             ...set,
                                         }),
                                     )}
                                     ariaLabel="Choose the student's set"
                                 />
                                 <FieldError>
-                                    {form.errors.entry_academic_session_id}
+                                    {form.errors.student_set_id}
                                 </FieldError>
                             </Field>
 
@@ -184,8 +183,8 @@ function StudentSpreadsheetImport({
 }: {
     onboarding: DashboardStaffStudentForm;
 }) {
-    const [entryAcademicSessionId, setEntryAcademicSessionId] = useState(
-        onboarding.assignedSets[0]?.entrySession.id.toString() ?? '',
+    const [studentSetId, setStudentSetId] = useState(
+        onboarding.assignedSets[0]?.id.toString() ?? '',
     );
 
     function submitRows(
@@ -197,7 +196,7 @@ function StudentSpreadsheetImport({
         router.post(
             storeImportedAdvisedStudents.url(),
             {
-                entry_academic_session_id: entryAcademicSessionId,
+                student_set_id: studentSetId,
                 file_name: fileName ?? '',
                 import_key: batch.importKey,
                 batch_number: batch.batchNumber,
@@ -222,17 +221,17 @@ function StudentSpreadsheetImport({
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">
             <PageHeading
                 title="Import Students From Spreadsheet"
-                detail={`Add several students to one ${onboarding.department.abbreviation} set.`}
+                detail={`Add several students to one ${onboarding.programme.abbreviation} set.`}
             />
 
             <div className="max-w-xl">
                 <Field>
                     <FieldLabel>Student Set</FieldLabel>
                     <StudentSetPicker
-                        value={entryAcademicSessionId}
-                        onValueChange={setEntryAcademicSessionId}
+                        value={studentSetId}
+                        onValueChange={setStudentSetId}
                         options={onboarding.assignedSets.map((set) => ({
-                            value: set.entrySession.id.toString(),
+                            value: set.id.toString(),
                             ...set,
                         }))}
                         ariaLabel="Choose the students' set"
@@ -243,7 +242,7 @@ function StudentSpreadsheetImport({
             <SpreadsheetImportPreview
                 title="Students Spreadsheet"
                 submitLabel="Import Students"
-                submitDisabled={entryAcademicSessionId === ''}
+                submitDisabled={studentSetId === ''}
                 fields={[
                     {
                         key: 'registrationNumber',

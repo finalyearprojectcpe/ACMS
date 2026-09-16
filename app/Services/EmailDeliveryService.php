@@ -6,10 +6,8 @@ use App\EmailDeliveryStatus;
 use App\Jobs\SendEmailDelivery;
 use App\Mail\AccessCodeMail;
 use App\Mail\DuePaymentReceiptMail;
-use App\Mail\FacultyHeadTransferInvitationMail;
 use App\Mail\GradeManagerMail;
 use App\Mail\PasswordResetMail;
-use App\Mail\SchoolAdminTransferInvitationMail;
 use App\Models\EmailDelivery;
 use Illuminate\Mail\SentMessage;
 use Illuminate\Support\Facades\Mail;
@@ -25,24 +23,6 @@ class EmailDeliveryService
             'template' => 'access_code',
             'access_code' => $accessCode,
             'login_url' => route('home'),
-        ]);
-    }
-
-    public function sendOwnershipTransferInvitation(EmailDelivery $delivery, string $accessCode, string $inviteUrl): EmailDelivery
-    {
-        return $this->queue($delivery, [
-            'template' => 'ownership_transfer',
-            'access_code' => $accessCode,
-            'invite_url' => $inviteUrl,
-        ]);
-    }
-
-    public function sendFacultyHeadTransferInvitation(EmailDelivery $delivery, string $accessCode, string $inviteUrl): EmailDelivery
-    {
-        return $this->queue($delivery, [
-            'template' => 'faculty_head_transfer',
-            'access_code' => $accessCode,
-            'invite_url' => $inviteUrl,
         ]);
     }
 
@@ -81,7 +61,7 @@ class EmailDeliveryService
 
     public function deliver(EmailDelivery $delivery): EmailDelivery
     {
-        $delivery->refresh()->loadMissing('school');
+        $delivery->refresh();
 
         if (in_array($delivery->status, [
             EmailDeliveryStatus::Sent->value,
@@ -183,8 +163,6 @@ class EmailDeliveryService
     {
         return match (data_get($delivery->metadata, 'template')) {
             'access_code' => new AccessCodeMail($delivery),
-            'ownership_transfer' => new SchoolAdminTransferInvitationMail($delivery),
-            'faculty_head_transfer' => new FacultyHeadTransferInvitationMail($delivery),
             'password_reset' => new PasswordResetMail($delivery),
             'due_payment_receipt' => new DuePaymentReceiptMail($delivery),
             default => throw new RuntimeException('The email type is not supported.'),

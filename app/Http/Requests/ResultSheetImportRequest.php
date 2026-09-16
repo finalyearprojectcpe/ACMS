@@ -14,8 +14,8 @@ class ResultSheetImportRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user()?->account_type === AccountType::Staff
-            && $this->user()?->staffProfile !== null;
+        return $this->user()?->account_type === AccountType::Adviser
+            && $this->user()?->advisorProfile !== null;
     }
 
     /**
@@ -26,9 +26,9 @@ class ResultSheetImportRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'entry_academic_session_id' => ['required', 'integer', 'exists:academic_sessions,id'],
+            'student_set_id' => ['required', 'integer', 'exists:student_sets,id'],
             'academic_year_semester_id' => ['required', 'integer', 'exists:academic_year_semesters,id'],
-            'action' => ['required', Rule::in(['draft', 'submit'])],
+            'action' => ['required', Rule::in(['draft', 'publish'])],
             'source_file' => ['nullable', 'file', 'mimes:xlsx,xls,csv', 'max:10240'],
             'column_mappings' => ['nullable', 'array'],
             'column_mappings.*' => ['nullable', 'string', 'max:180'],

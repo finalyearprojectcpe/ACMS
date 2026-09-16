@@ -11,12 +11,12 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Groups spreadsheet uploads so mapped rows, review status, and import summaries stay auditable.
+        // Groups adviser spreadsheet uploads so mapped rows and import summaries remain auditable.
         Schema::create('import_batches', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('advisor_profile_id')->constrained()->cascadeOnDelete();
             $table->foreignId('uploaded_by_user_id')->constrained('users')->cascadeOnDelete();
-            $table->nullableMorphs('scope');
+            $table->foreignId('student_set_id')->nullable()->constrained()->nullOnDelete();
             $table->string('type');
             $table->string('import_key')->nullable();
             $table->string('status')->default('draft');
@@ -27,8 +27,8 @@ return new class extends Migration
             $table->timestamp('approved_at')->nullable();
             $table->timestamps();
 
-            $table->index(['school_id', 'type', 'status']);
-            $table->unique(['school_id', 'uploaded_by_user_id', 'type', 'import_key']);
+            $table->index(['advisor_profile_id', 'type', 'status']);
+            $table->unique(['advisor_profile_id', 'uploaded_by_user_id', 'type', 'import_key'], 'import_batches_advisor_user_type_key_unique');
         });
     }
 

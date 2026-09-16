@@ -8,20 +8,19 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\MorphTo;
 
-#[Fillable(['school_id', 'uploaded_by_user_id', 'scope_type', 'scope_id', 'type', 'import_key', 'status', 'file_name', 'mappings', 'summary', 'submitted_at', 'approved_at'])]
+#[Fillable(['advisor_profile_id', 'uploaded_by_user_id', 'student_set_id', 'type', 'import_key', 'status', 'file_name', 'mappings', 'summary', 'submitted_at', 'approved_at'])]
 class ImportBatch extends Model
 {
     /** @use HasFactory<ImportBatchFactory> */
     use HasFactory;
 
     /**
-     * @return BelongsTo<School, $this>
+     * @return BelongsTo<AdvisorProfile, $this>
      */
-    public function school(): BelongsTo
+    public function advisorProfile(): BelongsTo
     {
-        return $this->belongsTo(School::class);
+        return $this->belongsTo(AdvisorProfile::class);
     }
 
     /**
@@ -33,11 +32,11 @@ class ImportBatch extends Model
     }
 
     /**
-     * @return MorphTo<Model, $this>
+     * @return BelongsTo<StudentSet, $this>
      */
-    public function scope(): MorphTo
+    public function studentSet(): BelongsTo
     {
-        return $this->morphTo();
+        return $this->belongsTo(StudentSet::class);
     }
 
     /**

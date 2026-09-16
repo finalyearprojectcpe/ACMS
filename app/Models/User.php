@@ -9,13 +9,12 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Storage;
 
-#[Fillable(['school_id', 'name', 'email', 'profile_photo_path', 'password', 'access_code', 'access_code_used_at', 'activated_at', 'disabled_at', 'status', 'account_type'])]
+#[Fillable(['name', 'email', 'profile_photo_path', 'password', 'access_code', 'access_code_used_at', 'activated_at', 'disabled_at', 'status', 'account_type'])]
 #[Hidden(['password', 'access_code', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -41,14 +40,6 @@ class User extends Authenticatable
     }
 
     /**
-     * @return BelongsTo<School, $this>
-     */
-    public function school(): BelongsTo
-    {
-        return $this->belongsTo(School::class);
-    }
-
-    /**
      * @return HasOne<StudentProfile, $this>
      */
     public function studentProfile(): HasOne
@@ -57,11 +48,11 @@ class User extends Authenticatable
     }
 
     /**
-     * @return HasOne<StaffProfile, $this>
+     * @return HasOne<AdvisorProfile, $this>
      */
-    public function staffProfile(): HasOne
+    public function advisorProfile(): HasOne
     {
-        return $this->hasOne(StaffProfile::class);
+        return $this->hasOne(AdvisorProfile::class);
     }
 
     public function profilePhotoUrl(): ?string

@@ -18,7 +18,7 @@ class AcademicPerformanceService
      */
     public function summary(StudentProfile $studentProfile): array
     {
-        $results = $this->approvedSemesterResults($studentProfile);
+        $results = $this->publishedSemesterResults($studentProfile);
         $totalUnits = (int) $results->sum('total_units');
         $totalQualityPoints = (int) $results->sum('total_grade_points');
 
@@ -42,7 +42,7 @@ class AcademicPerformanceService
 
         $results = StudentSemesterResult::query()
             ->whereIn('student_profile_id', $studentProfiles->pluck('id'))
-            ->whereHas('resultSheet', fn (Builder $query) => $query->where('status', ResultSheet::StatusApproved))
+            ->whereHas('resultSheet', fn (Builder $query) => $query->where('status', ResultSheet::StatusPublished))
             ->get()
             ->groupBy('student_profile_id');
 
@@ -69,7 +69,7 @@ class AcademicPerformanceService
         StudentProfile $studentProfile,
         ?int $maximumYearNumber = null,
     ): Collection {
-        $grouped = $this->approvedSemesterResults($studentProfile)
+        $grouped = $this->publishedSemesterResults($studentProfile)
             ->filter(fn (StudentSemesterResult $result): bool => $result->resultSheet?->academicYearSemester?->academicYear instanceof AcademicYear)
             ->groupBy(fn (StudentSemesterResult $result): int => (int) $result->resultSheet->academicYearSemester->academicYear->year_number);
 
@@ -114,7 +114,7 @@ class AcademicPerformanceService
         $semesterResults = StudentSemesterResult::query()
             ->with('resultSheet.academicYearSemester.academicYear')
             ->whereIn('student_profile_id', $studentProfileIds)
-            ->whereHas('resultSheet', fn (Builder $query) => $query->where('status', ResultSheet::StatusApproved))
+            ->whereHas('resultSheet', fn (Builder $query) => $query->where('status', ResultSheet::StatusPublished))
             ->get()
             ->groupBy('student_profile_id');
         $courseResults = StudentCourseResult::query()
@@ -126,7 +126,7 @@ class AcademicPerformanceService
             ])
             ->whereHas('studentSemesterResult', fn (Builder $query) => $query
                 ->whereIn('student_profile_id', $studentProfileIds)
-                ->whereHas('resultSheet', fn (Builder $sheetQuery) => $sheetQuery->where('status', ResultSheet::StatusApproved)))
+                ->whereHas('resultSheet', fn (Builder $sheetQuery) => $sheetQuery->where('status', ResultSheet::StatusPublished)))
             ->get()
             ->sortBy(fn (StudentCourseResult $result): string => $this->attemptOrder($result));
         $latestAttempts = [];
@@ -195,7 +195,7 @@ class AcademicPerformanceService
      */
     public function carryovers(StudentProfile $studentProfile): Collection
     {
-        return $this->latestApprovedCourseAttempts($studentProfile)
+        return $this->latestPublishedCourseAttempts($studentProfile)
             ->filter(fn (StudentCourseResult $result): bool => strtoupper($result->grade) === 'F')
             ->map(function (StudentCourseResult $result): ?array {
                 $sheetCourse = $result->resultSheetCourse;
@@ -225,7 +225,7 @@ class AcademicPerformanceService
     /**
      * @return Collection<int, StudentCourseResult>
      */
-    public function latestApprovedCourseAttempts(StudentProfile $studentProfile): Collection
+    public function latestPublishedCourseAttempts(StudentProfile $studentProfile): Collection
     {
         return StudentCourseResult::query()
             ->with([
@@ -236,7 +236,7 @@ class AcademicPerformanceService
             ])
             ->whereHas('studentSemesterResult', fn (Builder $query) => $query
                 ->where('student_profile_id', $studentProfile->id)
-                ->whereHas('resultSheet', fn (Builder $query) => $query->where('status', ResultSheet::StatusApproved)))
+                ->whereHas('resultSheet', fn (Builder $query) => $query->where('status', ResultSheet::StatusPublished)))
             ->get()
             ->sortBy(fn (StudentCourseResult $result): string => $this->attemptOrder($result))
             ->mapWithKeys(function (StudentCourseResult $result): array {
@@ -249,7 +249,7 @@ class AcademicPerformanceService
     /**
      * @return Collection<int, StudentSemesterResult>
      */
-    public function approvedSemesterResults(StudentProfile $studentProfile): Collection
+    public function publishedSemesterResults(StudentProfile $studentProfile): Collection
     {
         return StudentSemesterResult::query()
             ->with([
@@ -259,7 +259,7 @@ class AcademicPerformanceService
                 'courseResults.resultSheetCourse.courseOffering.course',
             ])
             ->where('student_profile_id', $studentProfile->id)
-            ->whereHas('resultSheet', fn (Builder $query) => $query->where('status', ResultSheet::StatusApproved))
+            ->whereHas('resultSheet', fn (Builder $query) => $query->where('status', ResultSheet::StatusPublished))
             ->get()
             ->sortBy(fn (StudentSemesterResult $result): string => sprintf(
                 '%s-%03d-%03d',

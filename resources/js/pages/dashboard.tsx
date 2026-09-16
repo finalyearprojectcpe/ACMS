@@ -3,16 +3,9 @@ import { RiArrowLeftLine } from '@remixicon/react';
 
 import { home as dashboardHome } from '@/actions/App/Http/Controllers/DashboardController';
 import { AppSidebar } from '@/components/app-sidebar';
-import { FacultyHeadDashboard } from '@/components/faculty-head-dashboard';
 import { FlashToasts } from '@/components/flash-toasts';
-import {
-    HodDashboard,
-    HodStaffImport,
-    HodSetAdvisorForm,
-    StudentRecordDashboard,
-} from '@/components/hod-dashboard';
+import { StudentRecordDashboard } from '@/components/student-record-dashboard';
 import { ResultSheetDetailDashboard } from '@/components/result-sheet-detail-dashboard';
-import { SchoolAdminDashboard } from '@/components/school-admin-dashboard';
 import { StaffCourseRegistrationDashboard } from '@/components/staff-course-registration-dashboard';
 import {
     StaffCourseOfferingForm,
@@ -29,7 +22,6 @@ import {
     StaffPaymentAccountFormDashboard,
     StaffPaymentSettingsDashboard,
 } from '@/components/staff-payment-settings-dashboard';
-import { StaffProfileDashboard } from '@/components/staff-profile-dashboard';
 import { StaffResultImportWizard } from '@/components/staff-result-import-wizard';
 import { StaffResultsDashboard } from '@/components/staff-results-dashboard';
 import { StaffSettingsDashboard } from '@/components/staff-settings-dashboard';
@@ -93,19 +85,6 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
         dashboard.staffHome !== null
             ? dashboard.staffHome
             : null;
-    const facultyHead =
-        dashboard.role === 'faculty_head' && dashboard.facultyHead !== null
-            ? dashboard.facultyHead
-            : null;
-    const schoolAdmin =
-        dashboard.role === 'school_admin' && dashboard.schoolAdmin !== null
-            ? dashboard.schoolAdmin
-            : null;
-    const hod =
-        dashboard.role === 'hod' && dashboard.hod !== null
-            ? dashboard.hod
-            : null;
-
     const staffStudents =
         dashboard.role === 'staff' &&
         dashboard.section === 'students' &&
@@ -184,17 +163,9 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
             : null;
     const staffSettings =
         dashboard.role === 'staff' &&
-        dashboard.section === 'settings' &&
+        dashboard.section === 'profile-settings' &&
         dashboard.staffSettings !== null
             ? dashboard.staffSettings
-            : null;
-    const hodStaffForm =
-        dashboard.role === 'hod' && dashboard.hodStaffForm !== null
-            ? dashboard.hodStaffForm
-            : null;
-    const hodSetAdvisorForm =
-        dashboard.role === 'hod' && dashboard.hodSetAdvisorForm !== null
-            ? dashboard.hodSetAdvisorForm
             : null;
     const studentHome =
         dashboard.role === 'student' &&
@@ -227,17 +198,11 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
             ? dashboard.studentProfile
             : null;
     const studentRecord =
-        ['staff', 'hod'].includes(dashboard.role) &&
+        dashboard.role === 'staff' &&
         dashboard.studentRecord !== null
             ? dashboard.studentRecord
             : null;
-    const staffRecord =
-        ['faculty_head', 'hod', 'staff'].includes(dashboard.role) &&
-        dashboard.staffRecord !== null
-            ? dashboard.staffRecord
-            : null;
     const resultSheetDetail =
-        ['staff', 'hod'].includes(dashboard.role) &&
         dashboard.resultSheetDetail !== null
             ? dashboard.resultSheetDetail
             : null;
@@ -301,28 +266,10 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                     </header>
 
                     <main className="background-graph flex flex-1 flex-col p-4 sm:p-6">
-                        {schoolAdmin ? (
-                            <SchoolAdminDashboard
-                                schoolAdmin={schoolAdmin}
-                                academicSessionForm={
-                                    dashboard.schoolAdminAcademicSessionForm
-                                }
-                                facultyForm={dashboard.schoolAdminFacultyForm}
-                                departmentForm={
-                                    dashboard.schoolAdminDepartmentForm
-                                }
-                                facultyHeadForm={
-                                    dashboard.schoolAdminFacultyHeadForm
-                                }
-                                section={dashboard.section}
-                                sectionTitle={dashboard.sectionTitle}
-                            />
-                        ) : resultSheetDetail ? (
+                        {resultSheetDetail ? (
                             <ResultSheetDetailDashboard
                                 detail={resultSheetDetail}
                             />
-                        ) : staffRecord ? (
-                            <StaffProfileDashboard record={staffRecord} />
                         ) : staffResultImportForm ? (
                             <StaffResultImportWizard
                                 form={staffResultImportForm}
@@ -339,18 +286,6 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                             <StaffCourseOfferingForm
                                 form={staffCourseOfferingForm}
                                 role={dashboard.role}
-                            />
-                        ) : facultyHead ? (
-                            <FacultyHeadDashboard
-                                facultyHead={facultyHead}
-                                hodForm={dashboard.facultyHeadHodForm}
-                                staffForm={dashboard.facultyHeadStaffForm}
-                                courses={dashboard.facultyHeadCourses}
-                                courseForm={
-                                    dashboard.facultyHeadCourseOfferingForm
-                                }
-                                section={dashboard.section}
-                                sectionTitle={dashboard.sectionTitle}
                             />
                         ) : staffCourseSchedules ? (
                             <StaffCourseSchedulesDashboard
@@ -374,17 +309,8 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                             />
                         ) : staffSettings ? (
                             <StaffSettingsDashboard settings={staffSettings} />
-                        ) : hodSetAdvisorForm ? (
-                            <HodSetAdvisorForm form={hodSetAdvisorForm} />
-                        ) : hodStaffForm ? (
-                            <HodStaffImport form={hodStaffForm} />
                         ) : studentRecord ? (
                             <StudentRecordDashboard record={studentRecord} />
-                        ) : hod ? (
-                            <HodDashboard
-                                hod={hod}
-                                section={dashboard.section}
-                            />
                         ) : staffHome ? (
                             <StaffHomeDashboard home={staffHome} />
                         ) : staffStudentForm ? (

@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests\Auth;
 
-use App\Models\School;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Str;
@@ -45,13 +44,6 @@ abstract class RegisterAccountRequest extends FormRequest
         return [
             'access_code' => ['required', 'string', 'max:255'],
         ];
-    }
-
-    protected function currentSchool(): ?School
-    {
-        $school = $this->attributes->get('school');
-
-        return $school instanceof School ? $school : null;
     }
 
     protected function prepareForValidation(): void

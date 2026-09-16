@@ -17,8 +17,8 @@ class StoreStaffPaymentAccountRequest extends FormRequest
         $user = $this->user();
 
         return $user instanceof User
-            && $user->account_type === AccountType::Staff
-            && $user->staffProfile !== null;
+            && $user->account_type === AccountType::Adviser
+            && $user->advisorProfile !== null;
     }
 
     /**

@@ -18,15 +18,12 @@ import {
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
-import { schoolEmailPlaceholder, useCurrentSchool } from '@/lib/school';
 import {
-    staff as staffSignup,
+    advisor as advisorSignup,
     student as studentSignup,
 } from '@/routes/signup';
 
 export function LoginForm({ className, ...props }: ComponentProps<'div'>) {
-    const school = useCurrentSchool();
-    const emailPlaceholder = schoolEmailPlaceholder(school);
     const form = useForm({
         email: '',
         password: '',
@@ -56,7 +53,7 @@ export function LoginForm({ className, ...props }: ComponentProps<'div'>) {
                             name="email"
                             type="email"
                             value={form.data.email}
-                            placeholder={emailPlaceholder}
+                            placeholder="name@university.edu"
                             autoComplete="email"
                             aria-invalid={Boolean(form.errors.email)}
                             onChange={(event) =>
@@ -117,8 +114,8 @@ export function LoginForm({ className, ...props }: ComponentProps<'div'>) {
                                     variant="link"
                                     className="h-auto p-0 text-xs"
                                 >
-                                    <Link href={staffSignup()}>
-                                        Create staff account
+                                    <Link href={advisorSignup()}>
+                                        Create adviser account
                                     </Link>
                                 </Button>
                             </FieldDescription>

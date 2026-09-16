@@ -11,10 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Stores courses offered by a faculty or department for a specific session and year-semester.
+        // Stores the courses available to one student set in a specific session and year-semester.
         Schema::create('course_offerings', function (Blueprint $table) {
             $table->id();
-            $table->morphs('owner');
+            $table->foreignId('student_set_id')->constrained()->cascadeOnDelete();
             $table->foreignId('course_id')->constrained()->cascadeOnDelete();
             $table->foreignId('academic_session_id')->constrained()->cascadeOnDelete();
             $table->foreignId('academic_year_semester_id')->constrained()->restrictOnDelete();
@@ -25,10 +25,10 @@ return new class extends Migration
             $table->timestamps();
 
             $table->unique(
-                ['owner_type', 'owner_id', 'course_id', 'academic_session_id', 'academic_year_semester_id'],
-                'course_offerings_owner_course_session_year_semester_unique'
+                ['student_set_id', 'course_id', 'academic_session_id', 'academic_year_semester_id'],
+                'course_offerings_set_course_session_year_semester_unique'
             );
-            $table->index(['academic_session_id', 'academic_year_semester_id'], 'course_offerings_session_year_semester_index');
+            $table->index(['student_set_id', 'academic_session_id', 'academic_year_semester_id'], 'course_offerings_set_context_index');
             $table->index(['category', 'archived_at']);
         });
     }

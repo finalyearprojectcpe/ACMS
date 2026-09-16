@@ -24,7 +24,7 @@ class DuePaymentService
     {
         [$payment, $needsInitialization] = DB::transaction(function () use ($assignment): array {
             $assignment = StudentDueAssignment::query()
-                ->with(['due.createdByStaffProfile.department', 'studentProfile.user', 'latestPayment'])
+                ->with(['due.advisorProfile', 'studentProfile.user', 'latestPayment'])
                 ->whereKey($assignment->id)
                 ->lockForUpdate()
                 ->firstOrFail();
@@ -41,10 +41,9 @@ class DuePaymentService
                 throw new RuntimeException('This due has been waived and no payment is required.');
             }
 
-            $staffProfile = $assignment->due->createdByStaffProfile;
-            $department = $staffProfile?->department;
-            $paymentAccount = $staffProfile !== null && $department !== null
-                ? PaymentAccount::currentFor($staffProfile, $department)
+            $advisorProfile = $assignment->due->advisorProfile;
+            $paymentAccount = $advisorProfile !== null
+                ? PaymentAccount::currentFor($advisorProfile)
                 : null;
 
             if (! $paymentAccount instanceof PaymentAccount) {
@@ -76,7 +75,7 @@ class DuePaymentService
 
             $payment = $assignment->payments()->create([
                 'student_profile_id' => $assignment->student_profile_id,
-                'school_id' => $assignment->studentProfile->school_id,
+                'advisor_profile_id' => $assignment->studentProfile->advisor_profile_id,
                 'payment_account_id' => $paymentAccount->id,
                 'provider' => DuePayment::ProviderPaystack,
                 'reference' => $this->newReference($assignment),
@@ -170,7 +169,7 @@ class DuePaymentService
             if (
                 $reference !== $payment->reference
                 || ! is_array($metadata)
-                || (int) Arr::get($metadata, 'school_id') !== (int) $payment->school_id
+                || (int) Arr::get($metadata, 'advisor_profile_id') !== (int) $payment->advisor_profile_id
                 || (int) Arr::get($metadata, 'due_id') !== (int) $payment->assignment->due_id
                 || (int) Arr::get($metadata, 'student_due_assignment_id') !== (int) $payment->student_due_assignment_id
                 || (int) Arr::get($metadata, 'student_profile_id') !== (int) $payment->student_profile_id

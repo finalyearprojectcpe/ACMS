@@ -9,18 +9,18 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['school_id', 'code', 'title', 'slug', 'credit_units'])]
+#[Fillable(['advisor_profile_id', 'code', 'title', 'slug', 'credit_units'])]
 class Course extends Model
 {
     /** @use HasFactory<CourseFactory> */
     use HasFactory;
 
     /**
-     * @return BelongsTo<School, $this>
+     * @return BelongsTo<AdvisorProfile, $this>
      */
-    public function school(): BelongsTo
+    public function advisorProfile(): BelongsTo
     {
-        return $this->belongsTo(School::class);
+        return $this->belongsTo(AdvisorProfile::class);
     }
 
     /**

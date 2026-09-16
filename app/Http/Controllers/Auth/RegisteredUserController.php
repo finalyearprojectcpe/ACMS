@@ -5,12 +5,10 @@ namespace App\Http\Controllers\Auth;
 use App\AccountStatus;
 use App\AccountType;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Auth\RegisterAccountRequest;
-use App\Http\Requests\Auth\RegisterStaffRequest;
+use App\Http\Requests\Auth\RegisterAdvisorRequest;
 use App\Http\Requests\Auth\RegisterStudentRequest;
-use App\Http\Requests\Auth\VerifyStaffRegistrationRequest;
 use App\Http\Requests\Auth\VerifyStudentRegistrationRequest;
-use App\Models\School;
+use App\Models\AdvisorProfile;
 use App\Models\StudentProfile;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
@@ -27,124 +25,63 @@ class RegisteredUserController extends Controller
 
     public function createStudent(Request $request): InertiaResponse
     {
-        return $this->renderSignup($request, AccountType::Student);
+        return Inertia::render('signup', [
+            'accountType' => AccountType::Student->value,
+            'activation' => $this->activationState($request),
+        ]);
     }
 
-    public function createStaff(Request $request): InertiaResponse
+    public function createAdvisor(): InertiaResponse
     {
-        return $this->renderSignup($request, AccountType::Staff);
+        return Inertia::render('signup', [
+            'accountType' => AccountType::Adviser->value,
+            'activation' => null,
+        ]);
     }
 
     public function verifyStudent(VerifyStudentRegistrationRequest $request): RedirectResponse
     {
-        $school = $this->currentSchool($request);
         $validated = $request->validated();
         $studentProfile = StudentProfile::query()
             ->with('user')
-            ->where('school_id', $school->id)
             ->where('registration_number', $validated['registration_number'])
-            ->whereHas('user', function ($query) use ($school): void {
-                $query
-                    ->where('school_id', $school->id)
-                    ->where('account_type', AccountType::Student);
-            })
-            ->first();
+            ->get()
+            ->first(function (StudentProfile $profile) use ($validated): bool {
+                $user = $profile->user;
 
-        if ($studentProfile?->user === null) {
+                return $user instanceof User
+                    && $user->account_type === AccountType::Student
+                    && $user->access_code !== null
+                    && hash_equals($user->access_code, $validated['access_code']);
+            });
+
+        if (! $studentProfile?->user instanceof User) {
             throw ValidationException::withMessages([
-                'registration_number' => 'No student account matches this registration number.',
+                'access_code' => 'The registration number and access code do not match an available student account.',
             ]);
         }
 
-        $this->ensureAccessCodeIsValid($studentProfile->user, $validated['access_code'], 'registration_number');
-        $this->rememberActivation($request, AccountType::Student, $studentProfile->user, $studentProfile->registration_number);
+        $this->ensureAccessCodeIsValid($studentProfile->user, $validated['access_code']);
+        $this->rememberActivation($request, $studentProfile->user, $studentProfile->registration_number);
 
-        return redirect()->route('signup.student');
-    }
-
-    public function verifyStaff(VerifyStaffRegistrationRequest $request): RedirectResponse
-    {
-        $school = $this->currentSchool($request);
-        $validated = $request->validated();
-        $user = User::query()
-            ->where('school_id', $school->id)
-            ->where('account_type', AccountType::Staff)
-            ->where('email', $validated['email'])
-            ->first();
-
-        if ($user === null) {
-            throw ValidationException::withMessages([
-                'email' => 'No staff account matches this email address.',
-            ]);
-        }
-
-        $this->ensureAccessCodeIsValid($user, $validated['access_code'], 'email');
-        $this->rememberActivation($request, AccountType::Staff, $user, $user->email ?? $validated['email']);
-
-        return redirect()->route('signup.staff');
+        return to_route('signup.student');
     }
 
     public function storeStudent(RegisterStudentRequest $request): RedirectResponse
     {
-        $user = $this->activationUser($request, AccountType::Student);
+        $user = $this->activationUser($request);
 
-        if ($user === null) {
+        if (! $user instanceof User) {
             throw ValidationException::withMessages([
-                'password' => 'Verify your access code before setting your password.',
+                'password' => 'Verify your registration number and access code before setting your password.',
             ]);
         }
 
         $validated = $request->validated();
 
-        return $this->activateAccount($request, $user, $validated, [
-            'email' => $validated['email'],
-        ]);
-    }
-
-    public function storeStaff(RegisterStaffRequest $request): RedirectResponse
-    {
-        $user = $this->activationUser($request, AccountType::Staff);
-
-        if ($user === null) {
-            throw ValidationException::withMessages([
-                'password' => 'Verify your access code before setting your password.',
-            ]);
-        }
-
-        $validated = $request->validated();
-
-        return $this->activateAccount($request, $user, $validated);
-    }
-
-    private function renderSignup(Request $request, AccountType $accountType): InertiaResponse
-    {
-        return Inertia::render('signup', [
-            'accountType' => $accountType->value,
-            'activation' => $this->activationState($request, $accountType),
-        ]);
-    }
-
-    /**
-     * @param  array{password: string}  $validated
-     * @param  array<string, string|null>  $attributes
-     */
-    private function activateAccount(RegisterAccountRequest $request, User $user, array $validated, array $attributes = []): RedirectResponse
-    {
-        if ($user->activated_at !== null) {
-            throw ValidationException::withMessages([
-                'password' => 'This account has already been activated.',
-            ]);
-        }
-
-        if ($user->access_code === null || $user->access_code_used_at !== null) {
-            throw ValidationException::withMessages([
-                'password' => 'Verify your access code before setting your password.',
-            ]);
-        }
-
-        DB::transaction(function () use ($attributes, $user, $validated): void {
+        DB::transaction(function () use ($user, $validated): void {
             $user->forceFill([
-                ...$attributes,
+                'email' => $validated['email'],
                 'password' => $validated['password'],
                 'access_code_used_at' => now(),
                 'activated_at' => now(),
@@ -153,57 +90,74 @@ class RegisteredUserController extends Controller
             ])->save();
         });
 
-        $this->forgetActivation($request, $user->account_type);
+        $this->forgetActivation($request);
+        Auth::login($user);
+        $request->session()->regenerate();
+
+        return to_route('dashboard');
+    }
+
+    public function storeAdvisor(RegisterAdvisorRequest $request): RedirectResponse
+    {
+        $validated = $request->validated();
+
+        $user = DB::transaction(function () use ($validated): User {
+            $user = User::query()->create([
+                'account_type' => AccountType::Adviser,
+                'name' => $validated['name'],
+                'email' => $validated['email'],
+                'password' => $validated['password'],
+                'email_verified_at' => now(),
+                'activated_at' => now(),
+                'status' => AccountStatus::Active,
+            ]);
+
+            AdvisorProfile::query()->create([
+                'user_id' => $user->id,
+                'institution_name' => $validated['institution_name'] ?? null,
+                'programme_name' => $validated['programme_name'],
+                'programme_abbreviation' => $validated['programme_abbreviation'],
+                'minimum_years_to_degree' => $validated['minimum_years_to_degree'],
+                'maximum_course_units' => $validated['maximum_course_units'],
+            ]);
+
+            return $user;
+        });
 
         Auth::login($user);
         $request->session()->regenerate();
 
-        return redirect()->route('dashboard');
+        return to_route('dashboard');
     }
 
-    private function ensureAccessCodeIsValid(User $user, string $accessCode, string $identifierField): void
+    private function ensureAccessCodeIsValid(User $user, string $accessCode): void
     {
         if ($user->activated_at !== null) {
             throw ValidationException::withMessages([
-                $identifierField => 'This account has already been activated.',
+                'registration_number' => 'This student account has already been activated.',
             ]);
         }
 
-        if (
-            $user->access_code === null
-            || $user->access_code_used_at !== null
-            || ! hash_equals((string) $user->access_code, $accessCode)
-        ) {
+        if ($user->access_code === null || $user->access_code_used_at !== null || ! hash_equals($user->access_code, $accessCode)) {
             throw ValidationException::withMessages([
                 'access_code' => 'The access code is invalid.',
             ]);
         }
     }
 
-    /**
-     * @return array{step: string, identifier: string|null}
-     */
-    private function activationState(Request $request, AccountType $accountType): array
+    /** @return array{step: string, identifier: string|null} */
+    private function activationState(Request $request): array
     {
-        $activation = $this->activationData($request, $accountType);
+        $activation = $this->activationData($request);
 
-        if ($activation === null) {
-            return [
-                'step' => 'verify',
-                'identifier' => null,
-            ];
-        }
-
-        return [
-            'step' => 'complete',
-            'identifier' => (string) $activation['identifier'],
-        ];
+        return $activation === null
+            ? ['step' => 'verify', 'identifier' => null]
+            : ['step' => 'complete', 'identifier' => $activation['identifier']];
     }
 
-    private function activationUser(Request $request, AccountType $accountType): ?User
+    private function activationUser(Request $request): ?User
     {
-        $school = $this->currentSchool($request);
-        $activation = $this->activationData($request, $accountType);
+        $activation = $this->activationData($request);
 
         if ($activation === null) {
             return null;
@@ -211,17 +165,11 @@ class RegisteredUserController extends Controller
 
         $user = User::query()
             ->whereKey($activation['user_id'])
-            ->where('school_id', $school->id)
-            ->where('account_type', $accountType->value)
+            ->where('account_type', AccountType::Student->value)
             ->first();
 
-        if (
-            $user === null
-            || $user->activated_at !== null
-            || $user->access_code === null
-            || $user->access_code_used_at !== null
-        ) {
-            $this->forgetActivation($request, $accountType);
+        if ($user === null || $user->activated_at !== null || $user->access_code === null || $user->access_code_used_at !== null) {
+            $this->forgetActivation($request);
 
             return null;
         }
@@ -229,65 +177,44 @@ class RegisteredUserController extends Controller
         return $user;
     }
 
-    /**
-     * @return array{user_id: int, school_id: int, account_type: string, identifier: string, verified_at: int}|null
-     */
-    private function activationData(Request $request, AccountType $accountType): ?array
+    /** @return array{user_id: int, identifier: string, verified_at: int}|null */
+    private function activationData(Request $request): ?array
     {
-        $school = $this->currentSchool($request);
-        $activation = $request->session()->get($this->activationSessionKey($accountType));
-
-        if (! is_array($activation)) {
-            return null;
-        }
+        $activation = $request->session()->get($this->activationSessionKey());
 
         if (
-            (int) ($activation['school_id'] ?? 0) !== $school->id
-            || ($activation['account_type'] ?? null) !== $accountType->value
+            ! is_array($activation)
             || (int) ($activation['verified_at'] ?? 0) < now()->subSeconds(self::ACTIVATION_TTL_SECONDS)->timestamp
             || ! isset($activation['user_id'], $activation['identifier'])
         ) {
-            $this->forgetActivation($request, $accountType);
+            $this->forgetActivation($request);
 
             return null;
         }
 
         return [
             'user_id' => (int) $activation['user_id'],
-            'school_id' => (int) $activation['school_id'],
-            'account_type' => (string) $activation['account_type'],
             'identifier' => (string) $activation['identifier'],
             'verified_at' => (int) $activation['verified_at'],
         ];
     }
 
-    private function rememberActivation(Request $request, AccountType $accountType, User $user, string $identifier): void
+    private function rememberActivation(Request $request, User $user, string $identifier): void
     {
-        $request->session()->put($this->activationSessionKey($accountType), [
+        $request->session()->put($this->activationSessionKey(), [
             'user_id' => $user->id,
-            'school_id' => $user->school_id,
-            'account_type' => $accountType->value,
             'identifier' => $identifier,
             'verified_at' => now()->timestamp,
         ]);
     }
 
-    private function forgetActivation(Request $request, AccountType $accountType): void
+    private function forgetActivation(Request $request): void
     {
-        $request->session()->forget($this->activationSessionKey($accountType));
+        $request->session()->forget($this->activationSessionKey());
     }
 
-    private function activationSessionKey(AccountType $accountType): string
+    private function activationSessionKey(): string
     {
-        return "signup.activation.{$accountType->value}";
-    }
-
-    private function currentSchool(Request $request): School
-    {
-        $school = $request->attributes->get('school');
-
-        abort_unless($school instanceof School, 404);
-
-        return $school;
+        return 'signup.activation.student';
     }
 }

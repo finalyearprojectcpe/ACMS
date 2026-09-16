@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\AccountStatus;
 use App\Models\EmailDelivery;
-use App\Models\School;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -14,9 +13,9 @@ class PasswordResetService
 {
     public function __construct(private readonly EmailDeliveryService $emailService) {}
 
-    public function requestReset(School $school, string $email): void
+    public function requestReset(string $email): void
     {
-        $user = $this->eligibleUser($school, $email);
+        $user = $this->eligibleUser($email);
 
         if (! $user instanceof User) {
             return;
@@ -26,7 +25,6 @@ class PasswordResetService
 
         DB::table('password_reset_tokens')->updateOrInsert(
             [
-                'school_id' => $school->id,
                 'email' => $email,
             ],
             [
@@ -36,7 +34,7 @@ class PasswordResetService
         );
 
         $delivery = EmailDelivery::query()->create([
-            'school_id' => $school->id,
+            'advisor_profile_id' => $user->advisorProfile?->id ?? $user->studentProfile?->advisor_profile_id,
             'user_id' => $user->id,
             'recipient_email' => $email,
             'subject' => 'Reset your GradeManager password',
@@ -53,11 +51,10 @@ class PasswordResetService
         );
     }
 
-    public function reset(School $school, string $email, string $token, string $password): bool
+    public function reset(string $email, string $token, string $password): bool
     {
-        return DB::transaction(function () use ($school, $email, $password, $token): bool {
+        return DB::transaction(function () use ($email, $password, $token): bool {
             $reset = DB::table('password_reset_tokens')
-                ->where('school_id', $school->id)
                 ->where('email', $email)
                 ->lockForUpdate()
                 ->first();
@@ -76,7 +73,7 @@ class PasswordResetService
                 return false;
             }
 
-            $user = $this->eligibleUser($school, $email);
+            $user = $this->eligibleUser($email);
 
             if (! $user instanceof User) {
                 return false;
@@ -88,7 +85,6 @@ class PasswordResetService
             ])->save();
             DB::table('sessions')->where('user_id', $user->id)->delete();
             DB::table('password_reset_tokens')
-                ->where('school_id', $school->id)
                 ->where('email', $email)
                 ->delete();
 
@@ -96,10 +92,10 @@ class PasswordResetService
         });
     }
 
-    private function eligibleUser(School $school, string $email): ?User
+    private function eligibleUser(string $email): ?User
     {
         return User::query()
-            ->where('school_id', $school->id)
+            ->with(['advisorProfile', 'studentProfile'])
             ->where('email', $email)
             ->where('status', AccountStatus::Active->value)
             ->whereNotNull('activated_at')

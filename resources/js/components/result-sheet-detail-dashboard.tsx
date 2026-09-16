@@ -1,46 +1,19 @@
-import { Link, router } from '@inertiajs/react';
-import {
-    RiDownload2Line,
-    RiFileExcel2Line,
-    RiSendPlaneLine,
-} from '@remixicon/react';
-import { useState } from 'react';
+import { Link } from '@inertiajs/react';
+import { RiDownload2Line, RiFileExcel2Line } from '@remixicon/react';
 
 import {
     createResultSheetImport,
-    reviewResultSheet,
+    exportResultSheet,
 } from '@/actions/App/Http/Controllers/DashboardController';
 import { qualifiedSemesterLabel } from '@/components/qualified-semester';
 import { ResultMatrixTable } from '@/components/result-matrix-table';
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-    AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Field, FieldLabel } from '@/components/ui/field';
-import { Textarea } from '@/components/ui/textarea';
 import type { DashboardResultSheet, DashboardResultSheetDetail } from '@/types';
 
 type ResultSheetDetailDashboardProps = {
     detail: DashboardResultSheetDetail;
 };
-
-const correctionReasons = [
-    { value: 'incomplete_data', label: 'Incomplete data' },
-    { value: 'incorrect_grades', label: 'Incorrect grades' },
-    {
-        value: 'missing_students_or_courses',
-        label: 'Missing students or courses',
-    },
-] as const;
 
 export function ResultSheetDetailDashboard({
     detail,
@@ -50,20 +23,7 @@ export function ResultSheetDetailDashboard({
         sheet.level.title,
         sheet.semester.name,
     );
-    const [correctionNote, setCorrectionNote] = useState('');
-    const [correctionReason, setCorrectionReason] = useState<string | null>(
-        null,
-    );
     const summary = `${sheet.academicSession.name} Session · ${sheet.studentCount} students · ${sheet.courseCount} courses · Avg GPA ${sheet.averageGpa}`;
-
-    function review(action: 'approve' | 'return') {
-        router.patch(reviewResultSheet.url({ resultSheet: sheet.id }), {
-            action,
-            correction_reason:
-                action === 'return' ? correctionReason : undefined,
-            correction_note: action === 'return' ? correctionNote : undefined,
-        });
-    }
 
     return (
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">
@@ -84,26 +44,34 @@ export function ResultSheetDetailDashboard({
                     </div>
                 </div>
 
-                {detail.canEdit || detail.sourceFileUrl ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                        {detail.sourceFileUrl ? (
-                            <Button asChild variant="outline">
-                                <a href={detail.sourceFileUrl}>
-                                    <RiDownload2Line />
-                                    Download Source
-                                </a>
-                            </Button>
-                        ) : null}
-                        {detail.canEdit ? (
-                            <Button asChild variant="outline">
-                                <Link href={createResultSheetImport()}>
-                                    <RiFileExcel2Line />
-                                    Replace Spreadsheet
-                                </Link>
-                            </Button>
-                        ) : null}
-                    </div>
-                ) : null}
+                <div className="flex flex-wrap items-center gap-2">
+                    <Button asChild variant="outline">
+                        <a href={exportResultSheet(sheet.id).url}>
+                            <RiFileExcel2Line />
+                            Export Result Sheet
+                        </a>
+                    </Button>
+                    {detail.canEdit || detail.sourceFileUrl ? (
+                        <>
+                            {detail.sourceFileUrl ? (
+                                <Button asChild variant="outline">
+                                    <a href={detail.sourceFileUrl}>
+                                        <RiDownload2Line />
+                                        Download Source
+                                    </a>
+                                </Button>
+                            ) : null}
+                            {detail.canEdit ? (
+                                <Button asChild variant="outline">
+                                    <Link href={createResultSheetImport()}>
+                                        <RiFileExcel2Line />
+                                        Replace Spreadsheet
+                                    </Link>
+                                </Button>
+                            ) : null}
+                        </>
+                    ) : null}
+                </div>
             </div>
 
             {sheet.correctionNote ? (
@@ -127,120 +95,6 @@ export function ResultSheetDetailDashboard({
                             {summary}
                         </div>
                     </div>
-                    {detail.canReview ? (
-                        <div className="flex flex-wrap gap-2">
-                            <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                    <Button variant="outline" type="button">
-                                        Return for Correction
-                                    </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                        <AlertDialogTitle>
-                                            Return {title} results?
-                                        </AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                            You can send this sheet back to the
-                                            course adviser with an optional
-                                            reason. Students will not see these
-                                            results while corrections are
-                                            pending.
-                                        </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <div className="grid gap-4">
-                                        <div className="grid gap-2">
-                                            <div className="text-sm font-medium">
-                                                Common reasons
-                                            </div>
-                                            <div className="flex flex-wrap gap-2">
-                                                {correctionReasons.map(
-                                                    (reason) => (
-                                                        <Button
-                                                            key={reason.value}
-                                                            type="button"
-                                                            variant={
-                                                                correctionReason ===
-                                                                reason.value
-                                                                    ? 'default'
-                                                                    : 'outline'
-                                                            }
-                                                            size="sm"
-                                                            onClick={() =>
-                                                                setCorrectionReason(
-                                                                    correctionReason ===
-                                                                        reason.value
-                                                                        ? null
-                                                                        : reason.value,
-                                                                )
-                                                            }
-                                                        >
-                                                            {reason.label}
-                                                        </Button>
-                                                    ),
-                                                )}
-                                            </div>
-                                        </div>
-                                        <Field>
-                                            <FieldLabel>
-                                                Note for the course adviser
-                                            </FieldLabel>
-                                            <Textarea
-                                                value={correctionNote}
-                                                onChange={(event) =>
-                                                    setCorrectionNote(
-                                                        event.target.value,
-                                                    )
-                                                }
-                                                placeholder="Optional. Add any detail that will help the course adviser correct the sheet."
-                                            />
-                                        </Field>
-                                    </div>
-                                    <AlertDialogFooter>
-                                        <AlertDialogCancel>
-                                            Keep Reviewing
-                                        </AlertDialogCancel>
-                                        <AlertDialogAction
-                                            onClick={() => review('return')}
-                                        >
-                                            Return Results
-                                        </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                </AlertDialogContent>
-                            </AlertDialog>
-                            <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                    <Button type="button">
-                                        <RiSendPlaneLine />
-                                        Approve Results
-                                    </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                        <AlertDialogTitle>
-                                            Approve {title} results?
-                                        </AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                            You are approving this result sheet
-                                            for public view. Students and
-                                            authorised staff will be able to see
-                                            the grades and GPA from this sheet.
-                                        </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                        <AlertDialogCancel>
-                                            Keep Reviewing
-                                        </AlertDialogCancel>
-                                        <AlertDialogAction
-                                            onClick={() => review('approve')}
-                                        >
-                                            Approve Results
-                                        </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                </AlertDialogContent>
-                            </AlertDialog>
-                        </div>
-                    ) : null}
                 </CardHeader>
                 <CardContent className="p-0">
                     <ResultMatrixTable

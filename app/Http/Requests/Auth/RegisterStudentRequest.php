@@ -15,16 +15,9 @@ class RegisterStudentRequest extends RegisterAccountRequest
      */
     public function rules(): array
     {
-        $school = $this->currentSchool();
-        $emailRule = Rule::unique(User::class, 'email');
-
-        if ($school !== null) {
-            $emailRule->where('school_id', $school->id);
-        }
-
         return [
             ...$this->passwordRules(),
-            'email' => ['required', 'string', 'email', 'max:255', $emailRule],
+            'email' => ['required', 'string', 'email', 'max:255', Rule::unique(User::class, 'email')],
         ];
     }
 }

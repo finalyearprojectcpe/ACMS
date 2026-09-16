@@ -41,7 +41,12 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Illuminate\Testing\TestResponse;
 use Inertia\Testing\AssertableInertia as Assert;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
 
 test('student users see the student dashboard shell', function () {
     $this->seed(AcademicStructureSeeder::class);
@@ -3061,13 +3066,31 @@ test('result import stores regular and carried courses in one semester sheet', f
     ]));
 
     $export->assertOk()
-        ->assertDownload('statement-of-results-2023000001.csv');
+        ->assertDownload('statement-of-results-2023000001-'.now()->format('Y-m-d').'.xlsx');
 
-    expect($export->streamedContent())
-        ->toContain('Statement of Results')
-        ->toContain('2023000001')
-        ->toContain('CPE 301')
-        ->toContain('Computer Architecture');
+    $statement = spreadsheetFromResponse($export);
+    $statementSheet = $statement->getSheetByName('Statement');
+
+    expect($statementSheet)->not->toBeNull()
+        ->and($statementSheet->getCell('A2')->getValue())->toBe('Statement of Results')
+        ->and($statementSheet->getCell('E5')->getValue())->toBe('2023000001')
+        ->and($statementSheet->getCell('E5')->getDataType())->toBe(DataType::TYPE_STRING)
+        ->and($statementSheet->getCell('A11')->getValue())->toContain('300L Harmattan Semester')
+        ->and($statementSheet->getCell('A13')->getValue())->toBe('CPE 301')
+        ->and($statementSheet->getCell('B13')->getValue())->toBe('Computer Architecture');
+
+    $resultExport = $this->actingAs($staffUser)->get(route('dashboard.results.export', $updated));
+    $resultExport->assertOk()->assertDownload();
+    $resultWorkbook = spreadsheetFromResponse($resultExport);
+    $resultSheet = $resultWorkbook->getSheetByName('Result Sheet');
+
+    expect($resultSheet)->not->toBeNull()
+        ->and($resultSheet->getCell('A2')->getValue())->toBe('300L Harmattan Semester Results')
+        ->and($resultSheet->getCell('D9')->getValue())->toBe('CPE 301')
+        ->and($resultSheet->getCell('E9')->getValue())->toBe('CPE 204')
+        ->and($resultSheet->getComment('E9')->getText()->getPlainText())->toContain('Signals and Systems')
+        ->and($resultSheet->getStyle('E9')->getFill()->getStartColor()->getRGB())->toBe('FDECEC')
+        ->and($resultSheet->getCell('C11')->getDataType())->toBe(DataType::TYPE_STRING);
 });
 
 test('department heads can view student profiles in their department', function () {
@@ -3125,6 +3148,23 @@ test('department heads can view student profiles in their department', function 
         'registrationNumber' => $outsideProfile->registration_number,
     ]))
         ->assertNotFound();
+
+    $classlistExport = $this->actingAs($hodUser)->get(route('dashboard.students.classlist', [
+        'query' => 'Ada',
+        'set' => '2023/2024',
+    ]));
+    $classlistExport->assertOk()->assertDownload();
+    $classlist = spreadsheetFromResponse($classlistExport);
+    $classlistSheet = $classlist->getSheetByName('Classlist');
+
+    expect($classlistSheet)->not->toBeNull()
+        ->and($classlistSheet->getCell('A2')->getValue())->toBe($department->abbreviation.' Student Classlist')
+        ->and($classlistSheet->getCell('B11')->getValue())->toBe('Ada Nwosu')
+        ->and($classlistSheet->getCell('B11')->getDataType())->toBe(DataType::TYPE_STRING)
+        ->and($classlistSheet->getCell('C11')->getValue())->toBe('2023001001')
+        ->and($classlistSheet->getCell('C11')->getDataType())->toBe(DataType::TYPE_STRING)
+        ->and($classlistSheet->getCell('D11')->getValue())->toBe('ada.nwosu@example.com')
+        ->and($classlistSheet->getCell('E10')->getValue())->toBeNull();
 });
 
 test('dashboard section routes render placeholders for allowed roles', function () {
@@ -3318,10 +3358,34 @@ test('course advisers manage the full due lifecycle and can update pending amoun
 
     $export = $this->actingAs($staffUser)->get(route('dashboard.dues.export', $due));
 
-    $export->assertOk()->assertDownload('due-payments-departmental-dues-300-level.csv');
-    expect($export->streamedContent())
-        ->toContain('Registration Number')
-        ->toContain($studentProfile->registration_number);
+    $export->assertOk()->assertDownload(
+        Str::lower($department->abbreviation).'-departmental-dues-300-level-payments-'.now()->format('Y-m-d').'.xlsx',
+    );
+    $payments = spreadsheetFromResponse($export);
+    $paymentsSheet = $payments->getSheetByName('Payments');
+
+    expect($paymentsSheet)->not->toBeNull()
+        ->and($paymentsSheet->getCell('A2')->getValue())->toBe('Departmental Dues 300 Level Payments')
+        ->and($paymentsSheet->getCell('C10')->getValue())->toBe($studentProfile->registration_number)
+        ->and($paymentsSheet->getCell('C10')->getDataType())->toBe(DataType::TYPE_STRING)
+        ->and($paymentsSheet->getCell('D10')->getValue())->toBe('Pending')
+        ->and($paymentsSheet->getCell('E10')->getValue())->toBe(16000)
+        ->and($paymentsSheet->getCell('F10')->getValue())->toBeNull();
+
+    $payment = markTestDuePaid($assignment);
+    $due->forceFill(['amount_kobo' => 1700000])->save();
+
+    $paidExport = $this->actingAs($staffUser)->get(route('dashboard.dues.export', $due));
+    $paidPayments = spreadsheetFromResponse($paidExport);
+    $paidPaymentsSheet = $paidPayments->getSheetByName('Payments');
+
+    expect($paidPaymentsSheet)->not->toBeNull()
+        ->and($paidPaymentsSheet->getCell('H7')->getValue())->toBe(17000)
+        ->and($paidPaymentsSheet->getCell('D10')->getValue())->toBe('Paid')
+        ->and($paidPaymentsSheet->getCell('E10')->getValue())->toBe(16000)
+        ->and($paidPaymentsSheet->getCell('F10')->getValue())->toBe(16000)
+        ->and($paidPaymentsSheet->getCell('H10')->getValue())->toBe($payment->receipt_number)
+        ->and($paidPaymentsSheet->getCell('I10')->getValue())->toBe($payment->reference);
 
     $this->actingAs($staffUser)
         ->post(route('dashboard.students.store'), [
@@ -3389,6 +3453,23 @@ test('Paystack refund webhooks reverse successful payments and reopen the due', 
 
     Queue::assertPushed(GenerateDuePaymentReceipt::class);
 });
+
+function spreadsheetFromResponse(TestResponse $response): Spreadsheet
+{
+    $path = tempnam(sys_get_temp_dir(), 'grademanager-xlsx-');
+
+    if ($path === false) {
+        throw new RuntimeException('A temporary spreadsheet file could not be created.');
+    }
+
+    file_put_contents($path, $response->streamedContent());
+
+    try {
+        return IOFactory::load($path);
+    } finally {
+        @unlink($path);
+    }
+}
 
 function createTestDue(
     Department $department,

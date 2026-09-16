@@ -6,32 +6,30 @@ use App\Models\AcademicSession;
 use App\Models\AcademicSessionSemester;
 use App\Models\AcademicYear;
 use App\Models\AcademicYearSemester;
-use App\Models\Department;
-use App\Models\School;
+use App\Models\AdvisorProfile;
 use App\Models\Semester;
 use App\Models\StudentProfile;
+use App\Models\StudentSet;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 
 class AcademicContextService
 {
-    public function currentSession(School $school, ?CarbonInterface $at = null): ?AcademicSession
+    public function currentSession(AdvisorProfile $advisorProfile, ?CarbonInterface $at = null): ?AcademicSession
     {
-        $date = $this->localDate($school, $at);
+        $date = $this->localDate($advisorProfile, $at);
 
-        return $school->academicSessions()
+        return $advisorProfile->academicSessions()
             ->whereDate('starts_on', '<=', $date)
             ->whereDate('ends_on', '>=', $date)
             ->latest('starts_on')
             ->first();
     }
 
-    public function currentSemesterInstance(
-        AcademicSession $academicSession,
-        ?CarbonInterface $at = null,
-    ): ?AcademicSessionSemester {
-        $academicSession->loadMissing('school');
-        $date = $this->localDate($academicSession->school, $at);
+    public function currentSemesterInstance(AcademicSession $academicSession, ?CarbonInterface $at = null): ?AcademicSessionSemester
+    {
+        $academicSession->loadMissing('advisorProfile');
+        $date = $this->localDate($academicSession->advisorProfile, $at);
 
         return $academicSession->semesterInstances()
             ->with('semester')
@@ -42,22 +40,12 @@ class AcademicContextService
 
     public function currentAcademicYearSemester(StudentProfile $studentProfile): ?AcademicYearSemester
     {
-        $studentProfile->loadMissing(['department.faculty.school', 'entryAcademicSession']);
-        $department = $studentProfile->department;
-        $school = $department?->faculty?->school;
-
-        if (! $department instanceof Department || ! $school instanceof School) {
-            return null;
-        }
-
-        $academicSession = $this->currentSession($school);
-
-        if (! $academicSession instanceof AcademicSession) {
-            return null;
-        }
-
-        $academicYear = $this->academicYearForSet($department, $studentProfile->entryAcademicSession, $academicSession);
-        $semester = $this->currentSemesterInstance($academicSession)?->semester;
+        $studentProfile->loadMissing(['advisorProfile', 'studentSet.entryAcademicSession']);
+        $academicSession = $this->currentSession($studentProfile->advisorProfile);
+        $academicYear = $this->academicYearForSet($studentProfile->studentSet, $academicSession);
+        $semester = $academicSession instanceof AcademicSession
+            ? $this->currentSemesterInstance($academicSession)?->semester
+            : null;
 
         if (! $academicYear instanceof AcademicYear || ! $semester instanceof Semester) {
             return null;
@@ -69,38 +57,21 @@ class AcademicContextService
             ->first();
     }
 
-    public function academicYearForSet(
-        Department $department,
-        ?AcademicSession $entryAcademicSession,
-        ?AcademicSession $targetAcademicSession = null,
-    ): ?AcademicYear {
-        if (! $entryAcademicSession instanceof AcademicSession) {
-            return null;
-        }
-
-        $department->loadMissing('faculty.school');
-        $school = $department->faculty?->school;
-
-        if (! $school instanceof School) {
-            return null;
-        }
-
-        $targetAcademicSession ??= $this->currentSession($school);
+    public function academicYearForSet(StudentSet $studentSet, ?AcademicSession $targetAcademicSession = null): ?AcademicYear
+    {
+        $studentSet->loadMissing(['advisorProfile', 'entryAcademicSession']);
+        $targetAcademicSession ??= $this->currentSession($studentSet->advisorProfile);
 
         if (! $targetAcademicSession instanceof AcademicSession) {
             return null;
         }
 
-        $sessions = $school->academicSessions()
+        $sessions = $studentSet->advisorProfile->academicSessions()
             ->oldest('starts_on')
             ->get(['id'])
             ->values();
-        $entryIndex = $sessions->search(
-            fn (AcademicSession $academicSession): bool => $academicSession->is($entryAcademicSession),
-        );
-        $targetIndex = $sessions->search(
-            fn (AcademicSession $academicSession): bool => $academicSession->is($targetAcademicSession),
-        );
+        $entryIndex = $sessions->search(fn (AcademicSession $session): bool => $session->is($studentSet->entryAcademicSession));
+        $targetIndex = $sessions->search(fn (AcademicSession $session): bool => $session->is($targetAcademicSession));
 
         if ($entryIndex === false || $targetIndex === false || $targetIndex < $entryIndex) {
             return null;
@@ -108,59 +79,27 @@ class AcademicContextService
 
         $yearNumber = (int) $targetIndex - (int) $entryIndex + 1;
 
-        if ($yearNumber > (int) $department->minimum_years_to_degree) {
+        if ($yearNumber > $studentSet->minimum_years_to_degree) {
             return null;
         }
 
-        return AcademicYear::query()
-            ->where('year_number', $yearNumber)
-            ->first();
+        return AcademicYear::query()->where('year_number', $yearNumber)->first();
     }
 
-    public function academicYearForStudent(
-        StudentProfile $studentProfile,
-        ?AcademicSession $targetAcademicSession = null,
-    ): ?AcademicYear {
-        $studentProfile->loadMissing(['department', 'entryAcademicSession', 'currentAcademicYear']);
+    public function academicYearForStudent(StudentProfile $studentProfile, ?AcademicSession $targetAcademicSession = null): ?AcademicYear
+    {
+        $studentProfile->loadMissing(['studentSet.entryAcademicSession', 'currentAcademicYear']);
 
-        if (! $studentProfile->department instanceof Department) {
-            return null;
-        }
-
-        if ($studentProfile->entryAcademicSession instanceof AcademicSession) {
-            return $this->academicYearForSet(
-                $studentProfile->department,
-                $studentProfile->entryAcademicSession,
-                $targetAcademicSession,
-            );
-        }
-
-        return $targetAcademicSession === null ? $studentProfile->currentAcademicYear : null;
+        return $studentProfile->studentSet instanceof StudentSet
+            ? $this->academicYearForSet($studentProfile->studentSet, $targetAcademicSession)
+            : ($targetAcademicSession === null ? $studentProfile->currentAcademicYear : null);
     }
 
-    public function sessionForSetYear(
-        Department $department,
-        ?AcademicSession $entryAcademicSession,
-        AcademicYear $academicYear,
-    ): ?AcademicSession {
-        if (! $entryAcademicSession instanceof AcademicSession) {
-            return null;
-        }
-
-        $department->loadMissing('faculty.school');
-        $school = $department->faculty?->school;
-
-        if (! $school instanceof School) {
-            return null;
-        }
-
-        $sessions = $school->academicSessions()
-            ->oldest('starts_on')
-            ->get()
-            ->values();
-        $entryIndex = $sessions->search(
-            fn (AcademicSession $academicSession): bool => $academicSession->is($entryAcademicSession),
-        );
+    public function sessionForSetYear(StudentSet $studentSet, AcademicYear $academicYear): ?AcademicSession
+    {
+        $studentSet->loadMissing(['advisorProfile', 'entryAcademicSession']);
+        $sessions = $studentSet->advisorProfile->academicSessions()->oldest('starts_on')->get()->values();
+        $entryIndex = $sessions->search(fn (AcademicSession $session): bool => $session->is($studentSet->entryAcademicSession));
 
         if ($entryIndex === false) {
             return null;
@@ -171,32 +110,16 @@ class AcademicContextService
         return $target instanceof AcademicSession ? $target : null;
     }
 
-    public function setHasGraduated(Department $department, ?AcademicSession $entryAcademicSession): bool
+    public function setHasGraduated(StudentSet $studentSet): bool
     {
-        if (! $entryAcademicSession instanceof AcademicSession) {
-            return false;
-        }
-
-        $department->loadMissing('faculty.school');
-        $school = $department->faculty?->school;
-        $currentSession = $school instanceof School ? $this->currentSession($school) : null;
-
-        if (! $currentSession instanceof AcademicSession) {
-            return false;
-        }
-
-        $sessions = $school->academicSessions()->oldest('starts_on')->pluck('id')->values();
-        $entryIndex = $sessions->search($entryAcademicSession->id);
-        $currentIndex = $sessions->search($currentSession->id);
-
-        return $entryIndex !== false
-            && $currentIndex !== false
-            && ((int) $currentIndex - (int) $entryIndex + 1) > (int) $department->minimum_years_to_degree;
+        return $this->academicYearForSet($studentSet) === null
+            && $this->currentSession($studentSet->advisorProfile) instanceof AcademicSession
+            && $studentSet->entryAcademicSession->starts_on->isBefore($this->currentSession($studentSet->advisorProfile)->starts_on);
     }
 
-    private function localDate(School $school, ?CarbonInterface $at): string
+    private function localDate(AdvisorProfile $advisorProfile, ?CarbonInterface $at): string
     {
-        $timezone = $school->timezone ?: config('app.timezone');
+        $timezone = $advisorProfile->timezone ?: config('app.timezone');
         $dateTime = $at instanceof CarbonInterface
             ? CarbonImmutable::instance($at)->setTimezone($timezone)
             : CarbonImmutable::now($timezone);

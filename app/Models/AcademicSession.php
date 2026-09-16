@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['school_id', 'name', 'starts_on', 'ends_on'])]
+#[Fillable(['advisor_profile_id', 'name', 'starts_on', 'ends_on'])]
 class AcademicSession extends Model
 {
     /** @use HasFactory<AcademicSessionFactory> */
@@ -27,11 +27,11 @@ class AcademicSession extends Model
     }
 
     /**
-     * @return BelongsTo<School, $this>
+     * @return BelongsTo<AdvisorProfile, $this>
      */
-    public function school(): BelongsTo
+    public function advisorProfile(): BelongsTo
     {
-        return $this->belongsTo(School::class);
+        return $this->belongsTo(AdvisorProfile::class);
     }
 
     /**

@@ -11,18 +11,18 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Stores school-level academic sessions so course offerings are scoped by session.
+        // Stores the dated academic sessions managed by one course adviser.
         Schema::create('academic_sessions', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('advisor_profile_id')->constrained()->cascadeOnDelete();
             $table->string('name');
             $table->date('starts_on');
             $table->date('ends_on');
             $table->timestamps();
 
-            $table->unique(['school_id', 'name']);
-            $table->unique(['school_id', 'starts_on', 'ends_on'], 'academic_sessions_school_dates_unique');
-            $table->index(['school_id', 'starts_on', 'ends_on']);
+            $table->unique(['advisor_profile_id', 'name']);
+            $table->unique(['advisor_profile_id', 'starts_on', 'ends_on'], 'academic_sessions_advisor_dates_unique');
+            $table->index(['advisor_profile_id', 'starts_on', 'ends_on']);
         });
 
     }

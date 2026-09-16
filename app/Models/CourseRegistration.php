@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['school_id', 'department_id', 'student_profile_id', 'academic_session_id', 'academic_year_semester_id', 'reviewer_staff_profile_id', 'status', 'feedback_note', 'submitted_at', 'reviewed_at'])]
+#[Fillable(['advisor_profile_id', 'student_set_id', 'student_profile_id', 'academic_session_id', 'academic_year_semester_id', 'reviewer_advisor_profile_id', 'status', 'feedback_note', 'submitted_at', 'reviewed_at'])]
 class CourseRegistration extends Model
 {
     public const string StatusDraft = 'draft';
@@ -28,19 +28,19 @@ class CourseRegistration extends Model
     ];
 
     /**
-     * @return BelongsTo<School, $this>
+     * @return BelongsTo<AdvisorProfile, $this>
      */
-    public function school(): BelongsTo
+    public function advisorProfile(): BelongsTo
     {
-        return $this->belongsTo(School::class);
+        return $this->belongsTo(AdvisorProfile::class);
     }
 
     /**
-     * @return BelongsTo<Department, $this>
+     * @return BelongsTo<StudentSet, $this>
      */
-    public function department(): BelongsTo
+    public function studentSet(): BelongsTo
     {
-        return $this->belongsTo(Department::class);
+        return $this->belongsTo(StudentSet::class);
     }
 
     /**
@@ -68,11 +68,11 @@ class CourseRegistration extends Model
     }
 
     /**
-     * @return BelongsTo<StaffProfile, $this>
+     * @return BelongsTo<AdvisorProfile, $this>
      */
-    public function reviewerStaffProfile(): BelongsTo
+    public function reviewerAdvisorProfile(): BelongsTo
     {
-        return $this->belongsTo(StaffProfile::class, 'reviewer_staff_profile_id');
+        return $this->belongsTo(AdvisorProfile::class, 'reviewer_advisor_profile_id');
     }
 
     /**

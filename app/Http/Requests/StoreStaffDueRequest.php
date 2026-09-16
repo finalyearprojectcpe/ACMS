@@ -18,8 +18,8 @@ class StoreStaffDueRequest extends FormRequest
         $user = $this->user();
 
         return $user instanceof User
-            && $user->account_type === AccountType::Staff
-            && $user->staffProfile !== null;
+            && $user->account_type === AccountType::Adviser
+            && $user->advisorProfile !== null;
     }
 
     /**
@@ -30,7 +30,7 @@ class StoreStaffDueRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'entry_academic_session_id' => ['required', 'integer', 'exists:academic_sessions,id'],
+            'student_set_id' => ['required', 'integer', 'exists:student_sets,id'],
             'title' => ['required', 'string', 'max:120'],
             'description' => ['nullable', 'string', 'max:160'],
             'amount_naira' => ['required', 'integer', 'min:100', 'max:1000000'],
@@ -45,7 +45,7 @@ class StoreStaffDueRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'entry_academic_session_id.required' => 'Select the student set that should receive this due.',
+            'student_set_id.required' => 'Select the student set that should receive this due.',
             'amount_naira.required' => 'Enter the amount students should pay.',
             'amount_naira.min' => 'The due amount should be at least NGN 100.',
             'amount_naira.max' => 'The due amount looks too high. Check it and try again.',

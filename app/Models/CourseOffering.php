@@ -9,9 +9,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Illuminate\Database\Eloquent\Relations\MorphTo;
 
-#[Fillable(['owner_type', 'owner_id', 'course_id', 'academic_session_id', 'academic_year_semester_id', 'course_title', 'credit_units', 'category', 'archived_at'])]
+#[Fillable(['student_set_id', 'course_id', 'academic_session_id', 'academic_year_semester_id', 'course_title', 'credit_units', 'category', 'archived_at'])]
 class CourseOffering extends Model
 {
     /** @use HasFactory<CourseOfferingFactory> */
@@ -26,18 +25,14 @@ class CourseOffering extends Model
 
             $offering->course_title ??= $course?->title;
             $offering->credit_units ??= $course?->credit_units;
-            $offering->category ??= $offering->owner_type === Faculty::class
-                ? CourseCategory::Faculty
-                : CourseCategory::Departmental;
+            $offering->category ??= CourseCategory::Departmental;
         });
     }
 
-    /**
-     * @return MorphTo<Model, $this>
-     */
-    public function owner(): MorphTo
+    /** @return BelongsTo<StudentSet, $this> */
+    public function studentSet(): BelongsTo
     {
-        return $this->morphTo();
+        return $this->belongsTo(StudentSet::class);
     }
 
     /**

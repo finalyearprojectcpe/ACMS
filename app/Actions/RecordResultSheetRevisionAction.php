@@ -58,7 +58,7 @@ class RecordResultSheetRevisionAction
     {
         return [
             'status' => $resultSheet->status,
-            'entry_academic_session_id' => $resultSheet->entry_academic_session_id,
+            'student_set_id' => $resultSheet->student_set_id,
             'academic_session_id' => $resultSheet->academic_session_id,
             'academic_year_semester_id' => $resultSheet->academic_year_semester_id,
             'courses' => $resultSheet->courses

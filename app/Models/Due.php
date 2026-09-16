@@ -10,11 +10,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
-    'school_id',
-    'department_id',
-    'entry_academic_session_id',
+    'advisor_profile_id',
+    'student_set_id',
     'academic_session_id',
-    'created_by_staff_profile_id',
     'payment_account_id',
     'title',
     'description',
@@ -37,27 +35,19 @@ class Due extends Model
     public const string StatusArchived = 'archived';
 
     /**
-     * @return BelongsTo<School, $this>
+     * @return BelongsTo<AdvisorProfile, $this>
      */
-    public function school(): BelongsTo
+    public function advisorProfile(): BelongsTo
     {
-        return $this->belongsTo(School::class);
+        return $this->belongsTo(AdvisorProfile::class);
     }
 
     /**
-     * @return BelongsTo<Department, $this>
+     * @return BelongsTo<StudentSet, $this>
      */
-    public function department(): BelongsTo
+    public function studentSet(): BelongsTo
     {
-        return $this->belongsTo(Department::class);
-    }
-
-    /**
-     * @return BelongsTo<AcademicSession, $this>
-     */
-    public function entryAcademicSession(): BelongsTo
-    {
-        return $this->belongsTo(AcademicSession::class, 'entry_academic_session_id');
+        return $this->belongsTo(StudentSet::class);
     }
 
     /**
@@ -66,14 +56,6 @@ class Due extends Model
     public function academicSession(): BelongsTo
     {
         return $this->belongsTo(AcademicSession::class);
-    }
-
-    /**
-     * @return BelongsTo<StaffProfile, $this>
-     */
-    public function createdByStaffProfile(): BelongsTo
-    {
-        return $this->belongsTo(StaffProfile::class, 'created_by_staff_profile_id');
     }
 
     /**

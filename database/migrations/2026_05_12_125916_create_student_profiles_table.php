@@ -11,22 +11,19 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Stores academic identity for student users, including their current year of study.
+        // Stores each student's adviser-owned academic identity and current year of study.
         Schema::create('student_profiles', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained()->cascadeOnDelete();
             $table->foreignId('user_id')->unique()->constrained()->cascadeOnDelete();
-            $table->foreignId('department_id')->constrained()->restrictOnDelete();
+            $table->foreignId('advisor_profile_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('student_set_id')->constrained()->cascadeOnDelete();
             $table->foreignId('current_academic_year_id')->nullable()->constrained('academic_years')->nullOnDelete();
-            $table->foreignId('entry_academic_session_id')->nullable()->constrained('academic_sessions')->nullOnDelete();
             $table->string('registration_number');
             $table->string('status')->default('active');
             $table->timestamps();
 
-            $table->index(['department_id', 'current_academic_year_id']);
-            $table->index(['department_id', 'entry_academic_session_id']);
-            $table->index(['department_id', 'registration_number']);
-            $table->unique(['school_id', 'registration_number']);
+            $table->index(['student_set_id', 'current_academic_year_id']);
+            $table->unique(['advisor_profile_id', 'registration_number']);
         });
     }
 

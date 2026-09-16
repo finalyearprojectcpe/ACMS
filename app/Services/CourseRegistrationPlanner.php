@@ -7,10 +7,9 @@ use App\Models\AcademicYearSemester;
 use App\Models\Course;
 use App\Models\CourseOffering;
 use App\Models\CourseRegistrationItem;
-use App\Models\Department;
-use App\Models\Faculty;
 use App\Models\StudentCourseResult;
 use App\Models\StudentProfile;
+use App\Models\StudentSet;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
@@ -23,59 +22,34 @@ class CourseRegistrationPlanner
         private readonly AcademicPerformanceService $academicPerformance,
     ) {}
 
-    /**
-     * @return array{
-     *     availableCourses: array<int, array<string, mixed>>,
-     *     selectableCourses: array<int, array<string, mixed>>,
-     *     courseGroups: array<int, array{key: string, title: string, detail: string, courses: array<int, array<string, mixed>>}>
-     * }
-     */
-    public function plan(
-        StudentProfile $studentProfile,
-        Department $department,
-        AcademicSession $academicSession,
-        AcademicYearSemester $academicYearSemester,
-    ): array {
-        $studentProfile->loadMissing(['entryAcademicSession', 'currentLevel']);
-        $department->loadMissing('faculty.school');
+    /** @return array{availableCourses: array<int, array<string, mixed>>, selectableCourses: array<int, array<string, mixed>>, courseGroups: array<int, array<string, mixed>>} */
+    public function plan(StudentProfile $studentProfile, AcademicSession $academicSession, AcademicYearSemester $academicYearSemester): array
+    {
+        $studentProfile->loadMissing('studentSet.entryAcademicSession');
+        $studentSet = $studentProfile->studentSet;
         $academicYearSemester->loadMissing(['academicYear', 'semester']);
 
-        $resultHistory = $this->approvedResultHistory($studentProfile);
-        $currentSemesterOfferings = $this->courseOfferingsForDepartmentSemester(
-            $department,
-            $academicSession,
-            $academicYearSemester,
-        );
-        $retakeOfferingsByCourse = $this->courseOfferingsForDepartmentSessionSemester(
-            $department,
-            $academicSession,
-            (int) $academicYearSemester->semester_id,
-        )->keyBy(fn (CourseOffering $offering): int => (int) $offering->course_id);
-        $currentCourseIds = $currentSemesterOfferings
-            ->pluck('course_id')
-            ->map(fn (int $id): int => (int) $id)
-            ->values();
+        $resultHistory = $this->publishedResultHistory($studentProfile);
+        $currentOfferings = $this->offeringsForContext($studentSet, $academicSession, $academicYearSemester);
+        $sameSemesterOfferings = $this->offeringsForSessionSemester($studentSet, $academicSession, (int) $academicYearSemester->semester_id)
+            ->keyBy(fn (CourseOffering $offering): int => (int) $offering->course_id);
+        $currentCourseIds = $currentOfferings->pluck('course_id')->map(fn (int $id): int => $id)->values();
 
-        $currentOptions = $currentSemesterOfferings
-            ->toBase()
-            ->map(fn (CourseOffering $offering): array => $this->courseOptionPayload(
-                $department,
-                $offering,
-                $this->sourceForCurrentOffering($department, $offering, $resultHistory),
-                $this->prerequisiteBlockReasons($offering, $resultHistory),
-                true,
-                null,
-            ));
+        $currentOptions = $currentOfferings->toBase()->map(fn (CourseOffering $offering): array => $this->courseOptionPayload(
+            $offering,
+            $this->sourceForCurrentOffering($offering, $resultHistory),
+            $this->prerequisiteBlockReasons($offering, $resultHistory),
+            true,
+            null,
+        ));
         $previousOptions = $this->previousRequirementOptions(
-            $studentProfile,
-            $department,
+            $studentSet,
             $academicSession,
             $academicYearSemester,
             $resultHistory,
-            $retakeOfferingsByCourse,
+            $sameSemesterOfferings,
             $currentCourseIds,
         );
-
         $availableCourses = $currentOptions
             ->merge($previousOptions)
             ->unique(fn (array $course): string => $this->optionKey($course['source'], $course['courseOfferingId']))
@@ -84,333 +58,196 @@ class CourseRegistrationPlanner
 
         return [
             'availableCourses' => $availableCourses->all(),
-            'selectableCourses' => $availableCourses
-                ->filter(fn (array $course): bool => (bool) $course['selectable'])
-                ->values()
-                ->all(),
+            'selectableCourses' => $availableCourses->where('selectable', true)->values()->all(),
             'courseGroups' => $this->courseGroups($availableCourses),
         ];
     }
 
-    /**
-     * @param  array<int, array{course_offering_id: int, source: string}>  $items
+    /** @param array<int, array{course_offering_id: int, source: string}> $items
      * @return array<int, array<string, mixed>>
      */
     public function selectedOptionsFromPayload(array $plan, array $items, bool $isSubmit): array
     {
-        $optionsByKey = collect($plan['availableCourses'] ?? [])
-            ->keyBy(fn (array $course): string => $this->optionKey($course['source'], $course['courseOfferingId']));
-        $selected = collect($items)
-            ->map(function (array $item) use ($optionsByKey): array {
-                $key = $this->optionKey((string) $item['source'], (int) $item['course_offering_id']);
-                $course = $optionsByKey->get($key);
+        $options = collect($plan['availableCourses'] ?? [])->keyBy(
+            fn (array $course): string => $this->optionKey($course['source'], $course['courseOfferingId']),
+        );
+        $selected = collect($items)->map(function (array $item) use ($options): array {
+            $course = $options->get($this->optionKey((string) $item['source'], (int) $item['course_offering_id']));
 
-                if (! is_array($course)) {
-                    throw ValidationException::withMessages([
-                        'items' => 'One of the selected courses is no longer available for this registration.',
-                    ]);
-                }
+            if (! is_array($course) || ! $course['selectable']) {
+                throw ValidationException::withMessages(['items' => 'One selected course is no longer available for this registration.']);
+            }
 
-                if (! (bool) $course['selectable']) {
-                    throw ValidationException::withMessages([
-                        'items' => "{$course['code']} is not offered for registration this semester.",
-                    ]);
-                }
+            return $course;
+        })->values();
 
-                return $course;
-            })
-            ->values();
-
-        $duplicateCode = $selected
-            ->pluck('code')
-            ->duplicates()
-            ->first();
+        $duplicateCode = $selected->pluck('code')->duplicates()->first();
 
         if (is_string($duplicateCode) && $duplicateCode !== '') {
-            throw ValidationException::withMessages([
-                'items' => "{$duplicateCode} appears more than once. Keep one entry for that course.",
-            ]);
+            throw ValidationException::withMessages(['items' => "{$duplicateCode} appears more than once. Keep one entry for that course."]);
         }
 
         if ($isSubmit) {
-            $blockReasons = $selected
-                ->flatMap(fn (array $course): array => collect($course['blockReasons'])
-                    ->map(fn (string $reason): string => "{$course['code']}: {$reason}")
-                    ->all())
-                ->values();
+            $reasons = $selected->flatMap(fn (array $course): array => collect($course['blockReasons'])
+                ->map(fn (string $reason): string => "{$course['code']}: {$reason}")
+                ->all());
 
-            if ($blockReasons->isNotEmpty()) {
-                throw ValidationException::withMessages([
-                    'items' => $blockReasons->take(3)->implode(' '),
-                ]);
+            if ($reasons->isNotEmpty()) {
+                throw ValidationException::withMessages(['items' => $reasons->take(3)->implode(' ')]);
             }
         }
 
         return $selected->all();
     }
 
-    /**
-     * @param  Collection<int, array<string, mixed>>  $availableCourses
-     */
+    /** @param Collection<int, array<string, mixed>> $availableCourses */
     private function courseGroups(Collection $availableCourses): array
     {
         return collect([
-            [
-                'key' => CourseRegistrationItem::SourceCurrentSet,
-                'title' => 'Current Set Courses',
-                'detail' => 'Courses normally offered to your set in this semester.',
-            ],
-            [
-                'key' => CourseRegistrationItem::SourceElective,
-                'title' => 'Elective Courses',
-                'detail' => 'Elective courses available for this semester.',
-            ],
-            [
-                'key' => CourseRegistrationItem::SourceCarryover,
-                'title' => 'Carryover Courses',
-                'detail' => 'Courses where your latest approved grade is F.',
-            ],
-            [
-                'key' => CourseRegistrationItem::SourceOutstandingRequirement,
-                'title' => 'Outstanding Previous Requirements',
-                'detail' => 'Required previous courses that still need to be satisfied.',
-            ],
-        ])->map(function (array $group) use ($availableCourses): array {
-            return [
-                ...$group,
-                'courses' => $availableCourses
-                    ->where('source', $group['key'])
-                    ->values()
-                    ->all(),
-            ];
-        })->filter(fn (array $group): bool => $group['courses'] !== [])
-            ->values()
-            ->all();
+            [CourseRegistrationItem::SourceCurrentSet, 'Current Set Courses', 'Courses offered to your set in this semester.'],
+            [CourseRegistrationItem::SourceElective, 'Elective Courses', 'Elective courses available in this semester.'],
+            [CourseRegistrationItem::SourceCarryover, 'Carryover Courses', 'Courses where your latest published grade is F.'],
+            [CourseRegistrationItem::SourceOutstandingRequirement, 'Outstanding Requirements', 'Previous required courses you have not completed.'],
+        ])->map(fn (array $group): array => [
+            'key' => $group[0],
+            'title' => $group[1],
+            'detail' => $group[2],
+            'courses' => $availableCourses->where('source', $group[0])->values()->all(),
+        ])->filter(fn (array $group): bool => $group['courses'] !== [])->values()->all();
     }
 
-    /**
-     * @param  Collection<int, array{grade: string, course: Course, context: string}>  $resultHistory
-     * @param  Collection<int, CourseOffering>  $retakeOfferingsByCourse
-     * @param  Collection<int, int>  $currentCourseIds
+    /** @param Collection<int, array{grade: string, course: Course, context: string}> $resultHistory
+     * @param Collection<int, CourseOffering> $sameSemesterOfferings
+     * @param Collection<int, int> $currentCourseIds
      * @return Collection<int, array<string, mixed>>
      */
-    private function previousRequirementOptions(
-        StudentProfile $studentProfile,
-        Department $department,
-        AcademicSession $academicSession,
-        AcademicYearSemester $academicYearSemester,
-        Collection $resultHistory,
-        Collection $retakeOfferingsByCourse,
-        Collection $currentCourseIds,
-    ): Collection {
-        $entryAcademicSession = $studentProfile->entryAcademicSession;
-
-        if (! $entryAcademicSession instanceof AcademicSession) {
-            return collect();
-        }
-
-        return $this->previousCourseOfferingsForStudentSet($department, $entryAcademicSession, $academicYearSemester)
+    private function previousRequirementOptions(StudentSet $studentSet, AcademicSession $academicSession, AcademicYearSemester $currentSlot, Collection $resultHistory, Collection $sameSemesterOfferings, Collection $currentCourseIds): Collection
+    {
+        return $this->previousOfferings($studentSet, $currentSlot)
             ->toBase()
             ->filter(fn (CourseOffering $offering): bool => ! $currentCourseIds->contains((int) $offering->course_id))
             ->keyBy(fn (CourseOffering $offering): int => (int) $offering->course_id)
-            ->map(function (CourseOffering $historicalOffering) use ($academicSession, $retakeOfferingsByCourse, $department, $resultHistory): ?array {
+            ->map(function (CourseOffering $historicalOffering) use ($academicSession, $sameSemesterOfferings, $resultHistory): ?array {
                 $history = $resultHistory->get((int) $historicalOffering->course_id);
-                $category = $this->courseCategoryForOffering($department, $historicalOffering);
-                $source = null;
-
-                if (is_array($history) && $history['grade'] === 'F') {
-                    $source = CourseRegistrationItem::SourceCarryover;
-                } elseif (! is_array($history) && $category !== 'Elective Course') {
-                    $source = CourseRegistrationItem::SourceOutstandingRequirement;
-                }
+                $source = is_array($history) && $history['grade'] === 'F'
+                    ? CourseRegistrationItem::SourceCarryover
+                    : (! is_array($history) && $historicalOffering->category->value !== 'elective'
+                        ? CourseRegistrationItem::SourceOutstandingRequirement
+                        : null);
 
                 if ($source === null) {
                     return null;
                 }
 
-                $registrationOffering = $retakeOfferingsByCourse->get((int) $historicalOffering->course_id);
-                $blockReasons = $registrationOffering instanceof CourseOffering
-                    ? $this->prerequisiteBlockReasons($registrationOffering, $resultHistory)
-                    : ["This course is not offered in {$academicSession->name} Session."];
+                $offering = $sameSemesterOfferings->get((int) $historicalOffering->course_id);
+                $selectable = $offering instanceof CourseOffering;
 
                 return $this->courseOptionPayload(
-                    $department,
-                    $registrationOffering instanceof CourseOffering ? $registrationOffering : $historicalOffering,
+                    $selectable ? $offering : $historicalOffering,
                     $source,
-                    $blockReasons,
-                    $registrationOffering instanceof CourseOffering,
+                    $selectable ? $this->prerequisiteBlockReasons($offering, $resultHistory) : ["This course is not offered in {$academicSession->name} Session."],
+                    $selectable,
                     $this->semesterLabel($historicalOffering),
                 );
-            })
-            ->filter()
-            ->values();
+            })->filter()->values();
     }
 
-    /**
-     * @return EloquentCollection<int, CourseOffering>
-     */
-    private function previousCourseOfferingsForStudentSet(
-        Department $department,
-        AcademicSession $entryAcademicSession,
-        AcademicYearSemester $currentAcademicYearSemester,
-    ): EloquentCollection {
-        $previousAcademicYearSemesters = $this->previousAcademicYearSemesters($currentAcademicYearSemester);
+    /** @return EloquentCollection<int, CourseOffering> */
+    private function previousOfferings(StudentSet $studentSet, AcademicYearSemester $currentSlot): EloquentCollection
+    {
         $offerings = new EloquentCollection;
 
-        foreach ($previousAcademicYearSemesters as $academicYearSemester) {
-            $academicSession = $this->academicContext->sessionForSetYear(
-                $department,
-                $entryAcademicSession,
-                $academicYearSemester->academicYear,
-            );
+        foreach ($this->previousSlots($currentSlot) as $slot) {
+            $session = $this->academicContext->sessionForSetYear($studentSet, $slot->academicYear);
 
-            if (! $academicSession instanceof AcademicSession) {
-                continue;
+            if ($session instanceof AcademicSession) {
+                $offerings = $offerings->merge($this->offeringsForContext($studentSet, $session, $slot));
             }
-
-            $offerings = $offerings->merge($this->courseOfferingsForDepartmentSemester($department, $academicSession, $academicYearSemester));
         }
 
-        return $offerings
-            ->sortBy(fn (CourseOffering $offering): string => sprintf(
-                '%02d-%02d-%s',
-                $offering->academicYearSemester->academicYear->year_number,
-                $offering->academicYearSemester->semester->sort_order,
-                $offering->course->code,
-            ))
-            ->values();
+        return $offerings->sortBy(fn (CourseOffering $offering): string => sprintf(
+            '%02d-%02d-%s',
+            $offering->academicYearSemester->academicYear->year_number,
+            $offering->academicYearSemester->semester->sort_order,
+            $offering->course->code,
+        ))->values();
     }
 
-    /**
-     * @return EloquentCollection<int, AcademicYearSemester>
-     */
-    private function previousAcademicYearSemesters(AcademicYearSemester $currentAcademicYearSemester): EloquentCollection
+    /** @return EloquentCollection<int, AcademicYearSemester> */
+    private function previousSlots(AcademicYearSemester $currentSlot): EloquentCollection
     {
-        $currentAcademicYearSemester->loadMissing(['academicYear', 'semester']);
+        $currentSlot->loadMissing(['academicYear', 'semester']);
 
-        return AcademicYearSemester::query()
-            ->with(['academicYear', 'semester'])
-            ->get()
-            ->filter(fn (AcademicYearSemester $academicYearSemester): bool => (int) $academicYearSemester->academicYear->year_number < (int) $currentAcademicYearSemester->academicYear->year_number
-                || (
-                    (int) $academicYearSemester->academicYear->year_number === (int) $currentAcademicYearSemester->academicYear->year_number
-                    && (int) $academicYearSemester->semester->sort_order < (int) $currentAcademicYearSemester->semester->sort_order
-                ))
-            ->sortBy(fn (AcademicYearSemester $academicYearSemester): string => sprintf(
-                '%02d-%02d',
-                $academicYearSemester->academicYear->year_number,
-                $academicYearSemester->semester->sort_order,
-            ))
+        return AcademicYearSemester::query()->with(['academicYear', 'semester'])->get()
+            ->filter(fn (AcademicYearSemester $slot): bool => $slot->academicYear->year_number < $currentSlot->academicYear->year_number
+                || ($slot->academicYear->year_number === $currentSlot->academicYear->year_number && $slot->semester->sort_order < $currentSlot->semester->sort_order))
+            ->sortBy(fn (AcademicYearSemester $slot): string => sprintf('%02d-%02d', $slot->academicYear->year_number, $slot->semester->sort_order))
             ->values();
     }
 
-    /**
-     * @return EloquentCollection<int, CourseOffering>
-     */
-    private function courseOfferingsForDepartmentSemester(
-        Department $department,
-        AcademicSession $academicSession,
-        AcademicYearSemester $academicYearSemester,
-    ): EloquentCollection {
-        $query = CourseOffering::query()
+    /** @return EloquentCollection<int, CourseOffering> */
+    private function offeringsForContext(StudentSet $studentSet, AcademicSession $session, AcademicYearSemester $slot): EloquentCollection
+    {
+        return CourseOffering::query()
             ->with(['course', 'prerequisiteCourses', 'academicYearSemester.academicYear', 'academicYearSemester.semester'])
-            ->where('academic_session_id', $academicSession->id)
-            ->where('academic_year_semester_id', $academicYearSemester->id)
-            ->whereNull('archived_at');
-
-        $this->whereOfferingOwner($query, $department);
-
-        return $query
+            ->whereBelongsTo($studentSet)
+            ->whereBelongsTo($session, 'academicSession')
+            ->whereBelongsTo($slot, 'academicYearSemester')
+            ->whereNull('archived_at')
             ->get()
             ->sortBy(fn (CourseOffering $offering): string => $offering->course->code)
             ->values();
     }
 
-    /**
-     * @return EloquentCollection<int, CourseOffering>
-     */
-    private function courseOfferingsForDepartmentSessionSemester(
-        Department $department,
-        AcademicSession $academicSession,
-        int $semesterId,
-    ): EloquentCollection {
-        $query = CourseOffering::query()
+    /** @return EloquentCollection<int, CourseOffering> */
+    private function offeringsForSessionSemester(StudentSet $studentSet, AcademicSession $session, int $semesterId): EloquentCollection
+    {
+        return CourseOffering::query()
             ->with(['course', 'prerequisiteCourses', 'academicYearSemester.academicYear', 'academicYearSemester.semester'])
-            ->where('academic_session_id', $academicSession->id)
-            ->whereHas(
-                'academicYearSemester',
-                fn (Builder $query): Builder => $query->where('semester_id', $semesterId),
-            )
-            ->whereNull('archived_at');
-
-        $this->whereOfferingOwner($query, $department);
-
-        return $query
+            ->whereBelongsTo($studentSet)
+            ->whereBelongsTo($session, 'academicSession')
+            ->whereHas('academicYearSemester', fn (Builder $query): Builder => $query->where('semester_id', $semesterId))
+            ->whereNull('archived_at')
             ->get()
-            ->sortBy(fn (CourseOffering $offering): string => sprintf(
-                '%02d-%s',
-                $offering->academicYearSemester->academicYear->year_number,
-                $offering->course->code,
-            ))
+            ->sortBy(fn (CourseOffering $offering): string => sprintf('%02d-%s', $offering->academicYearSemester->academicYear->year_number, $offering->course->code))
             ->values();
     }
 
-    /**
-     * @return Collection<int, array{grade: string, course: Course, context: string}>
-     */
-    private function approvedResultHistory(StudentProfile $studentProfile): Collection
+    /** @return Collection<int, array{grade: string, course: Course, context: string}> */
+    private function publishedResultHistory(StudentProfile $studentProfile): Collection
     {
-        return $this->academicPerformance
-            ->latestApprovedCourseAttempts($studentProfile)
-            ->mapWithKeys(function (StudentCourseResult $courseResult): array {
-                $sheetCourse = $courseResult->resultSheetCourse;
-                $course = $sheetCourse->courseOffering?->course;
+        return $this->academicPerformance->latestPublishedCourseAttempts($studentProfile)
+            ->mapWithKeys(function (StudentCourseResult $result): array {
+                $course = $result->resultSheetCourse->courseOffering?->course;
 
-                if (! $course instanceof Course) {
-                    return [];
-                }
-
-                return [
-                    (int) $course->id => [
-                        'grade' => strtoupper($courseResult->grade),
-                        'course' => $course,
-                        'context' => $sheetCourse->course_code,
-                    ],
-                ];
+                return $course instanceof Course ? [(int) $course->id => [
+                    'grade' => strtoupper($result->grade),
+                    'course' => $course,
+                    'context' => $result->resultSheetCourse->course_code,
+                ]] : [];
             });
     }
 
-    /**
-     * @param  Collection<int, array{grade: string, course: Course, context: string}>  $resultHistory
+    /** @param Collection<int, array{grade: string, course: Course, context: string}> $resultHistory
      * @return array<int, string>
      */
     private function prerequisiteBlockReasons(CourseOffering $offering, Collection $resultHistory): array
     {
         $offering->loadMissing('prerequisiteCourses');
 
-        return $offering->prerequisiteCourses
-            ->map(function (Course $prerequisite) use ($resultHistory): ?string {
-                $history = $resultHistory->get((int) $prerequisite->id);
+        return $offering->prerequisiteCourses->map(function (Course $course) use ($resultHistory): ?string {
+            $history = $resultHistory->get((int) $course->id);
 
-                if (! is_array($history)) {
-                    return "{$prerequisite->code} has not been passed yet.";
-                }
+            if (! is_array($history)) {
+                return "{$course->code} has not been passed yet.";
+            }
 
-                if ($history['grade'] === 'F') {
-                    return "{$prerequisite->code} was last recorded as F.";
-                }
-
-                return null;
-            })
-            ->filter()
-            ->values()
-            ->all();
+            return $history['grade'] === 'F' ? "{$course->code} was last recorded as F." : null;
+        })->filter()->values()->all();
     }
 
-    /**
-     * @param  Collection<int, array{grade: string, course: Course, context: string}>  $resultHistory
-     */
-    private function sourceForCurrentOffering(Department $department, CourseOffering $offering, Collection $resultHistory): string
+    /** @param Collection<int, array{grade: string, course: Course, context: string}> $resultHistory */
+    private function sourceForCurrentOffering(CourseOffering $offering, Collection $resultHistory): string
     {
         $history = $resultHistory->get((int) $offering->course_id);
 
@@ -418,25 +255,16 @@ class CourseRegistrationPlanner
             return CourseRegistrationItem::SourceCarryover;
         }
 
-        if ($this->courseCategoryForOffering($department, $offering) === 'Elective Course') {
-            return CourseRegistrationItem::SourceElective;
-        }
-
-        return CourseRegistrationItem::SourceCurrentSet;
+        return $offering->category->value === 'elective'
+            ? CourseRegistrationItem::SourceElective
+            : CourseRegistrationItem::SourceCurrentSet;
     }
 
-    /**
-     * @param  array<int, string>  $blockReasons
+    /** @param array<int, string> $blockReasons
      * @return array<string, mixed>
      */
-    private function courseOptionPayload(
-        Department $department,
-        CourseOffering $offering,
-        string $source,
-        array $blockReasons,
-        bool $selectable,
-        ?string $originSemester,
-    ): array {
+    private function courseOptionPayload(CourseOffering $offering, string $source, array $blockReasons, bool $selectable, ?string $originSemester): array
+    {
         $offering->loadMissing(['course', 'academicYearSemester.academicYear', 'academicYearSemester.semester']);
 
         return [
@@ -444,7 +272,7 @@ class CourseRegistrationPlanner
             'code' => $offering->course->code,
             'title' => $offering->course_title,
             'units' => (int) $offering->credit_units,
-            'category' => $this->courseCategoryForOffering($department, $offering),
+            'category' => $offering->category->label(),
             'source' => $source,
             'sourceLabel' => $this->sourceLabel($source),
             'isCarryover' => $source === CourseRegistrationItem::SourceCarryover,
@@ -452,33 +280,6 @@ class CourseRegistrationPlanner
             'blockReasons' => array_values($blockReasons),
             'originSemester' => $originSemester,
         ];
-    }
-
-    private function courseCategoryForOffering(Department $department, CourseOffering $offering): string
-    {
-        return $offering->category->label();
-    }
-
-    private function whereOfferingOwner(Builder $query, Department $department): void
-    {
-        $department->loadMissing('faculty');
-        $faculty = $department->faculty;
-
-        $query->where(function (Builder $query) use ($department, $faculty): void {
-            $query->where(function (Builder $query) use ($department): void {
-                $query
-                    ->where('owner_type', Department::class)
-                    ->where('owner_id', $department->id);
-            });
-
-            if ($faculty instanceof Faculty) {
-                $query->orWhere(function (Builder $query) use ($faculty): void {
-                    $query
-                        ->where('owner_type', Faculty::class)
-                        ->where('owner_id', $faculty->id);
-                });
-            }
-        });
     }
 
     private function sourceLabel(string $source): string
@@ -503,15 +304,13 @@ class CourseRegistrationPlanner
         };
     }
 
-    private function optionKey(string $source, int $courseOfferingId): string
+    private function optionKey(string $source, int $offeringId): string
     {
-        return "{$source}-{$courseOfferingId}";
+        return "{$source}-{$offeringId}";
     }
 
     private function semesterLabel(CourseOffering $offering): string
     {
-        $offering->loadMissing(['academicYearSemester.academicYear', 'academicYearSemester.semester']);
-
         return "{$offering->academicYearSemester->academicYear->name} {$offering->academicYearSemester->semester->name} Semester";
     }
 }

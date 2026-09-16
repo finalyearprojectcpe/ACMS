@@ -1,21 +1,14 @@
 import { studentSetText } from '@/components/student-set-label';
 import type {
     DashboardContext,
-    DashboardDepartment,
-    DashboardFaculty,
+    DashboardProgramme,
     DashboardStudentSetContext,
 } from '@/types';
 
 export function dashboardOrganization(
     dashboard: DashboardContext,
-): DashboardDepartment | DashboardFaculty | null {
-    if (dashboard.role === 'school_admin') {
-        return dashboard.schoolAdmin?.school ?? null;
-    }
-
-    return dashboard.role === 'faculty_head'
-        ? dashboard.faculty
-        : dashboard.department;
+): DashboardProgramme | null {
+    return dashboard.programme;
 }
 
 export function dashboardSidebarRoleLabel(dashboard: DashboardContext): string {
@@ -24,17 +17,13 @@ export function dashboardSidebarRoleLabel(dashboard: DashboardContext): string {
     if (dashboard.role === 'staff') {
         const setLabel = staffSetLabel(
             dashboard.advisedSets,
-            dashboard.department?.minimumYearsToDegree,
+            dashboard.programme?.minimumYearsToDegree,
         );
         const advisorLabel = organization
             ? `${organization.abbreviation} Course Adviser`
             : 'Course Adviser';
 
         return setLabel ? `${setLabel} ${advisorLabel}` : advisorLabel;
-    }
-
-    if (dashboard.role === 'school_admin' && organization !== null) {
-        return `${organization.abbreviation} School Admin`;
     }
 
     if (organization === null) {
@@ -51,10 +40,6 @@ export function dashboardHeaderOrganizationLabel(
 
     if (organization === null) {
         return null;
-    }
-
-    if (['faculty_head', 'school_admin'].includes(dashboard.role)) {
-        return organization.abbreviation;
     }
 
     return organization.name;

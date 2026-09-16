@@ -10,18 +10,18 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['school_id', 'user_id', 'department_id', 'current_academic_year_id', 'entry_academic_session_id', 'registration_number', 'status'])]
+#[Fillable(['user_id', 'advisor_profile_id', 'student_set_id', 'current_academic_year_id', 'registration_number', 'status'])]
 class StudentProfile extends Model
 {
     /** @use HasFactory<StudentProfileFactory> */
     use HasFactory;
 
     /**
-     * @return BelongsTo<School, $this>
+     * @return BelongsTo<AdvisorProfile, $this>
      */
-    public function school(): BelongsTo
+    public function advisorProfile(): BelongsTo
     {
-        return $this->belongsTo(School::class);
+        return $this->belongsTo(AdvisorProfile::class);
     }
 
     /**
@@ -33,11 +33,11 @@ class StudentProfile extends Model
     }
 
     /**
-     * @return BelongsTo<Department, $this>
+     * @return BelongsTo<StudentSet, $this>
      */
-    public function department(): BelongsTo
+    public function studentSet(): BelongsTo
     {
-        return $this->belongsTo(Department::class);
+        return $this->belongsTo(StudentSet::class);
     }
 
     /**
@@ -54,14 +54,6 @@ class StudentProfile extends Model
     public function currentLevel(): BelongsTo
     {
         return $this->currentAcademicYear();
-    }
-
-    /**
-     * @return BelongsTo<AcademicSession, $this>
-     */
-    public function entryAcademicSession(): BelongsTo
-    {
-        return $this->belongsTo(AcademicSession::class, 'entry_academic_session_id');
     }
 
     /**

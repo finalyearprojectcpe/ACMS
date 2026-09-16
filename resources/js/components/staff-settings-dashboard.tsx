@@ -62,17 +62,17 @@ export function StaffSettingsDashboard({
                     <CardContent className="grid gap-4 p-4 text-sm">
                         <div className="flex flex-wrap items-center gap-2">
                             <RoleBadge
-                                role="Staff"
-                                context={settings.department?.abbreviation}
+                                role="Course Adviser"
+                                context={settings.programme.abbreviation}
                             />
                         </div>
                         <SummaryLine
-                            label="Department"
-                            value={settings.department?.name ?? 'Not set'}
+                            label="Programme"
+                            value={settings.programme.name}
                         />
                         <SummaryLine
-                            label="Faculty"
-                            value={settings.faculty?.name ?? 'Not set'}
+                            label="Institution"
+                            value={settings.institution ?? 'Not set'}
                         />
                         <div className="grid gap-2">
                             <span className="text-xs font-medium tracking-normal text-muted-foreground">
