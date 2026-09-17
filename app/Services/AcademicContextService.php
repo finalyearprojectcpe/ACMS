@@ -47,7 +47,7 @@ class AcademicContextService
             ? $this->currentSemesterInstance($academicSession)?->semester
             : null;
 
-        if (! $academicYear instanceof AcademicYear || ! $semester instanceof Semester) {
+        if (! ($academicYear instanceof AcademicYear) || ! ($semester instanceof Semester)) {
             return null;
         }
 
@@ -62,7 +62,7 @@ class AcademicContextService
         $studentSet->loadMissing(['advisorProfile', 'entryAcademicSession']);
         $targetAcademicSession ??= $this->currentSession($studentSet->advisorProfile);
 
-        if (! $targetAcademicSession instanceof AcademicSession) {
+        if (! ($targetAcademicSession instanceof AcademicSession)) {
             return null;
         }
 

@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\EmailDeliveryStatus;
 use App\Jobs\SendEmailDelivery;
-use App\Mail\AccessCodeMail;
 use App\Mail\DuePaymentReceiptMail;
 use App\Mail\GradeManagerMail;
 use App\Mail\PasswordResetMail;
@@ -17,15 +16,6 @@ use Throwable;
 
 class EmailDeliveryService
 {
-    public function sendAccessCode(EmailDelivery $delivery, string $accessCode): EmailDelivery
-    {
-        return $this->queue($delivery, [
-            'template' => 'access_code',
-            'access_code' => $accessCode,
-            'login_url' => route('home'),
-        ]);
-    }
-
     public function sendPasswordResetInvitation(EmailDelivery $delivery, string $resetUrl): EmailDelivery
     {
         return $this->queue($delivery, [
@@ -162,7 +152,6 @@ class EmailDeliveryService
     private function mailableFor(EmailDelivery $delivery): GradeManagerMail
     {
         return match (data_get($delivery->metadata, 'template')) {
-            'access_code' => new AccessCodeMail($delivery),
             'password_reset' => new PasswordResetMail($delivery),
             'due_payment_receipt' => new DuePaymentReceiptMail($delivery),
             default => throw new RuntimeException('The email type is not supported.'),

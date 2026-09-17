@@ -2,7 +2,7 @@ import { useForm } from '@inertiajs/react';
 import { RiSave3Line } from '@remixicon/react';
 import type { FormEvent } from 'react';
 
-import { updateStudentProfile } from '@/actions/App/Http/Controllers/DashboardController';
+import { updateStudentProfile } from '@/actions/App/Http/Controllers/AdviserAccountController';
 import { ProfilePhotoSettingsCard } from '@/components/profile-photo-settings-card';
 import { Button } from '@/components/ui/button';
 import {
@@ -190,12 +190,8 @@ function ProfileSummaryCard({ profile }: { profile: DashboardStudentProfile }) {
                         value={profile.registrationNumber}
                     />
                     <SummaryItem
-                        label="CGPA"
-                        value={profile.cgpa ?? 'Not available'}
-                    />
-                    <SummaryItem
-                        label="Department"
-                        value={departmentLabel(profile.department)}
+                        label="Programme"
+                        value={programmeLabel(profile.programme)}
                     />
                     <SummaryItem
                         label="Current Level"
@@ -205,8 +201,8 @@ function ProfileSummaryCard({ profile }: { profile: DashboardStudentProfile }) {
 
                 <div className="grid gap-4 rounded-md border border-border bg-muted/20 p-4">
                     <SummaryItem
-                        label="Faculty"
-                        value={facultyLabel(profile.faculty)}
+                        label="Institution"
+                        value={profile.institution ?? 'Not provided'}
                     />
                     <SummaryItem
                         label="Course Adviser"
@@ -239,20 +235,8 @@ function SummaryItem({
     );
 }
 
-function facultyLabel(faculty: DashboardStudentProfile['faculty']): string {
-    if (faculty === null) {
-        return 'Unassigned';
-    }
-
-    return `${faculty.name} (${faculty.abbreviation})`;
-}
-
-function departmentLabel(
-    department: DashboardStudentProfile['department'],
+function programmeLabel(
+    programme: DashboardStudentProfile['programme'],
 ): string {
-    if (department === null) {
-        return 'Unassigned';
-    }
-
-    return `${department.name} (${department.abbreviation})`;
+    return `${programme.name} (${programme.abbreviation})`;
 }

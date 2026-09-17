@@ -3,7 +3,7 @@ import { RiSave3Line } from '@remixicon/react';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 
-import { updateProfilePhoto } from '@/actions/App/Http/Controllers/DashboardController';
+import { updateProfilePhoto } from '@/actions/App/Http/Controllers/AdviserAccountController';
 import { ProfilePhotoIdentityContent } from '@/components/profile-photo-identity-content';
 import { Button } from '@/components/ui/button';
 import { Card, CardForm } from '@/components/ui/card';

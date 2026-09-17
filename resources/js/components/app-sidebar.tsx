@@ -4,7 +4,6 @@ import {
     RiBookOpenLine,
     RiCalendarTodoLine,
     RiCashLine,
-    RiGraduationCapLine,
     RiHome5Line,
     RiLogoutBoxRLine,
     RiSettings3Line,
@@ -16,7 +15,6 @@ import type { ComponentProps, ComponentType } from 'react';
 import { destroy as logoutUser } from '@/actions/App/Http/Controllers/Auth/AuthenticatedSessionController';
 import {
     home as dashboardHome,
-    level as dashboardLevel,
     section as dashboardSection,
 } from '@/actions/App/Http/Controllers/DashboardController';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -29,14 +27,11 @@ import {
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
-    SidebarMenuSub,
-    SidebarMenuSubButton,
-    SidebarMenuSubItem,
     SidebarRail,
 } from '@/components/ui/sidebar';
 import { dashboardSidebarRoleLabel } from '@/lib/dashboard-labels';
 import { initialsFor } from '@/lib/person';
-import type { Auth, DashboardContext, DashboardLevel } from '@/types';
+import type { Auth, DashboardContext } from '@/types';
 import type { RouteDefinition } from '@/wayfinder';
 
 type DashboardRoute = RouteDefinition<'get'>;
@@ -44,21 +39,12 @@ type DashboardRoute = RouteDefinition<'get'>;
 type NavItem = {
     title: string;
     section: string;
-    href?: DashboardRoute;
-    icon: ComponentType<{ className?: string }>;
-    items?: NavSubItem[];
-};
-
-type NavSubItem = {
-    title: string;
-    section: string;
     href: DashboardRoute;
-    levelSlug?: string;
+    icon: ComponentType<{ className?: string }>;
 };
 
 type ActiveItem = {
     section: string;
-    levelSlug?: string;
 };
 
 export function AppSidebar({
@@ -104,51 +90,16 @@ export function AppSidebar({
                     <SidebarMenu>
                         {navigation.map((item) => (
                             <SidebarMenuItem key={item.title}>
-                                {item.href && !item.items?.length ? (
-                                    <SidebarMenuButton
-                                        asChild
-                                        tooltip={item.title}
-                                        isActive={isActive(item, dashboard)}
-                                    >
-                                        <Link href={item.href}>
-                                            <item.icon className="size-4" />
-                                            <span>{item.title}</span>
-                                        </Link>
-                                    </SidebarMenuButton>
-                                ) : (
-                                    <SidebarMenuButton
-                                        tooltip={item.title}
-                                        isActive={false}
-                                        className="cursor-default hover:bg-transparent hover:text-sidebar-foreground active:bg-transparent active:text-sidebar-foreground data-open:hover:bg-transparent data-open:hover:text-sidebar-foreground"
-                                    >
-                                        <>
-                                            <item.icon className="size-4" />
-                                            <span>{item.title}</span>
-                                        </>
-                                    </SidebarMenuButton>
-                                )}
-
-                                {item.items?.length ? (
-                                    <SidebarMenuSub>
-                                        {item.items.map((subItem) => (
-                                            <SidebarMenuSubItem
-                                                key={`${subItem.title}-${subItem.levelSlug ?? ''}`}
-                                            >
-                                                <SidebarMenuSubButton
-                                                    asChild
-                                                    isActive={isActive(
-                                                        subItem,
-                                                        dashboard,
-                                                    )}
-                                                >
-                                                    <Link href={subItem.href}>
-                                                        {subItem.title}
-                                                    </Link>
-                                                </SidebarMenuSubButton>
-                                            </SidebarMenuSubItem>
-                                        ))}
-                                    </SidebarMenuSub>
-                                ) : null}
+                                <SidebarMenuButton
+                                    asChild
+                                    tooltip={item.title}
+                                    isActive={isActive(item, dashboard)}
+                                >
+                                    <Link href={item.href}>
+                                        <item.icon className="size-4" />
+                                        <span>{item.title}</span>
+                                    </Link>
+                                </SidebarMenuButton>
                             </SidebarMenuItem>
                         ))}
                     </SidebarMenu>
@@ -205,13 +156,13 @@ export function AppSidebar({
 
 function navigationFor(dashboard: DashboardContext): NavItem[] {
     if (dashboard.role === 'student') {
-        return studentNavigation(dashboard.levels);
+        return studentNavigation();
     }
 
-    return staffNavigation();
+    return adviserNavigation();
 }
 
-function staffNavigation(): NavItem[] {
+function adviserNavigation(): NavItem[] {
     return [
         nav('Home', 'home', dashboardHome(), RiHome5Line),
         nav(
@@ -232,12 +183,6 @@ function staffNavigation(): NavItem[] {
             dashboardSection({ section: 'course-registration' }),
             RiCalendarTodoLine,
         ),
-        nav(
-            'Result Management',
-            'result-management',
-            dashboardSection({ section: 'result-management' }),
-            RiGraduationCapLine,
-        ),
         nav('Dues', 'dues', dashboardSection({ section: 'dues' }), RiCashLine),
         nav(
             'Paystack Settings',
@@ -254,16 +199,9 @@ function staffNavigation(): NavItem[] {
     ];
 }
 
-function studentNavigation(levels: DashboardLevel[]): NavItem[] {
+function studentNavigation(): NavItem[] {
     return [
         nav('Home', 'home', dashboardHome(), RiHome5Line),
-        nav(
-            'Results',
-            'results',
-            undefined,
-            RiGraduationCapLine,
-            levelLinks('results', levels),
-        ),
         nav('Dues', 'dues', dashboardSection({ section: 'dues' }), RiCashLine),
         nav(
             'Course Registration',
@@ -283,36 +221,14 @@ function studentNavigation(levels: DashboardLevel[]): NavItem[] {
 function nav(
     title: string,
     section: string,
-    href: DashboardRoute | undefined,
+    href: DashboardRoute,
     icon: ComponentType<{ className?: string }>,
-    items?: NavSubItem[],
 ): NavItem {
-    return { title, section, href, icon, items };
-}
-
-function levelLinks(
-    section: 'results',
-    levels: DashboardLevel[],
-): NavSubItem[] {
-    return levels.map((level) => ({
-        title: level.title,
-        section,
-        levelSlug: level.slug,
-        href: dashboardLevel({
-            level: level.slug,
-        }),
-    }));
+    return { title, section, href, icon };
 }
 
 function isActive(item: ActiveItem, dashboard: DashboardContext): boolean {
     if (item.section !== dashboard.section) {
-        return false;
-    }
-
-    if (
-        item.levelSlug !== undefined &&
-        item.levelSlug !== dashboard.levelSlug
-    ) {
         return false;
     }
 

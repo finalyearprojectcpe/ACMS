@@ -1,60 +1,49 @@
 {
-  "_AuthenticatedSessionController-CGRluOe3.js": {
-    "file": "assets/AuthenticatedSessionController-CGRluOe3.js",
+  "_AuthenticatedSessionController-DSJXhOC0.js": {
+    "file": "assets/AuthenticatedSessionController-DSJXhOC0.js",
     "name": "AuthenticatedSessionController",
     "imports": [
-      "_field-CZtr8biR.js"
+      "_flash-toasts-BgWPIqOe.js"
     ]
   },
-  "_PasswordResetController-BMnyy4VQ.js": {
-    "file": "assets/PasswordResetController-BMnyy4VQ.js",
+  "_PasswordResetController-CgiV02mb.js": {
+    "file": "assets/PasswordResetController-CgiV02mb.js",
     "name": "PasswordResetController",
     "imports": [
-      "_field-CZtr8biR.js"
+      "_flash-toasts-BgWPIqOe.js"
     ]
   },
-  "_auth-card-GeQnJBwR.js": {
-    "file": "assets/auth-card-GeQnJBwR.js",
+  "_auth-card-Bg9uv3wd.js": {
+    "file": "assets/auth-card-Bg9uv3wd.js",
     "name": "auth-card",
     "imports": [
-      "_jsx-runtime-DCXLslBY.js",
-      "_utils-Bh0vRZ2q.js",
-      "_card-BCoECYlp.js"
+      "_utils-BbUrN999.js",
+      "_card-DkJddVLn.js"
     ]
   },
-  "_card-BCoECYlp.js": {
-    "file": "assets/card-BCoECYlp.js",
+  "_card-DkJddVLn.js": {
+    "file": "assets/card-DkJddVLn.js",
     "name": "card",
     "imports": [
-      "_jsx-runtime-DCXLslBY.js",
-      "_utils-Bh0vRZ2q.js"
+      "_utils-BbUrN999.js"
     ]
   },
-  "_copyable-value-Dr-OzEyi.js": {
-    "file": "assets/copyable-value-Dr-OzEyi.js",
+  "_copyable-value-C7XgMfDt.js": {
+    "file": "assets/copyable-value-C7XgMfDt.js",
     "name": "copyable-value",
     "imports": [
-      "_jsx-runtime-DCXLslBY.js",
+      "_utils-BbUrN999.js",
       "resources/js/app.tsx",
-      "_utils-Bh0vRZ2q.js",
-      "_card-BCoECYlp.js"
+      "_card-DkJddVLn.js"
     ]
   },
-  "_field-CZtr8biR.js": {
-    "file": "assets/field-CZtr8biR.js",
-    "name": "field",
-    "imports": [
-      "_jsx-runtime-DCXLslBY.js",
-      "_utils-Bh0vRZ2q.js",
-      "_card-BCoECYlp.js"
-    ]
-  },
-  "_flash-toasts-C6Kk4Ryv.js": {
-    "file": "assets/flash-toasts-C6Kk4Ryv.js",
+  "_flash-toasts-BgWPIqOe.js": {
+    "file": "assets/flash-toasts-BgWPIqOe.js",
     "name": "flash-toasts",
     "imports": [
-      "_jsx-runtime-DCXLslBY.js",
-      "resources/js/app.tsx"
+      "_utils-BbUrN999.js",
+      "resources/js/app.tsx",
+      "_card-DkJddVLn.js"
     ]
   },
   "_fonts-B4pDHxjI.css": {
@@ -229,41 +218,26 @@
     "file": "assets/inter-600-normal-plRanbMR.woff2",
     "src": "_inter-600-normal-plRanbMR.woff2"
   },
-  "_jsx-runtime-DCXLslBY.js": {
-    "file": "assets/jsx-runtime-DCXLslBY.js",
-    "name": "jsx-runtime"
-  },
-  "_password-input-C9a34tHW.js": {
-    "file": "assets/password-input-C9a34tHW.js",
+  "_password-input-BDWxf-OE.js": {
+    "file": "assets/password-input-BDWxf-OE.js",
     "name": "password-input",
     "imports": [
-      "_jsx-runtime-DCXLslBY.js",
+      "_utils-BbUrN999.js",
       "resources/js/app.tsx",
-      "_utils-Bh0vRZ2q.js",
-      "_field-CZtr8biR.js",
-      "_card-BCoECYlp.js"
+      "_flash-toasts-BgWPIqOe.js",
+      "_card-DkJddVLn.js"
     ]
   },
-  "_routes-lNZ5A21D.js": {
-    "file": "assets/routes-lNZ5A21D.js",
+  "_routes-BaU3EDLV.js": {
+    "file": "assets/routes-BaU3EDLV.js",
     "name": "routes",
     "imports": [
-      "_field-CZtr8biR.js"
+      "_flash-toasts-BgWPIqOe.js"
     ]
   },
-  "_school-nLOJ9afs.js": {
-    "file": "assets/school-nLOJ9afs.js",
-    "name": "school",
-    "imports": [
-      "_jsx-runtime-DCXLslBY.js"
-    ]
-  },
-  "_utils-Bh0vRZ2q.js": {
-    "file": "assets/utils-Bh0vRZ2q.js",
-    "name": "utils",
-    "imports": [
-      "_jsx-runtime-DCXLslBY.js"
-    ]
+  "_utils-BbUrN999.js": {
+    "file": "assets/utils-BbUrN999.js",
+    "name": "utils"
   },
   "node_modules/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-cyrillic-ext-wght-normal.woff2": {
     "file": "assets/jetbrains-mono-cyrillic-ext-wght-normal-EocZY2iu.woff2",
@@ -290,13 +264,13 @@
     "src": "node_modules/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-vietnamese-wght-normal.woff2"
   },
   "node_modules/xlsx/xlsx.mjs": {
-    "file": "assets/xlsx-BnIazKek.js",
+    "file": "assets/xlsx-DbE3yonJ.js",
     "name": "xlsx",
     "src": "node_modules/xlsx/xlsx.mjs",
     "isDynamicEntry": true
   },
   "resources/css/app.css": {
-    "file": "assets/app-7RAvm-H4.css",
+    "file": "assets/app-CSCbeyj9.css",
     "name": "app",
     "names": [
       "app.css"
@@ -313,144 +287,108 @@
     ]
   },
   "resources/js/app.tsx": {
-    "file": "assets/app-DBqrc2T1.js",
+    "file": "assets/app-DxTFPVL1.js",
     "name": "app",
     "src": "resources/js/app.tsx",
     "isEntry": true,
     "imports": [
-      "_jsx-runtime-DCXLslBY.js",
-      "_utils-Bh0vRZ2q.js"
+      "_utils-BbUrN999.js"
     ],
     "dynamicImports": [
       "resources/js/pages/dashboard.tsx",
       "resources/js/pages/forgot-password.tsx",
       "resources/js/pages/login.tsx",
-      "resources/js/pages/ownership-transfer.tsx",
       "resources/js/pages/receipt-verification.tsx",
       "resources/js/pages/reset-password.tsx",
-      "resources/js/pages/signup.tsx",
-      "resources/js/pages/welcome.tsx"
+      "resources/js/pages/signup.tsx"
     ]
   },
   "resources/js/pages/dashboard.tsx": {
-    "file": "assets/dashboard-DTBmX8Rm.js",
+    "file": "assets/dashboard-DGgWDMvt.js",
     "name": "dashboard",
     "src": "resources/js/pages/dashboard.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_jsx-runtime-DCXLslBY.js",
+      "_utils-BbUrN999.js",
       "resources/js/app.tsx",
-      "_utils-Bh0vRZ2q.js",
-      "_field-CZtr8biR.js",
-      "_card-BCoECYlp.js",
-      "_AuthenticatedSessionController-CGRluOe3.js",
-      "_copyable-value-Dr-OzEyi.js",
-      "_flash-toasts-C6Kk4Ryv.js",
-      "_password-input-C9a34tHW.js",
-      "_school-nLOJ9afs.js"
+      "_flash-toasts-BgWPIqOe.js",
+      "_card-DkJddVLn.js",
+      "_AuthenticatedSessionController-DSJXhOC0.js",
+      "_copyable-value-C7XgMfDt.js",
+      "_password-input-BDWxf-OE.js"
     ],
     "dynamicImports": [
       "node_modules/xlsx/xlsx.mjs"
     ]
   },
   "resources/js/pages/forgot-password.tsx": {
-    "file": "assets/forgot-password-DS9gUxzd.js",
+    "file": "assets/forgot-password-Dl0qyInq.js",
     "name": "forgot-password",
     "src": "resources/js/pages/forgot-password.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_jsx-runtime-DCXLslBY.js",
-      "_field-CZtr8biR.js",
-      "_card-BCoECYlp.js",
-      "_PasswordResetController-BMnyy4VQ.js",
-      "_auth-card-GeQnJBwR.js",
-      "_flash-toasts-C6Kk4Ryv.js",
-      "_school-nLOJ9afs.js",
-      "_routes-lNZ5A21D.js"
+      "_utils-BbUrN999.js",
+      "_flash-toasts-BgWPIqOe.js",
+      "_card-DkJddVLn.js",
+      "_PasswordResetController-CgiV02mb.js",
+      "_auth-card-Bg9uv3wd.js",
+      "_routes-BaU3EDLV.js"
     ]
   },
   "resources/js/pages/login.tsx": {
-    "file": "assets/login-D0GRGVNZ.js",
+    "file": "assets/login-BPGpoj7Q.js",
     "name": "login",
     "src": "resources/js/pages/login.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_jsx-runtime-DCXLslBY.js",
-      "_field-CZtr8biR.js",
-      "_card-BCoECYlp.js",
-      "_AuthenticatedSessionController-CGRluOe3.js",
-      "_PasswordResetController-BMnyy4VQ.js",
-      "_auth-card-GeQnJBwR.js",
-      "_flash-toasts-C6Kk4Ryv.js",
-      "_password-input-C9a34tHW.js",
-      "_school-nLOJ9afs.js"
-    ]
-  },
-  "resources/js/pages/ownership-transfer.tsx": {
-    "file": "assets/ownership-transfer-Ba5ksPsU.js",
-    "name": "ownership-transfer",
-    "src": "resources/js/pages/ownership-transfer.tsx",
-    "isDynamicEntry": true,
-    "imports": [
-      "_jsx-runtime-DCXLslBY.js",
-      "_field-CZtr8biR.js",
-      "_card-BCoECYlp.js",
-      "_auth-card-GeQnJBwR.js",
-      "_password-input-C9a34tHW.js",
-      "_routes-lNZ5A21D.js"
+      "_utils-BbUrN999.js",
+      "_flash-toasts-BgWPIqOe.js",
+      "_card-DkJddVLn.js",
+      "_AuthenticatedSessionController-DSJXhOC0.js",
+      "_PasswordResetController-CgiV02mb.js",
+      "_auth-card-Bg9uv3wd.js",
+      "_password-input-BDWxf-OE.js"
     ]
   },
   "resources/js/pages/receipt-verification.tsx": {
-    "file": "assets/receipt-verification-GvW7o3tQ.js",
+    "file": "assets/receipt-verification-DiVctIZ0.js",
     "name": "receipt-verification",
     "src": "resources/js/pages/receipt-verification.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_jsx-runtime-DCXLslBY.js",
+      "_utils-BbUrN999.js",
       "resources/js/app.tsx",
-      "_card-BCoECYlp.js",
-      "_copyable-value-Dr-OzEyi.js"
+      "_card-DkJddVLn.js",
+      "_copyable-value-C7XgMfDt.js"
     ]
   },
   "resources/js/pages/reset-password.tsx": {
-    "file": "assets/reset-password-B2XH_r6C.js",
+    "file": "assets/reset-password-QV6cJwe5.js",
     "name": "reset-password",
     "src": "resources/js/pages/reset-password.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_jsx-runtime-DCXLslBY.js",
-      "_field-CZtr8biR.js",
-      "_card-BCoECYlp.js",
-      "_PasswordResetController-BMnyy4VQ.js",
-      "_auth-card-GeQnJBwR.js",
-      "_flash-toasts-C6Kk4Ryv.js",
-      "_password-input-C9a34tHW.js",
-      "_routes-lNZ5A21D.js"
+      "_utils-BbUrN999.js",
+      "_flash-toasts-BgWPIqOe.js",
+      "_card-DkJddVLn.js",
+      "_PasswordResetController-CgiV02mb.js",
+      "_auth-card-Bg9uv3wd.js",
+      "_password-input-BDWxf-OE.js",
+      "_routes-BaU3EDLV.js"
     ]
   },
   "resources/js/pages/signup.tsx": {
-    "file": "assets/signup-CaJBpjPw.js",
+    "file": "assets/signup-C_gOa_QH.js",
     "name": "signup",
     "src": "resources/js/pages/signup.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_jsx-runtime-DCXLslBY.js",
-      "_field-CZtr8biR.js",
-      "_card-BCoECYlp.js",
-      "_auth-card-GeQnJBwR.js",
-      "_flash-toasts-C6Kk4Ryv.js",
-      "_password-input-C9a34tHW.js",
-      "_school-nLOJ9afs.js",
-      "_routes-lNZ5A21D.js"
-    ]
-  },
-  "resources/js/pages/welcome.tsx": {
-    "file": "assets/welcome-ClnsVWYD.js",
-    "name": "welcome",
-    "src": "resources/js/pages/welcome.tsx",
-    "isDynamicEntry": true,
-    "imports": [
-      "_jsx-runtime-DCXLslBY.js"
+      "_utils-BbUrN999.js",
+      "_flash-toasts-BgWPIqOe.js",
+      "_card-DkJddVLn.js",
+      "_auth-card-Bg9uv3wd.js",
+      "_password-input-BDWxf-OE.js",
+      "_routes-BaU3EDLV.js"
     ]
   }
 }

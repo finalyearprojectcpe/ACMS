@@ -56,20 +56,6 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | School Resolution
-    |--------------------------------------------------------------------------
-    |
-    | The application can resolve a school from a production subdomain such as
-    | futo.site.edu. Local development falls back to the configured default.
-    |
-    */
-
-    'school_domain' => env('SCHOOL_DOMAIN'),
-
-    'default_school_abbreviation' => env('DEFAULT_SCHOOL_ABBREVIATION', 'FUTO'),
-
-    /*
-    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

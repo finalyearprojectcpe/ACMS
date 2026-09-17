@@ -4,7 +4,6 @@ namespace Database\Factories;
 
 use App\Models\CourseOffering;
 use App\Models\CourseRegistration;
-use App\Models\CourseRegistrationItem;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -25,8 +24,7 @@ class CourseRegistrationItemFactory extends Factory
         return [
             'course_registration_id' => CourseRegistration::factory(),
             'course_offering_id' => $offering->id,
-            'source' => CourseRegistrationItem::SourceCurrentSet,
-            'category' => 'Faculty Course',
+            'category' => 'normal',
             'course_code' => $offering->course->code,
             'course_title' => $offering->course->title,
             'credit_units' => $offering->course->credit_units,

@@ -30,9 +30,9 @@ import {
 import type {
     DashboardAcademicSession,
     DashboardLevel,
-    DashboardStaffCourseOffering,
-    DashboardStaffCoursePrerequisite,
-    DashboardStaffCourseScheduleSemester,
+    DashboardAdviserCourseOffering,
+    DashboardAdviserCoursePrerequisite,
+    DashboardAdviserCourseScheduleSemester,
 } from '@/types';
 
 type CourseOfferingBrowserProps = {
@@ -40,7 +40,7 @@ type CourseOfferingBrowserProps = {
     detail?: string;
     levels: DashboardLevel[];
     selectedLevel: DashboardLevel;
-    semesters: DashboardStaffCourseScheduleSemester[];
+    semesters: DashboardAdviserCourseScheduleSemester[];
     session: Pick<DashboardAcademicSession, 'name'> | null;
     sessions?: DashboardAcademicSession[];
     selectedSessionId?: string;
@@ -48,14 +48,14 @@ type CourseOfferingBrowserProps = {
     onSessionChange?: (sessionId: string) => void;
     onSelectionChange?: (
         level: DashboardLevel,
-        semester: DashboardStaffCourseScheduleSemester,
+        semester: DashboardAdviserCourseScheduleSemester,
     ) => void;
     renderHeaderAction?: (
-        semester: DashboardStaffCourseScheduleSemester,
+        semester: DashboardAdviserCourseScheduleSemester,
     ) => ReactNode;
     renderCourseAction?: (
-        offering: DashboardStaffCourseOffering,
-        semester: DashboardStaffCourseScheduleSemester,
+        offering: DashboardAdviserCourseOffering,
+        semester: DashboardAdviserCourseScheduleSemester,
     ) => ReactNode;
 };
 
@@ -95,7 +95,7 @@ export function CourseOfferingBrowser({
 
     function selectLevelSemester(
         level: DashboardLevel,
-        semester: DashboardStaffCourseScheduleSemester,
+        semester: DashboardAdviserCourseScheduleSemester,
     ) {
         setActiveSemesterSlug(semester.slug);
 
@@ -289,14 +289,8 @@ export function CourseOfferingBrowser({
                                             {activeSemester.totalUnits} units
                                         </span>
                                         <span>
-                                            {activeSemester.facultyCourseCount}{' '}
-                                            faculty
-                                        </span>
-                                        <span>
-                                            {
-                                                activeSemester.departmentalCourseCount
-                                            }{' '}
-                                            departmental
+                                            {activeSemester.normalCourseCount}{' '}
+                                            normal
                                         </span>
                                         <span>
                                             {activeSemester.electiveCourseCount}{' '}
@@ -339,11 +333,11 @@ function CourseOfferingsTable({
     renderCourseAction,
     selectedLevel,
 }: {
-    semester: DashboardStaffCourseScheduleSemester;
+    semester: DashboardAdviserCourseScheduleSemester;
     hasCourseActions: boolean;
     renderCourseAction?: (
-        offering: DashboardStaffCourseOffering,
-        semester: DashboardStaffCourseScheduleSemester,
+        offering: DashboardAdviserCourseOffering,
+        semester: DashboardAdviserCourseScheduleSemester,
     ) => ReactNode;
     selectedLevel: DashboardLevel;
 }) {
@@ -424,7 +418,7 @@ function CourseOfferingsTable({
 function PrerequisiteBadges({
     prerequisites,
 }: {
-    prerequisites: DashboardStaffCoursePrerequisite[];
+    prerequisites: DashboardAdviserCoursePrerequisite[];
 }) {
     if (prerequisites.length === 0) {
         return <span className="text-xs text-muted-foreground">None</span>;
@@ -474,8 +468,8 @@ export function sessionDisplayName(
 }
 
 function compareSemesters(
-    first: DashboardStaffCourseScheduleSemester,
-    second: DashboardStaffCourseScheduleSemester,
+    first: DashboardAdviserCourseScheduleSemester,
+    second: DashboardAdviserCourseScheduleSemester,
 ): number {
     const order = { harmattan: 0, rain: 1 };
 

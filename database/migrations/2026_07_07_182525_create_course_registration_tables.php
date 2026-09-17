@@ -34,12 +34,11 @@ return new class extends Migration
             $table->index(['reviewer_advisor_profile_id', 'status'], 'course_registrations_reviewer_status_index');
         });
 
-        // Stores the individual courses selected on a student's registration, including current, carryover, and outstanding requirement rows.
+        // Stores the individual courses selected on a student's semester registration.
         Schema::create('course_registration_items', function (Blueprint $table) {
             $table->id();
             $table->foreignId('course_registration_id')->constrained()->cascadeOnDelete();
             $table->foreignId('course_offering_id')->constrained()->restrictOnDelete();
-            $table->string('source')->default('current_set');
             $table->string('category');
             $table->string('course_code');
             $table->string('course_title');
@@ -47,7 +46,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->unique(['course_registration_id', 'course_offering_id'], 'course_registration_items_registration_offering_unique');
-            $table->index(['course_offering_id', 'source'], 'course_registration_items_offering_source_index');
+            $table->index('course_offering_id');
         });
     }
 

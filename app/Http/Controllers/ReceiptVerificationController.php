@@ -27,7 +27,7 @@ class ReceiptVerificationController extends Controller
                 'status' => $payment->status === DuePayment::StatusReversed ? 'reversed' : 'valid',
                 'receiptNumber' => $payment->receipt_number,
                 'transactionId' => $payment->paystack_transaction_id,
-                'school' => $payment->advisorProfile->institution_name ?: config('app.name'),
+                'institution' => $payment->advisorProfile->institution_name ?: config('app.name'),
                 'due' => $payment->assignment->due->title,
                 'amount' => sprintf('NGN %s', number_format($payment->amount_kobo / 100, 2)),
                 'paidAt' => $payment->paid_at?->format('F j, Y \a\t g:i A'),

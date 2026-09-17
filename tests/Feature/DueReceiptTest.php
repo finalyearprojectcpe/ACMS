@@ -4,14 +4,13 @@ use App\Jobs\GenerateDuePaymentReceipt;
 use App\Jobs\SendEmailDelivery;
 use App\Mail\DuePaymentReceiptMail;
 use App\Models\AcademicSession;
-use App\Models\AcademicYear;
-use App\Models\Department;
+use App\Models\AdvisorProfile;
 use App\Models\Due;
 use App\Models\DuePayment;
 use App\Models\PaymentAccount;
-use App\Models\StaffProfile;
 use App\Models\StudentDueAssignment;
 use App\Models\StudentProfile;
+use App\Models\StudentSet;
 use App\Models\User;
 use App\Services\DueAssignmentService;
 use App\Services\DuePaymentService;
@@ -53,7 +52,9 @@ test('confirmed Paystack payments queue, store, email, verify, and download PDF 
         ->and($payment->receipt_path)->not->toBeNull()
         ->and(Storage::disk('local')->get($payment->receipt_path))->toStartWith('%PDF')
         ->and($payment->receiptEmailDelivery)->not->toBeNull()
-        ->and($payment->receiptEmailDelivery->metadata['attachment']['path'])->toBe($payment->receipt_path);
+        ->and($payment->receiptEmailDelivery->metadata['attachment']['path'])->toBe($payment->receipt_path)
+        ->and((new DuePaymentReceiptMail($payment->receiptEmailDelivery))->render())
+        ->toContain('Federal University of Technology Owerri');
     Queue::assertPushed(SendEmailDelivery::class);
 
     Config::set('services.resend.key', 're_test_key');
@@ -146,64 +147,46 @@ test('a late completion keeps the exact older checkout amount after a due amount
 });
 
 /**
- * @return array{studentUser: User, payment: DuePayment, assignment: StudentDueAssignment, due: Due, schoolId: int, paymentAccountId: int}
+ * @return array{studentUser: User, payment: DuePayment, assignment: StudentDueAssignment, due: Due, advisorProfileId: int, paymentAccountId: int}
  */
 function createDueReceiptFixture(): array
 {
-    $department = Department::factory()->create();
-    $department->load('faculty.school');
-    $school = $department->faculty->school;
-    $entrySession = AcademicSession::factory()->create([
-        'school_id' => $school->id,
-        'name' => '2023/2024',
-        'starts_on' => '2023-09-01',
-        'ends_on' => '2024-08-31',
+    $advisor = AdvisorProfile::factory()->create([
+        'institution_name' => 'Federal University of Technology Owerri',
     ]);
     $currentSession = AcademicSession::factory()->create([
-        'school_id' => $school->id,
+        'advisor_profile_id' => $advisor->id,
         'name' => '2025/2026',
         'starts_on' => '2025-09-01',
         'ends_on' => '2026-08-31',
     ]);
+    $set = StudentSet::factory()->create([
+        'advisor_profile_id' => $advisor->id,
+        'entry_academic_session_id' => $currentSession->id,
+    ]);
     $studentUser = User::factory()->student()->create([
-        'school_id' => $school->id,
         'name' => 'Chinaza Okafor',
         'email' => 'chinaza@example.test',
     ]);
     $studentProfile = StudentProfile::factory()->create([
-        'school_id' => $school->id,
         'user_id' => $studentUser->id,
-        'department_id' => $department->id,
-        'current_academic_year_id' => AcademicYear::factory(),
-        'entry_academic_session_id' => $entrySession->id,
+        'advisor_profile_id' => $set->advisor_profile_id,
+        'student_set_id' => $set->id,
         'registration_number' => '2023001234',
     ]);
-    $staffUser = User::factory()->staff()->create(['school_id' => $school->id]);
-    $staffProfile = StaffProfile::factory()->create([
-        'user_id' => $staffUser->id,
-        'department_id' => $department->id,
-    ]);
     $paymentAccount = PaymentAccount::factory()->create([
-        'school_id' => $school->id,
-        'department_id' => $department->id,
-        'staff_profile_id' => $staffProfile->id,
-        'entry_academic_session_id' => null,
-        'scope_key' => 'staff-'.$staffProfile->id,
+        'advisor_profile_id' => $set->advisor_profile_id,
         'paystack_subaccount_code' => 'ACCT_RECEIPT_TEST',
         'status' => PaymentAccount::StatusActive,
         'active_marker' => 1,
     ]);
-    $due = Due::query()->create([
-        'school_id' => $school->id,
-        'department_id' => $department->id,
-        'entry_academic_session_id' => $entrySession->id,
+    $due = Due::factory()->create([
+        'advisor_profile_id' => $set->advisor_profile_id,
+        'student_set_id' => $set->id,
         'academic_session_id' => $currentSession->id,
-        'created_by_staff_profile_id' => $staffProfile->id,
         'payment_account_id' => $paymentAccount->id,
-        'title' => 'Departmental Dues 300 Level',
+        'title' => 'Student Dues 300 Level',
         'amount_kobo' => 1500000,
-        'currency' => 'NGN',
-        'status' => Due::StatusPublished,
         'published_at' => now(),
     ]);
     $assignment = StudentDueAssignment::query()->create([
@@ -215,7 +198,7 @@ function createDueReceiptFixture(): array
     $payment = DuePayment::query()->create([
         'student_due_assignment_id' => $assignment->id,
         'student_profile_id' => $studentProfile->id,
-        'school_id' => $school->id,
+        'advisor_profile_id' => $set->advisor_profile_id,
         'payment_account_id' => $paymentAccount->id,
         'provider' => DuePayment::ProviderPaystack,
         'reference' => 'DUE-RECEIPT-TEST',
@@ -233,13 +216,13 @@ function createDueReceiptFixture(): array
         'payment' => $payment,
         'assignment' => $assignment,
         'due' => $due,
-        'schoolId' => (int) $school->id,
+        'advisorProfileId' => (int) $set->advisor_profile_id,
         'paymentAccountId' => (int) $paymentAccount->id,
     ];
 }
 
 /**
- * @param  array{payment: DuePayment, assignment: StudentDueAssignment, due: Due, schoolId: int, paymentAccountId: int}  $fixture
+ * @param  array{payment: DuePayment, assignment: StudentDueAssignment, due: Due, advisorProfileId: int, paymentAccountId: int}  $fixture
  * @return array<string, mixed>
  */
 function successfulPaystackData(array $fixture): array
@@ -255,7 +238,7 @@ function successfulPaystackData(array $fixture): array
         'gateway_response' => 'Successful',
         'paid_at' => '2026-07-11T10:00:00+01:00',
         'metadata' => [
-            'school_id' => $fixture['schoolId'],
+            'advisor_profile_id' => $fixture['advisorProfileId'],
             'due_id' => $fixture['due']->id,
             'student_due_assignment_id' => $fixture['assignment']->id,
             'student_profile_id' => $fixture['assignment']->student_profile_id,

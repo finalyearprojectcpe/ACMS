@@ -17,7 +17,7 @@ class PasswordResetService
     {
         $user = $this->eligibleUser($email);
 
-        if (! $user instanceof User) {
+        if (! ($user instanceof User)) {
             return;
         }
 
@@ -75,7 +75,7 @@ class PasswordResetService
 
             $user = $this->eligibleUser($email);
 
-            if (! $user instanceof User) {
+            if (! ($user instanceof User)) {
                 return false;
             }
 

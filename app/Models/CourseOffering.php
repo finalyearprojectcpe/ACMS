@@ -25,7 +25,7 @@ class CourseOffering extends Model
 
             $offering->course_title ??= $course?->title;
             $offering->credit_units ??= $course?->credit_units;
-            $offering->category ??= CourseCategory::Departmental;
+            $offering->category ??= CourseCategory::Normal;
         });
     }
 

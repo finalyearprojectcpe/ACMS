@@ -2,8 +2,8 @@
 
 namespace Database\Factories;
 
+use App\Models\AdvisorProfile;
 use App\Models\EmailDelivery;
-use App\Models\School;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -20,7 +20,7 @@ class EmailDeliveryFactory extends Factory
     public function definition(): array
     {
         return [
-            'school_id' => School::factory(),
+            'advisor_profile_id' => AdvisorProfile::factory(),
             'user_id' => User::factory(),
             'recipient_email' => fake()->safeEmail(),
             'subject' => fake()->sentence(4),

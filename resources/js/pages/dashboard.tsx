@@ -2,36 +2,28 @@ import { Head, usePage } from '@inertiajs/react';
 import { RiArrowLeftLine } from '@remixicon/react';
 
 import { home as dashboardHome } from '@/actions/App/Http/Controllers/DashboardController';
+import { AdviserCourseRegistrationDashboard } from '@/components/adviser-course-registration-dashboard';
+import {
+    AdviserCourseOfferingForm,
+    AdviserCourseSchedulesDashboard,
+} from '@/components/adviser-course-schedules-dashboard';
+import { AdviserDueDetailDashboard } from '@/components/adviser-due-detail-dashboard';
+import { AdviserDueFormDashboard } from '@/components/adviser-due-form-dashboard';
+import { AdviserDueWaiverFormDashboard } from '@/components/adviser-due-waiver-form-dashboard';
+import { AdviserDuesDashboard } from '@/components/adviser-dues-dashboard';
+import { AdviserHomeDashboard } from '@/components/adviser-home-dashboard';
+import { AdviserPaymentAccountFormDashboard } from '@/components/adviser-payment-account-form-dashboard';
+import { AdviserPaymentSettingsDashboard } from '@/components/adviser-payment-settings-dashboard';
+import { AdviserSettingsDashboard } from '@/components/adviser-settings-dashboard';
+import { AdviserStudentOnboarding } from '@/components/adviser-student-onboarding';
+import { AdviserStudentsDashboard } from '@/components/adviser-students-dashboard';
 import { AppSidebar } from '@/components/app-sidebar';
 import { FlashToasts } from '@/components/flash-toasts';
-import { StudentRecordDashboard } from '@/components/student-record-dashboard';
-import { ResultSheetDetailDashboard } from '@/components/result-sheet-detail-dashboard';
-import { StaffCourseRegistrationDashboard } from '@/components/staff-course-registration-dashboard';
-import {
-    StaffCourseOfferingForm,
-    StaffCourseSchedulesDashboard,
-} from '@/components/staff-course-schedules-dashboard';
-import {
-    StaffDueDetailDashboard,
-    StaffDueFormDashboard,
-    StaffDueWaiverFormDashboard,
-    StaffDuesDashboard,
-} from '@/components/staff-dues-dashboard';
-import { StaffHomeDashboard } from '@/components/staff-home-dashboard';
-import {
-    StaffPaymentAccountFormDashboard,
-    StaffPaymentSettingsDashboard,
-} from '@/components/staff-payment-settings-dashboard';
-import { StaffResultImportWizard } from '@/components/staff-result-import-wizard';
-import { StaffResultsDashboard } from '@/components/staff-results-dashboard';
-import { StaffSettingsDashboard } from '@/components/staff-settings-dashboard';
-import { StaffStudentOnboarding } from '@/components/staff-student-onboarding';
-import { StaffStudentsDashboard } from '@/components/staff-students-dashboard';
 import { StudentCourseRegistrationDashboard } from '@/components/student-course-registration-dashboard';
 import { StudentDuesDashboard } from '@/components/student-dues-dashboard';
 import { StudentHomeDashboard } from '@/components/student-home-dashboard';
 import { StudentProfileDashboard } from '@/components/student-profile-dashboard';
-import { StudentResultsDashboard } from '@/components/student-results-dashboard';
+import { StudentRecordDashboard } from '@/components/student-record-dashboard';
 import { ThemeToggle } from '@/components/theme-toggle';
 import {
     Breadcrumb,
@@ -79,105 +71,87 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                   .filter(Boolean)
                   .join(' • ')
             : null;
-    const staffHome =
-        dashboard.role === 'staff' &&
+    const adviserHome =
+        dashboard.role === 'adviser' &&
         dashboard.section === 'home' &&
-        dashboard.staffHome !== null
-            ? dashboard.staffHome
+        dashboard.adviserHome !== null
+            ? dashboard.adviserHome
             : null;
-    const staffStudents =
-        dashboard.role === 'staff' &&
+    const adviserStudents =
+        dashboard.role === 'adviser' &&
         dashboard.section === 'students' &&
-        dashboard.staffStudents !== null
-            ? dashboard.staffStudents
+        dashboard.adviserStudents !== null
+            ? dashboard.adviserStudents
             : null;
-    const staffStudentForm =
-        dashboard.role === 'staff' && dashboard.staffStudentForm !== null
-            ? dashboard.staffStudentForm
+    const adviserStudentForm =
+        dashboard.role === 'adviser' && dashboard.adviserStudentForm !== null
+            ? dashboard.adviserStudentForm
             : null;
-    const staffCourseSchedules =
-        dashboard.role === 'staff' &&
+    const adviserCourseSchedules =
+        dashboard.role === 'adviser' &&
         dashboard.section === 'courses' &&
-        dashboard.staffCourseSchedules !== null
-            ? dashboard.staffCourseSchedules
+        dashboard.adviserCourseSchedules !== null
+            ? dashboard.adviserCourseSchedules
             : null;
-    const staffCourseOfferingForm =
-        dashboard.role === 'staff' &&
+    const adviserCourseOfferingForm =
+        dashboard.role === 'adviser' &&
         dashboard.section === 'courses' &&
-        dashboard.staffCourseOfferingForm !== null
-            ? dashboard.staffCourseOfferingForm
+        dashboard.adviserCourseOfferingForm !== null
+            ? dashboard.adviserCourseOfferingForm
             : null;
-    const staffCourseRegistration =
-        dashboard.role === 'staff' &&
+    const adviserCourseRegistration =
+        dashboard.role === 'adviser' &&
         dashboard.section === 'course-registration' &&
-        dashboard.staffCourseRegistration !== null
-            ? dashboard.staffCourseRegistration
+        dashboard.adviserCourseRegistration !== null
+            ? dashboard.adviserCourseRegistration
             : null;
-    const staffResults =
-        dashboard.role === 'staff' &&
-        dashboard.section === 'result-management' &&
-        dashboard.staffResults !== null
-            ? dashboard.staffResults
-            : null;
-    const staffResultImportForm =
-        dashboard.role === 'staff' &&
-        dashboard.section === 'result-management' &&
-        dashboard.staffResultImportForm !== null
-            ? dashboard.staffResultImportForm
-            : null;
-    const staffDues =
-        dashboard.role === 'staff' &&
+    const adviserDues =
+        dashboard.role === 'adviser' &&
         dashboard.section === 'dues' &&
-        dashboard.staffDues !== null
-            ? dashboard.staffDues
+        dashboard.adviserDues !== null
+            ? dashboard.adviserDues
             : null;
-    const staffDueForm =
-        dashboard.role === 'staff' &&
+    const adviserDueForm =
+        dashboard.role === 'adviser' &&
         dashboard.section === 'dues' &&
-        dashboard.staffDueForm !== null
-            ? dashboard.staffDueForm
+        dashboard.adviserDueForm !== null
+            ? dashboard.adviserDueForm
             : null;
-    const staffDueDetail =
-        dashboard.role === 'staff' &&
+    const adviserDueDetail =
+        dashboard.role === 'adviser' &&
         dashboard.section === 'dues' &&
-        dashboard.staffDueDetail !== null
-            ? dashboard.staffDueDetail
+        dashboard.adviserDueDetail !== null
+            ? dashboard.adviserDueDetail
             : null;
-    const staffDueWaiverForm =
-        dashboard.role === 'staff' &&
+    const adviserDueWaiverForm =
+        dashboard.role === 'adviser' &&
         dashboard.section === 'dues' &&
-        dashboard.staffDueWaiverForm !== null
-            ? dashboard.staffDueWaiverForm
+        dashboard.adviserDueWaiverForm !== null
+            ? dashboard.adviserDueWaiverForm
             : null;
-    const staffPaymentSettings =
-        dashboard.role === 'staff' &&
+    const adviserPaymentSettings =
+        dashboard.role === 'adviser' &&
         dashboard.section === 'payment-settings' &&
-        dashboard.staffPaymentSettings !== null
-            ? dashboard.staffPaymentSettings
+        dashboard.adviserPaymentSettings !== null
+            ? dashboard.adviserPaymentSettings
             : null;
-    const staffPaymentAccountForm =
-        dashboard.role === 'staff' &&
+    const adviserPaymentAccountForm =
+        dashboard.role === 'adviser' &&
         dashboard.section === 'payment-settings' &&
-        dashboard.staffPaymentAccountForm !== null
-            ? dashboard.staffPaymentAccountForm
+        dashboard.adviserPaymentAccountForm !== null
+            ? dashboard.adviserPaymentAccountForm
             : null;
-    const staffSettings =
-        dashboard.role === 'staff' &&
+    const adviserSettings =
+        dashboard.role === 'adviser' &&
         dashboard.section === 'profile-settings' &&
-        dashboard.staffSettings !== null
-            ? dashboard.staffSettings
+        dashboard.adviserSettings !== null
+            ? dashboard.adviserSettings
             : null;
     const studentHome =
         dashboard.role === 'student' &&
         dashboard.section === 'home' &&
         dashboard.studentHome !== null
             ? dashboard.studentHome
-            : null;
-    const studentResults =
-        dashboard.role === 'student' &&
-        dashboard.section === 'results' &&
-        dashboard.studentResults !== null
-            ? dashboard.studentResults
             : null;
     const studentDues =
         dashboard.role === 'student' &&
@@ -198,13 +172,8 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
             ? dashboard.studentProfile
             : null;
     const studentRecord =
-        dashboard.role === 'staff' &&
-        dashboard.studentRecord !== null
+        dashboard.role === 'adviser' && dashboard.studentRecord !== null
             ? dashboard.studentRecord
-            : null;
-    const resultSheetDetail =
-        dashboard.resultSheetDetail !== null
-            ? dashboard.resultSheetDetail
             : null;
 
     return (
@@ -266,63 +235,56 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                     </header>
 
                     <main className="background-graph flex flex-1 flex-col p-4 sm:p-6">
-                        {resultSheetDetail ? (
-                            <ResultSheetDetailDashboard
-                                detail={resultSheetDetail}
+                        {adviserDueWaiverForm ? (
+                            <AdviserDueWaiverFormDashboard
+                                form={adviserDueWaiverForm}
                             />
-                        ) : staffResultImportForm ? (
-                            <StaffResultImportWizard
-                                form={staffResultImportForm}
+                        ) : adviserDueForm ? (
+                            <AdviserDueFormDashboard form={adviserDueForm} />
+                        ) : adviserDueDetail ? (
+                            <AdviserDueDetailDashboard
+                                detail={adviserDueDetail}
                             />
-                        ) : staffDueWaiverForm ? (
-                            <StaffDueWaiverFormDashboard
-                                form={staffDueWaiverForm}
+                        ) : adviserCourseOfferingForm ? (
+                            <AdviserCourseOfferingForm
+                                form={adviserCourseOfferingForm}
                             />
-                        ) : staffDueForm ? (
-                            <StaffDueFormDashboard form={staffDueForm} />
-                        ) : staffDueDetail ? (
-                            <StaffDueDetailDashboard detail={staffDueDetail} />
-                        ) : staffCourseOfferingForm ? (
-                            <StaffCourseOfferingForm
-                                form={staffCourseOfferingForm}
-                                role={dashboard.role}
+                        ) : adviserCourseSchedules ? (
+                            <AdviserCourseSchedulesDashboard
+                                courseSchedules={adviserCourseSchedules}
                             />
-                        ) : staffCourseSchedules ? (
-                            <StaffCourseSchedulesDashboard
-                                courseSchedules={staffCourseSchedules}
+                        ) : adviserCourseRegistration ? (
+                            <AdviserCourseRegistrationDashboard
+                                registration={adviserCourseRegistration}
                             />
-                        ) : staffResults ? (
-                            <StaffResultsDashboard results={staffResults} />
-                        ) : staffCourseRegistration ? (
-                            <StaffCourseRegistrationDashboard
-                                registration={staffCourseRegistration}
+                        ) : adviserDues ? (
+                            <AdviserDuesDashboard dues={adviserDues} />
+                        ) : adviserPaymentAccountForm ? (
+                            <AdviserPaymentAccountFormDashboard
+                                form={adviserPaymentAccountForm}
                             />
-                        ) : staffDues ? (
-                            <StaffDuesDashboard dues={staffDues} />
-                        ) : staffPaymentAccountForm ? (
-                            <StaffPaymentAccountFormDashboard
-                                form={staffPaymentAccountForm}
+                        ) : adviserPaymentSettings ? (
+                            <AdviserPaymentSettingsDashboard
+                                settings={adviserPaymentSettings}
                             />
-                        ) : staffPaymentSettings ? (
-                            <StaffPaymentSettingsDashboard
-                                settings={staffPaymentSettings}
+                        ) : adviserSettings ? (
+                            <AdviserSettingsDashboard
+                                settings={adviserSettings}
                             />
-                        ) : staffSettings ? (
-                            <StaffSettingsDashboard settings={staffSettings} />
                         ) : studentRecord ? (
                             <StudentRecordDashboard record={studentRecord} />
-                        ) : staffHome ? (
-                            <StaffHomeDashboard home={staffHome} />
-                        ) : staffStudentForm ? (
-                            <StaffStudentOnboarding
-                                onboarding={staffStudentForm}
+                        ) : adviserHome ? (
+                            <AdviserHomeDashboard home={adviserHome} />
+                        ) : adviserStudentForm ? (
+                            <AdviserStudentOnboarding
+                                onboarding={adviserStudentForm}
                             />
-                        ) : staffStudents ? (
-                            <StaffStudentsDashboard students={staffStudents} />
+                        ) : adviserStudents ? (
+                            <AdviserStudentsDashboard
+                                students={adviserStudents}
+                            />
                         ) : studentHome ? (
                             <StudentHomeDashboard home={studentHome} />
-                        ) : studentResults ? (
-                            <StudentResultsDashboard results={studentResults} />
                         ) : studentDues ? (
                             <StudentDuesDashboard dues={studentDues} />
                         ) : studentCourseRegistration ? (

@@ -1,1 +1,0 @@
-import{n as e,r as t,t as n}from"./jsx-runtime-DCXLslBY.js";var r=e(),i=n();function a(){let e=(0,r.c)(1),n;return e[0]===Symbol.for(`react.memo_cache_sentinel`)?(n=(0,i.jsxs)(i.Fragment,{children:[(0,i.jsx)(t,{title:`Welcome`}),(0,i.jsx)(`span`,{children:`wow, so much work.`})]}),e[0]=n):n=e[0],n}export{a as default};

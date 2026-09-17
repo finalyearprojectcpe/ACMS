@@ -12,6 +12,8 @@ class ReceiptUrlService
         return URL::signedRoute(
             'receipts.verify',
             ['paystackTransactionId' => $payment->paystack_transaction_id],
+            null,
+            false,
         );
     }
 

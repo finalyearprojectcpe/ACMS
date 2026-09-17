@@ -14,8 +14,8 @@ export function dashboardOrganization(
 export function dashboardSidebarRoleLabel(dashboard: DashboardContext): string {
     const organization = dashboardOrganization(dashboard);
 
-    if (dashboard.role === 'staff') {
-        const setLabel = staffSetLabel(
+    if (dashboard.role === 'adviser') {
+        const setLabel = adviserSetLabel(
             dashboard.advisedSets,
             dashboard.programme?.minimumYearsToDegree,
         );
@@ -45,7 +45,7 @@ export function dashboardHeaderOrganizationLabel(
     return organization.name;
 }
 
-function staffSetLabel(
+function adviserSetLabel(
     sets: DashboardStudentSetContext[],
     minimumYearsToDegree?: number,
 ): string | null {

@@ -1,14 +1,14 @@
 import { router } from '@inertiajs/react';
 import {
     RiArrowDownSLine,
-    RiErrorWarningLine,
     RiSendPlaneLine,
     RiSave3Line,
 } from '@remixicon/react';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 
-import { storeCourseRegistration } from '@/actions/App/Http/Controllers/DashboardController';
+import { store as storeCourseRegistration } from '@/actions/App/Http/Controllers/CourseRegistrationController';
+import { CourseCategoryBadge } from '@/components/course-category-badge';
 import { QualifiedSemester } from '@/components/qualified-semester';
 import {
     AlertDialog,
@@ -41,7 +41,6 @@ import {
 import { cn } from '@/lib/utils';
 import type {
     DashboardCourseRegistrationCourse,
-    DashboardCourseRegistrationSource,
     DashboardCourseRegistrationSummary,
     DashboardStudentCourseRegistration,
 } from '@/types';
@@ -49,11 +48,6 @@ import type {
 type StudentCourseRegistrationDashboardProps = {
     registration: DashboardStudentCourseRegistration;
 };
-
-const previousCourseSources = new Set<DashboardCourseRegistrationSource>([
-    'carryover',
-    'outstanding_requirement',
-]);
 
 export function StudentCourseRegistrationDashboard({
     registration,
@@ -75,9 +69,6 @@ export function StudentCourseRegistrationDashboard({
         [registration.selectedCourses],
     );
     const exceedsMaximum = selectedUnits > registration.maximumCourseUnits;
-    const selectedBlockReasons = selectedCourses.flatMap((course) =>
-        course.blockReasons.map((reason) => `${course.code}: ${reason}`),
-    );
     const isLocked = ['In review', 'Approved'].includes(
         registration.reviewStatus,
     );
@@ -86,25 +77,12 @@ export function StudentCourseRegistrationDashboard({
         selectedCourses.some(
             (course) => !initialSelectedKeys.has(courseKey(course)),
         );
-    const allCurrentCourses = registration.courseGroups
-        .filter((group) => !previousCourseSources.has(group.key))
-        .flatMap((group) => group.courses);
-    const allPreviousCourses = registration.courseGroups
-        .filter((group) => previousCourseSources.has(group.key))
-        .flatMap((group) => group.courses);
     const displayCourses = isLocked
-        ? selectedCourses.filter(
-              (course) => !previousCourseSources.has(course.source),
-          )
-        : allCurrentCourses;
-    const displayPreviousCourses = isLocked
-        ? selectedCourses.filter((course) =>
-              previousCourseSources.has(course.source),
-          )
-        : allPreviousCourses;
+        ? selectedCourses
+        : registration.courseGroups.flatMap((group) => group.courses);
 
     function toggleCourse(course: DashboardCourseRegistrationCourse) {
-        if (isLocked || !course.selectable) {
+        if (isLocked) {
             return;
         }
 
@@ -126,7 +104,6 @@ export function StudentCourseRegistrationDashboard({
                 action,
                 items: selectedCourses.map((course) => ({
                     course_offering_id: course.courseOfferingId,
-                    source: course.source,
                 })),
             },
             { preserveScroll: true },
@@ -179,7 +156,7 @@ export function StudentCourseRegistrationDashboard({
                                         disabled={
                                             selectedCourses.length === 0 ||
                                             exceedsMaximum ||
-                                            selectedBlockReasons.length > 0
+                                            exceedsMaximum
                                         }
                                     >
                                         <RiSendPlaneLine />
@@ -231,19 +208,6 @@ export function StudentCourseRegistrationDashboard({
                 </Notice>
             ) : null}
 
-            {selectedBlockReasons.length > 0 ? (
-                <Notice
-                    tone="danger"
-                    title="Some selected courses cannot be submitted yet"
-                >
-                    <ul className="mt-1 list-inside list-disc">
-                        {selectedBlockReasons.slice(0, 3).map((reason) => (
-                            <li key={reason}>{reason}</li>
-                        ))}
-                    </ul>
-                </Notice>
-            ) : null}
-
             <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
                 <CardHeader className="flex flex-col gap-2 border-b border-border sm:flex-row sm:items-center sm:justify-between">
                     <div>
@@ -273,27 +237,6 @@ export function StudentCourseRegistrationDashboard({
                     />
                 </CardContent>
             </Card>
-
-            {displayPreviousCourses.length > 0 ? (
-                <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
-                    <CardHeader className="border-b border-border">
-                        <CardTitle>Carryover & Outstanding Courses</CardTitle>
-                        <div className="text-xs text-muted-foreground">
-                            {isLocked
-                                ? 'Carryover and outstanding courses included in this registration.'
-                                : 'Courses from previous semesters that still need to be satisfied.'}
-                        </div>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                        <CourseOptionsTable
-                            courses={displayPreviousCourses}
-                            selectedKeys={selectedKeys}
-                            isLocked={isLocked}
-                            onToggleCourse={toggleCourse}
-                        />
-                    </CardContent>
-                </Card>
-            ) : null}
 
             {registration.previousRegistrations.length > 0 ? (
                 <PreviousRegistrations
@@ -331,7 +274,7 @@ function CourseOptionsTable({
                         Category
                     </TableHead>
                     <TableHead className="w-[14%] pr-4 text-right">
-                        Source
+                        Category
                     </TableHead>
                 </TableRow>
             </TableHeader>
@@ -339,7 +282,7 @@ function CourseOptionsTable({
                 {courses.length === 0 ? (
                     <TableRow>
                         <TableCell
-                            colSpan={isLocked ? 5 : 6}
+                            colSpan={isLocked ? 4 : 5}
                             className="px-4 py-8 text-center text-muted-foreground"
                         >
                             {isLocked
@@ -360,7 +303,6 @@ function CourseOptionsTable({
                                     <TableCell className="px-4">
                                         <Checkbox
                                             checked={selected}
-                                            disabled={!course.selectable}
                                             aria-label={`Select ${course.code}`}
                                             onCheckedChange={() =>
                                                 onToggleCourse(course)
@@ -376,14 +318,14 @@ function CourseOptionsTable({
                                         <div className="font-medium">
                                             {course.title}
                                         </div>
-                                        {course.originSemester ? (
+                                        {course.prerequisites.length > 0 ? (
                                             <div className="text-xs text-muted-foreground">
-                                                From {course.originSemester}
+                                                Requires{' '}
+                                                {course.prerequisites.join(
+                                                    ', ',
+                                                )}
                                             </div>
                                         ) : null}
-                                        {!isLocked && (
-                                            <CourseWarnings course={course} />
-                                        )}
                                     </div>
                                 </TableCell>
                                 <TableCell className="text-center font-semibold tabular-nums">
@@ -393,7 +335,9 @@ function CourseOptionsTable({
                                     {course.category}
                                 </TableCell>
                                 <TableCell className="pr-4 text-right">
-                                    <SourceBadge course={course} />
+                                    <CourseCategoryBadge
+                                        category={course.categoryValue}
+                                    />
                                 </TableCell>
                             </TableRow>
                         );
@@ -485,7 +429,7 @@ function ReadonlyCoursesTable({
                     <TableHead>Title</TableHead>
                     <TableHead className="w-[12%] text-center">Units</TableHead>
                     <TableHead className="w-[18%] pr-4 text-right">
-                        Source
+                        Category
                     </TableHead>
                 </TableRow>
             </TableHeader>
@@ -505,55 +449,14 @@ function ReadonlyCoursesTable({
                             {course.units}
                         </TableCell>
                         <TableCell className="pr-4 text-right">
-                            <SourceBadge course={course} />
+                            <CourseCategoryBadge
+                                category={course.categoryValue}
+                            />
                         </TableCell>
                     </TableRow>
                 ))}
             </TableBody>
         </Table>
-    );
-}
-
-function CourseWarnings({
-    course,
-}: {
-    course: DashboardCourseRegistrationCourse;
-}) {
-    if (course.blockReasons.length === 0) {
-        return null;
-    }
-
-    return (
-        <div className="mt-1 flex items-start gap-1.5 text-xs text-red-700 dark:text-red-300">
-            <RiErrorWarningLine className="mt-0.5 size-3.5 shrink-0" />
-            <span>{course.blockReasons.join(' ')}</span>
-        </div>
-    );
-}
-
-function SourceBadge({
-    course,
-}: {
-    course: DashboardCourseRegistrationCourse;
-}) {
-    return (
-        <Badge
-            variant="outline"
-            className={
-                {
-                    current_set:
-                        'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-300',
-                    carryover:
-                        'border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/15 dark:text-red-300',
-                    outstanding_requirement:
-                        'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-300',
-                    elective:
-                        'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-500/30 dark:bg-violet-500/15 dark:text-violet-300',
-                }[course.source]
-            }
-        >
-            {course.sourceLabel}
-        </Badge>
     );
 }
 
@@ -604,5 +507,5 @@ function statusBadgeClass(status: string): string {
 }
 
 function courseKey(course: DashboardCourseRegistrationCourse): string {
-    return `${course.source}-${course.courseOfferingId}`;
+    return course.courseOfferingId.toString();
 }

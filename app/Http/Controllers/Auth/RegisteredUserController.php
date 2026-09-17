@@ -71,7 +71,7 @@ class RegisteredUserController extends Controller
     {
         $user = $this->activationUser($request);
 
-        if (! $user instanceof User) {
+        if (! ($user instanceof User)) {
             throw ValidationException::withMessages([
                 'password' => 'Verify your registration number and access code before setting your password.',
             ]);

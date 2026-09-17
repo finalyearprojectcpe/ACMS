@@ -46,12 +46,6 @@ class StudentSet extends Model
         return $this->hasMany(CourseOffering::class);
     }
 
-    /** @return HasMany<ResultSheet, $this> */
-    public function resultSheets(): HasMany
-    {
-        return $this->hasMany(ResultSheet::class);
-    }
-
     /** @return HasMany<Due, $this> */
     public function dues(): HasMany
     {

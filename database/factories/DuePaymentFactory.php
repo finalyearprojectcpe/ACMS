@@ -25,7 +25,8 @@ class DuePaymentFactory extends Factory
         return [
             'student_due_assignment_id' => $assignment->id,
             'student_profile_id' => $studentProfile->id,
-            'school_id' => $studentProfile->school_id,
+            'advisor_profile_id' => $studentProfile->advisor_profile_id,
+            'payment_account_id' => null,
             'provider' => DuePayment::ProviderPaystack,
             'reference' => 'DUE-'.Str::upper(Str::random(24)),
             'status' => DuePayment::StatusInitialized,

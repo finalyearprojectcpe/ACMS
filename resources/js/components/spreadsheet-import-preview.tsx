@@ -21,17 +21,16 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import { schoolEmailPlaceholder, useCurrentSchool } from '@/lib/school';
-
-type SpreadsheetField = {
-    key: string;
-    label: string;
-    aliases?: string[];
-    defaultColumnIndex?: number;
-    description?: string;
-    emptyValueLabel?: string;
-    required?: boolean;
-};
+import {
+    batchSizes,
+    createImportKey,
+    defaultMapping,
+    formatList,
+    hasMissingRequiredFields,
+    importErrorMessages,
+    mappedSpreadsheetRows,
+} from '@/lib/spreadsheet-import';
+import type { SpreadsheetField } from '@/lib/spreadsheet-import';
 
 type SheetData = {
     name: string;
@@ -72,14 +71,6 @@ type SpreadsheetImportPreviewProps = {
 const UNMAPPED_COLUMN = '__unmapped__';
 const DEFAULT_BATCH_SIZE = 200;
 
-function createImportKey(): string {
-    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-        return crypto.randomUUID();
-    }
-
-    return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
 export function SpreadsheetImportPreview({
     fields,
     title = 'Spreadsheet Import',
@@ -88,7 +79,6 @@ export function SpreadsheetImportPreview({
     batchSize = DEFAULT_BATCH_SIZE,
     onSubmit,
 }: SpreadsheetImportPreviewProps) {
-    const currentSchool = useCurrentSchool();
     const [fileName, setFileName] = useState<string | null>(null);
     const [sheets, setSheets] = useState<SheetData[]>([]);
     const [activeSheetName, setActiveSheetName] = useState('');
@@ -127,7 +117,7 @@ export function SpreadsheetImportPreview({
     const importErrors = importErrorMessages(
         errors,
         fields,
-        schoolEmailPlaceholder(currentSchool),
+        'name.com',
         batchStartRow,
     );
 
@@ -523,287 +513,4 @@ function spreadsheetCellContent(value: string, field: SpreadsheetField) {
             {field.emptyValueLabel}
         </Badge>
     );
-}
-
-function defaultMapping(
-    headers: string[],
-    fields: SpreadsheetField[],
-): Record<string, string> {
-    return Object.fromEntries(
-        fields.map((field, fieldIndex) => {
-            const headerIndex = matchingHeaderIndex(headers, field);
-            const fallbackIndex = field.defaultColumnIndex ?? fieldIndex;
-            const index =
-                headerIndex >= 0
-                    ? headerIndex
-                    : headers[fallbackIndex] !== undefined
-                      ? fallbackIndex
-                      : -1;
-
-            return [field.key, index >= 0 ? index.toString() : ''];
-        }),
-    );
-}
-
-function mappedSpreadsheetRows(
-    rows: string[][],
-    fields: SpreadsheetField[],
-    mapping: Record<string, string>,
-): Array<Record<string, string>> {
-    return rows
-        .map((row) =>
-            Object.fromEntries(
-                fields.map((field) => {
-                    const columnIndex = mappedColumnIndex(mapping[field.key]);
-
-                    return [
-                        field.key,
-                        columnIndex === null ? '' : (row[columnIndex] ?? ''),
-                    ];
-                }),
-            ),
-        )
-        .filter((row) => Object.values(row).some((value) => value !== ''));
-}
-
-function normalized(value: string): string {
-    return value.toLowerCase().replace(/[^a-z0-9]+/g, '');
-}
-
-function matchingHeaderIndex(
-    headers: string[],
-    field: SpreadsheetField,
-): number {
-    const candidates = [field.label, ...(field.aliases ?? [])]
-        .map(normalized)
-        .filter(Boolean);
-    const exactIndex = headers.findIndex((header) =>
-        candidates.includes(normalized(header)),
-    );
-
-    if (exactIndex >= 0) {
-        return exactIndex;
-    }
-
-    return headers.findIndex((header) => {
-        const normalizedHeader = normalized(header);
-
-        if (normalizedHeader === '') {
-            return false;
-        }
-
-        return candidates.some(
-            (candidate) =>
-                normalizedHeader.includes(candidate) ||
-                candidate.includes(normalizedHeader),
-        );
-    });
-}
-
-function mappedColumnIndex(value: string | undefined): number | null {
-    if (value === undefined || value === '') {
-        return null;
-    }
-
-    const columnIndex = Number(value);
-
-    return Number.isInteger(columnIndex) && columnIndex >= 0
-        ? columnIndex
-        : null;
-}
-
-function hasMissingRequiredFields(
-    rows: Array<Record<string, string>>,
-    fields: SpreadsheetField[],
-): boolean {
-    return fields
-        .filter((field) => field.required)
-        .some((field) =>
-            rows.some((row) => (row[field.key] ?? '').trim() === ''),
-        );
-}
-
-function importErrorMessages(
-    errors: Record<string, string>,
-    fields: SpreadsheetField[],
-    emailExample: string,
-    rowOffset: number,
-): string[] {
-    const generalErrors: string[] = [];
-    const rowErrors = new Map<string, { rows: number[]; message: string }>();
-
-    Object.entries(errors).forEach(([key, message]) => {
-        const rowFieldMatch = key.match(/^rows\.(\d+)\.([^.]+)$/);
-
-        if (!rowFieldMatch) {
-            generalErrors.push(importGeneralErrorMessage(key, message, fields));
-
-            return;
-        }
-
-        const rowNumber = rowOffset + Number(rowFieldMatch[1]);
-        const fieldKey = rowFieldMatch[2];
-        const fieldLabel = fieldLabelFor(fields, fieldKey);
-        const friendlyMessage = importRowErrorMessage(
-            fieldKey,
-            fieldLabel,
-            message,
-            emailExample,
-        );
-        const group = rowErrors.get(friendlyMessage) ?? {
-            rows: [],
-            message: friendlyMessage,
-        };
-
-        group.rows.push(rowNumber);
-        rowErrors.set(friendlyMessage, group);
-    });
-
-    return [
-        ...generalErrors,
-        ...Array.from(rowErrors.values()).map(
-            (group) => `${formatRows(group.rows)}: ${group.message}`,
-        ),
-    ];
-}
-
-function importGeneralErrorMessage(
-    key: string,
-    message: string,
-    fields: SpreadsheetField[],
-): string {
-    const normalizedMessage = message.toLowerCase();
-
-    if (key === 'rows') {
-        const maxRowsMatch = message.match(/more than (\d+) items/i);
-
-        if (maxRowsMatch) {
-            return `This batch has more than ${maxRowsMatch[1]} records. Import the batch shown on this page, then continue with the next batch.`;
-        }
-
-        if (
-            normalizedMessage.includes('required') ||
-            normalizedMessage.includes('at least')
-        ) {
-            return 'Choose a spreadsheet with at least one row to import.';
-        }
-
-        return friendlyRawMessage(message, 'spreadsheet');
-    }
-
-    if (key === 'file_name') {
-        return 'The file name is too long. Rename the file and try again.';
-    }
-
-    return friendlyRawMessage(message, fieldLabelFor(fields, key));
-}
-
-function importRowErrorMessage(
-    fieldKey: string,
-    fieldLabel: string,
-    message: string,
-    emailExample: string,
-): string {
-    const normalizedMessage = message.toLowerCase();
-
-    if (normalizedMessage.includes('valid email address')) {
-        return `${fieldLabel} is not valid. Use an email like ${emailExample}.`;
-    }
-
-    if (normalizedMessage.includes('required')) {
-        return `${fieldLabel} is missing. ${missingFieldInstruction(fieldKey)}`;
-    }
-
-    if (
-        normalizedMessage.includes('must not be greater than') ||
-        normalizedMessage.includes('may not be greater than')
-    ) {
-        return `${fieldLabel} is too long. Shorten it and try again.`;
-    }
-
-    if (normalizedMessage.includes('no department in this faculty matches')) {
-        return 'Department was not found in your faculty. Use the department abbreviation or full department name.';
-    }
-
-    if (normalizedMessage.includes('belongs to a student account')) {
-        return 'Email belongs to a student account. Use a staff email address instead.';
-    }
-
-    if (normalizedMessage.includes('staff member is not in this faculty')) {
-        return 'Staff member is not in this faculty.';
-    }
-
-    if (normalizedMessage.includes('staff member is already')) {
-        return message;
-    }
-
-    if (
-        normalizedMessage.includes(
-            'full name is required when importing a new staff account',
-        )
-    ) {
-        return "Full Name is required for a new staff account. Add the staff member's full name.";
-    }
-
-    return friendlyRawMessage(message, fieldLabel);
-}
-
-function fieldLabelFor(fields: SpreadsheetField[], key: string): string {
-    return fields.find((field) => field.key === key)?.label ?? key;
-}
-
-function missingFieldInstruction(fieldKey: string): string {
-    if (fieldKey === 'department') {
-        return 'Add a department abbreviation or full department name.';
-    }
-
-    if (fieldKey === 'name') {
-        return "Add the staff member's full name.";
-    }
-
-    if (fieldKey === 'email') {
-        return "Add the staff member's email address.";
-    }
-
-    return 'Add the missing value.';
-}
-
-function friendlyRawMessage(message: string, fieldLabel: string): string {
-    const cleanedMessage = message
-        .replace(/^The rows\.\d+\.[a-zA-Z_]+ field /i, '')
-        .replace(/^The rows field /i, '')
-        .replace(/^The [^.]+ field /i, '')
-        .replace(/rows\.\d+\.[a-zA-Z_]+/gi, fieldLabel.toLowerCase())
-        .replace(/rows/gi, 'spreadsheet rows')
-        .replace(/\.$/, '');
-
-    return `${fieldLabel} ${cleanedMessage}.`;
-}
-
-function formatRows(rows: number[]): string {
-    const uniqueRows = [...new Set(rows)].sort((left, right) => left - right);
-
-    if (uniqueRows.length === 1) {
-        return `Row ${uniqueRows[0]}`;
-    }
-
-    return `Rows ${formatList(uniqueRows.map(String))}`;
-}
-
-function batchSizes(totalRows: number, batchSize: number): number[] {
-    const sizes: number[] = [];
-
-    for (let remaining = totalRows; remaining > 0; remaining -= batchSize) {
-        sizes.push(Math.min(batchSize, remaining));
-    }
-
-    return sizes;
-}
-
-function formatList(values: string[]): string {
-    if (values.length <= 2) {
-        return values.join(' and ');
-    }
-
-    return `${values.slice(0, -1).join(', ')}, and ${values.at(-1)}`;
 }

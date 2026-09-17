@@ -57,14 +57,6 @@ class StudentProfile extends Model
     }
 
     /**
-     * @return HasMany<StudentSemesterResult, $this>
-     */
-    public function semesterResults(): HasMany
-    {
-        return $this->hasMany(StudentSemesterResult::class);
-    }
-
-    /**
      * @return HasMany<StudentDueAssignment, $this>
      */
     public function dueAssignments(): HasMany

@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Dates each semester inside a school session and controls its course-registration window.
+        // Dates each semester inside an academic session and controls its course-registration window.
         Schema::create('academic_session_semesters', function (Blueprint $table) {
             $table->id();
             $table->foreignId('academic_session_id')->constrained()->cascadeOnDelete();

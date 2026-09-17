@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\AcademicSession;
 use App\Models\AcademicYear;
 use App\Models\AcademicYearSemester;
 use App\Models\Semester;
@@ -45,10 +44,6 @@ class AcademicStructureSeeder extends Seeder
                         ]);
                     });
             });
-
-        AcademicSession::query()
-            ->with('semesterInstances')
-            ->each(fn (AcademicSession $academicSession) => $academicSession->syncDefaultSemesterInstances());
     }
 
     /**

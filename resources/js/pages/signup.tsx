@@ -12,7 +12,9 @@ export default function SignupPage({
     activation: SignupActivation | null;
 }) {
     const title =
-        accountType === 'student' ? 'Student account' : 'Course adviser account';
+        accountType === 'student'
+            ? 'Student account'
+            : 'Course adviser account';
 
     return (
         <>

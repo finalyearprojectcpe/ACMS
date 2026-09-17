@@ -1,20 +1,15 @@
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import type { DashboardStaffCourseOffering } from '@/types';
+import type { DashboardAdviserCourseOffering } from '@/types';
 
-type CourseCategory = DashboardStaffCourseOffering['category'];
+type CourseCategory = DashboardAdviserCourseOffering['category'];
 
 const courseCategoryDetails: Record<
     CourseCategory,
     { label: string; className: string }
 > = {
-    faculty: {
-        label: 'Faculty Course',
-        className:
-            'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-400/30 dark:bg-indigo-400/10 dark:text-indigo-300',
-    },
-    departmental: {
-        label: 'Departmental Course',
+    normal: {
+        label: 'Normal Course',
         className:
             'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-300',
     },

@@ -1,9 +1,15 @@
 <?php
 
+use App\Http\Controllers\AcademicSetupController;
+use App\Http\Controllers\AdviserAccountController;
+use App\Http\Controllers\AdviserStudentController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\Auth\RegisteredUserController;
+use App\Http\Controllers\CourseOfferingController;
+use App\Http\Controllers\CourseRegistrationController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DueController;
 use App\Http\Controllers\ReceiptVerificationController;
 use Illuminate\Support\Facades\Route;
 
@@ -23,7 +29,7 @@ Route::middleware('guest')->group(function (): void {
     Route::post('/signup/adviser', [RegisteredUserController::class, 'storeAdvisor'])->middleware('throttle:5,1')->name('signup.advisor.store');
 });
 
-Route::post('/paystack/webhook', [DashboardController::class, 'handlePaystackWebhook'])->name('paystack.webhook');
+Route::post('/paystack/webhook', [DueController::class, 'webhook'])->name('paystack.webhook');
 Route::get('/receipts/{paystackTransactionId}/verify', [ReceiptVerificationController::class, 'show'])
     ->whereNumber('paystackTransactionId')
     ->name('receipts.verify');
@@ -36,13 +42,10 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/dashboard', [DashboardController::class, 'home'])->name('dashboard');
 
     Route::get('/dashboard/students/create', [DashboardController::class, 'createAdvisedStudent'])->name('dashboard.students.create');
-    Route::post('/dashboard/students', [DashboardController::class, 'storeAdvisedStudent'])->name('dashboard.students.store');
+    Route::post('/dashboard/students', [AdviserStudentController::class, 'store'])->name('dashboard.students.store');
     Route::get('/dashboard/students/import', [DashboardController::class, 'importAdvisedStudents'])->name('dashboard.students.import');
-    Route::post('/dashboard/students/import', [DashboardController::class, 'storeImportedAdvisedStudents'])->name('dashboard.students.import.store');
-    Route::get('/dashboard/students/classlist/export', [DashboardController::class, 'exportStudentClasslist'])->name('dashboard.students.classlist');
-    Route::get('/dashboard/students/{registrationNumber}/statement-of-results', [DashboardController::class, 'downloadStudentStatement'])
-        ->where('registrationNumber', '[^/]+')
-        ->name('dashboard.students.statement');
+    Route::post('/dashboard/students/import', [AdviserStudentController::class, 'import'])->name('dashboard.students.import.store');
+    Route::get('/dashboard/students/classlist/export', [AdviserStudentController::class, 'exportClasslist'])->name('dashboard.students.classlist');
     Route::get('/dashboard/students/{registrationNumber}', [DashboardController::class, 'showStudentProfile'])
         ->where('registrationNumber', '[^/]+')
         ->name('dashboard.students.show');
@@ -51,7 +54,7 @@ Route::middleware('auth')->group(function (): void {
         ->whereIn('level', ['100-level', '200-level', '300-level', '400-level', '500-level', '600-level', '700-level'])
         ->whereIn('semester', ['harmattan', 'rain'])
         ->name('dashboard.courses.create');
-    Route::post('/dashboard/courses/{level}/{semester}', [DashboardController::class, 'storeCourseOffering'])
+    Route::post('/dashboard/courses/{level}/{semester}', [CourseOfferingController::class, 'store'])
         ->whereIn('level', ['100-level', '200-level', '300-level', '400-level', '500-level', '600-level', '700-level'])
         ->whereIn('semester', ['harmattan', 'rain'])
         ->name('dashboard.courses.store');
@@ -60,52 +63,47 @@ Route::middleware('auth')->group(function (): void {
         ->whereIn('semester', ['harmattan', 'rain'])
         ->whereNumber('offering')
         ->name('dashboard.courses.edit');
-    Route::patch('/dashboard/courses/{level}/{semester}/{offering}', [DashboardController::class, 'updateCourseOffering'])
+    Route::patch('/dashboard/courses/{level}/{semester}/{offering}', [CourseOfferingController::class, 'update'])
         ->whereIn('level', ['100-level', '200-level', '300-level', '400-level', '500-level', '600-level', '700-level'])
         ->whereIn('semester', ['harmattan', 'rain'])
         ->whereNumber('offering')
         ->name('dashboard.courses.update');
 
-    Route::get('/dashboard/results/import', [DashboardController::class, 'createResultSheetImport'])->name('dashboard.results.import');
-    Route::post('/dashboard/results/import', [DashboardController::class, 'storeResultSheetImport'])->name('dashboard.results.import.store');
-    Route::get('/dashboard/results/{resultSheet}/export', [DashboardController::class, 'exportResultSheet'])->whereNumber('resultSheet')->name('dashboard.results.export');
-    Route::get('/dashboard/results/{resultSheet}/source-file', [DashboardController::class, 'downloadResultSheetSourceFile'])->whereNumber('resultSheet')->name('dashboard.results.source-file');
-    Route::get('/dashboard/results/{resultSheet}', [DashboardController::class, 'showResultSheet'])->whereNumber('resultSheet')->name('dashboard.results.show');
-
-    Route::post('/dashboard/course-registration', [DashboardController::class, 'storeCourseRegistration'])->name('dashboard.course-registration.store');
+    Route::post('/dashboard/course-registration', [CourseRegistrationController::class, 'store'])->name('dashboard.course-registration.store');
     Route::get('/dashboard/course-registration/{courseRegistration}', [DashboardController::class, 'showCourseRegistrationReview'])->whereNumber('courseRegistration')->name('dashboard.course-registration.show');
-    Route::patch('/dashboard/course-registration/{courseRegistration}/approve', [DashboardController::class, 'approveCourseRegistration'])->whereNumber('courseRegistration')->name('dashboard.course-registration.approve');
-    Route::patch('/dashboard/course-registration/{courseRegistration}/return', [DashboardController::class, 'returnCourseRegistration'])->whereNumber('courseRegistration')->name('dashboard.course-registration.return');
+    Route::patch('/dashboard/course-registration/{courseRegistration}/approve', [CourseRegistrationController::class, 'approve'])->whereNumber('courseRegistration')->name('dashboard.course-registration.approve');
+    Route::patch('/dashboard/course-registration/{courseRegistration}/return', [CourseRegistrationController::class, 'returnForCorrection'])->whereNumber('courseRegistration')->name('dashboard.course-registration.return');
 
-    Route::get('/dashboard/dues/create', [DashboardController::class, 'createStaffDue'])->name('dashboard.dues.create');
-    Route::post('/dashboard/dues', [DashboardController::class, 'storeStaffDue'])->name('dashboard.dues.store');
-    Route::get('/dashboard/dues/{due}/edit', [DashboardController::class, 'editStaffDue'])->whereNumber('due')->name('dashboard.dues.edit');
-    Route::patch('/dashboard/dues/{due}', [DashboardController::class, 'updateStaffDue'])->whereNumber('due')->name('dashboard.dues.update');
-    Route::patch('/dashboard/dues/{due}/archive', [DashboardController::class, 'archiveStaffDue'])->whereNumber('due')->name('dashboard.dues.archive');
-    Route::patch('/dashboard/dues/{due}/restore', [DashboardController::class, 'restoreStaffDue'])->whereNumber('due')->name('dashboard.dues.restore');
-    Route::get('/dashboard/dues/{due}/export', [DashboardController::class, 'exportStaffDue'])->whereNumber('due')->name('dashboard.dues.export');
+    Route::get('/dashboard/dues/create', [DashboardController::class, 'createAdviserDue'])->name('dashboard.dues.create');
+    Route::post('/dashboard/dues', [DueController::class, 'store'])->name('dashboard.dues.store');
+    Route::get('/dashboard/dues/{due}/edit', [DashboardController::class, 'editAdviserDue'])->whereNumber('due')->name('dashboard.dues.edit');
+    Route::patch('/dashboard/dues/{due}', [DueController::class, 'update'])->whereNumber('due')->name('dashboard.dues.update');
+    Route::patch('/dashboard/dues/{due}/archive', [DueController::class, 'archive'])->whereNumber('due')->name('dashboard.dues.archive');
+    Route::patch('/dashboard/dues/{due}/restore', [DueController::class, 'restore'])->whereNumber('due')->name('dashboard.dues.restore');
+    Route::get('/dashboard/dues/{due}/export', [DueController::class, 'export'])->whereNumber('due')->name('dashboard.dues.export');
     Route::get('/dashboard/dues/{due}/assignments/{studentDueAssignment}/waive', [DashboardController::class, 'createStudentDueWaiver'])->whereNumber('due')->whereNumber('studentDueAssignment')->name('dashboard.dues.assignments.waive.create');
-    Route::patch('/dashboard/dues/{due}/assignments/{studentDueAssignment}/waive', [DashboardController::class, 'waiveStudentDue'])->whereNumber('due')->whereNumber('studentDueAssignment')->name('dashboard.dues.assignments.waive');
-    Route::patch('/dashboard/dues/{due}/assignments/{studentDueAssignment}/restore', [DashboardController::class, 'restoreStudentDue'])->whereNumber('due')->whereNumber('studentDueAssignment')->name('dashboard.dues.assignments.restore');
-    Route::get('/dashboard/dues/{due}', [DashboardController::class, 'showStaffDue'])->whereNumber('due')->name('dashboard.dues.show');
+    Route::patch('/dashboard/dues/{due}/assignments/{studentDueAssignment}/waive', [DueController::class, 'waive'])->whereNumber('due')->whereNumber('studentDueAssignment')->name('dashboard.dues.assignments.waive');
+    Route::patch('/dashboard/dues/{due}/assignments/{studentDueAssignment}/restore', [DueController::class, 'restoreAssignment'])->whereNumber('due')->whereNumber('studentDueAssignment')->name('dashboard.dues.assignments.restore');
+    Route::get('/dashboard/dues/{due}', [DashboardController::class, 'showAdviserDue'])->whereNumber('due')->name('dashboard.dues.show');
 
-    Route::post('/dashboard/dues/assignments/{studentDueAssignment}/pay', [DashboardController::class, 'startDuePayment'])->whereNumber('studentDueAssignment')->name('dashboard.dues.payments.store');
-    Route::get('/dashboard/dues/payments/{duePayment}/callback', [DashboardController::class, 'handleDuePaymentCallback'])->whereNumber('duePayment')->name('dashboard.dues.payments.callback');
-    Route::get('/dashboard/dues/payments/{paystackTransactionId}/receipt', [DashboardController::class, 'downloadDuePaymentReceipt'])->whereNumber('paystackTransactionId')->name('dashboard.dues.payments.receipt');
-    Route::post('/dashboard/dues/payments/{paystackTransactionId}/receipt/retry', [DashboardController::class, 'retryDuePaymentReceipt'])->whereNumber('paystackTransactionId')->name('dashboard.dues.payments.receipt.retry');
-    Route::post('/dashboard/dues/payments/{paystackTransactionId}/receipt/email', [DashboardController::class, 'resendDuePaymentReceiptEmail'])->whereNumber('paystackTransactionId')->name('dashboard.dues.payments.receipt.email');
+    Route::post('/dashboard/dues/assignments/{studentDueAssignment}/pay', [DueController::class, 'startPayment'])->whereNumber('studentDueAssignment')->name('dashboard.dues.payments.store');
+    Route::get('/dashboard/dues/payments/{duePayment}/callback', [DueController::class, 'callback'])->whereNumber('duePayment')->name('dashboard.dues.payments.callback');
+    Route::get('/dashboard/dues/payments/{paystackTransactionId}/receipt', [DueController::class, 'downloadReceipt'])->whereNumber('paystackTransactionId')->name('dashboard.dues.payments.receipt');
+    Route::post('/dashboard/dues/payments/{paystackTransactionId}/receipt/retry', [DueController::class, 'retryReceipt'])->whereNumber('paystackTransactionId')->name('dashboard.dues.payments.receipt.retry');
+    Route::post('/dashboard/dues/payments/{paystackTransactionId}/receipt/email', [DueController::class, 'resendReceiptEmail'])->whereNumber('paystackTransactionId')->name('dashboard.dues.payments.receipt.email');
 
-    Route::get('/dashboard/payment-settings/create', [DashboardController::class, 'createStaffPaymentAccount'])->name('dashboard.payment-settings.create');
-    Route::post('/dashboard/payment-settings', [DashboardController::class, 'storeStaffPaymentAccount'])->name('dashboard.payment-settings.store');
-    Route::patch('/dashboard/profile-settings/password', [DashboardController::class, 'updateStaffPassword'])->name('dashboard.profile-settings.password.update');
-    Route::patch('/dashboard/profile-settings/photo', [DashboardController::class, 'updateProfilePhoto'])->name('dashboard.profile-settings.photo.update');
-    Route::patch('/dashboard/profile-settings', [DashboardController::class, 'updateStudentProfile'])->name('dashboard.profile-settings.update');
+    Route::get('/dashboard/payment-settings/create', [DashboardController::class, 'createAdviserPaymentAccount'])->name('dashboard.payment-settings.create');
+    Route::post('/dashboard/payment-settings', [AdviserAccountController::class, 'storePaymentAccount'])->name('dashboard.payment-settings.store');
+    Route::patch('/dashboard/profile-settings/password', [AdviserAccountController::class, 'updatePassword'])->name('dashboard.profile-settings.password.update');
+    Route::patch('/dashboard/profile-settings/photo', [AdviserAccountController::class, 'updateProfilePhoto'])->name('dashboard.profile-settings.photo.update');
+    Route::patch('/dashboard/profile-settings', [AdviserAccountController::class, 'updateStudentProfile'])->name('dashboard.profile-settings.update');
+    Route::post('/dashboard/profile-settings/academic-sessions', [AcademicSetupController::class, 'storeSession'])->name('dashboard.profile-settings.academic-sessions.store');
+    Route::patch('/dashboard/profile-settings/academic-sessions/{academicSession}', [AcademicSetupController::class, 'updateSession'])->whereNumber('academicSession')->name('dashboard.profile-settings.academic-sessions.update');
+    Route::post('/dashboard/profile-settings/student-sets', [AcademicSetupController::class, 'storeStudentSet'])->name('dashboard.profile-settings.student-sets.store');
+    Route::patch('/dashboard/profile-settings/student-sets/{studentSet}', [AcademicSetupController::class, 'updateStudentSet'])->whereNumber('studentSet')->name('dashboard.profile-settings.student-sets.update');
 
-    Route::get('/dashboard/results/{level}', [DashboardController::class, 'level'])
-        ->whereIn('level', ['100-level', '200-level', '300-level', '400-level', '500-level', '600-level', '700-level'])
-        ->name('dashboard.level');
     Route::get('/dashboard/{section}', [DashboardController::class, 'section'])
-        ->whereIn('section', ['students', 'courses', 'result-management', 'course-registration', 'dues', 'payment-settings', 'results', 'profile-settings'])
+        ->whereIn('section', ['students', 'courses', 'course-registration', 'dues', 'payment-settings', 'profile-settings'])
         ->name('dashboard.section');
     Route::redirect('/dashboard/profile', '/dashboard/profile-settings');
     Route::redirect('/dashboard/course-schedules', '/dashboard/course-registration');

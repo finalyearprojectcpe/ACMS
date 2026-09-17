@@ -46,7 +46,7 @@ class DuePaymentService
                 ? PaymentAccount::currentFor($advisorProfile)
                 : null;
 
-            if (! $paymentAccount instanceof PaymentAccount) {
+            if (! ($paymentAccount instanceof PaymentAccount)) {
                 throw new PaystackException('This due does not have a usable payout account.');
             }
 

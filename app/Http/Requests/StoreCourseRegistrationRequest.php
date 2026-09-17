@@ -3,7 +3,6 @@
 namespace App\Http\Requests;
 
 use App\AccountType;
-use App\Models\CourseRegistrationItem;
 use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -34,15 +33,6 @@ class StoreCourseRegistrationRequest extends FormRequest
             'action' => ['required', Rule::in(['save', 'submit'])],
             'items' => ['required', 'array', 'min:1', 'max:24'],
             'items.*.course_offering_id' => ['required', 'integer', 'distinct', 'exists:course_offerings,id'],
-            'items.*.source' => [
-                'required',
-                Rule::in([
-                    CourseRegistrationItem::SourceCurrentSet,
-                    CourseRegistrationItem::SourceCarryover,
-                    CourseRegistrationItem::SourceOutstandingRequirement,
-                    CourseRegistrationItem::SourceElective,
-                ]),
-            ],
         ];
     }
 

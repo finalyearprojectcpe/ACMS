@@ -35,7 +35,7 @@ class PaystackService
             throw new RuntimeException('This student needs an email address before payment can start.');
         }
 
-        if (! $paymentAccount instanceof PaymentAccount || ! $paymentAccount->isActive()) {
+        if (! ($paymentAccount instanceof PaymentAccount) || ! $paymentAccount->isActive()) {
             throw new RuntimeException('This due does not have an active payout account.');
         }
 

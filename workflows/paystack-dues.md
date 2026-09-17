@@ -1,6 +1,6 @@
 # Configure Paystack Dues
 
-Use this workflow when enabling online dues payment for staff advisers.
+Use this workflow when enabling online dues payment for course advisers.
 
 ## Purpose
 
@@ -8,16 +8,16 @@ Course advisers create dues for the student sets they manage. Each adviser conne
 
 ## Paystack Setup
 
-1. Create or select the Paystack business account used by the school platform.
+1. Create or select the Paystack business account used by GradeManager.
 2. Copy the secret key and public key from the Paystack dashboard.
 3. Confirm split payments and subaccounts are available for the Paystack account.
 4. Add the webhook URL in Paystack:
 
 ```txt
-https://<school-domain>/paystack/webhook
+https://<application-domain>/paystack/webhook
 ```
 
-5. Keep the Paystack dashboard available to staff advisers through the Paystack Settings page.
+5. Keep the Paystack dashboard available to course advisers through the Paystack Settings page.
 
 ## Environment Variables
 
@@ -32,7 +32,7 @@ PAYSTACK_PAYMENT_CHANNELS=card,bank,ussd,bank_transfer
 PAYSTACK_SPLIT_FEE_BEARER=subaccount
 ```
 
-`PAYSTACK_SPLIT_FEE_BEARER=subaccount` means Paystack fees are deducted from the adviser payout side instead of the central platform account. Use `account` only when the school deliberately wants the central Paystack account to carry payment fees.
+`PAYSTACK_SPLIT_FEE_BEARER=subaccount` means Paystack fees are deducted from the adviser payout side instead of the central platform account. Use `account` only when the platform deliberately carries payment fees.
 
 ## Adviser Workflow
 
@@ -102,7 +102,7 @@ php artisan test --compact --filter=due
 
 ## Security Notes
 
-- Do not ask staff advisers for Paystack API keys.
+- Do not ask course advisers for Paystack API keys.
 - Do not commit Paystack keys.
 - Store only the adviser bank account number encrypted in the database.
 - Show the connected bank details only to the adviser who owns the payout account.

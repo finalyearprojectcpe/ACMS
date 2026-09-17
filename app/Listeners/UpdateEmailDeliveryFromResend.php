@@ -36,7 +36,7 @@ class UpdateEmailDeliveryFromResend
             ? EmailDelivery::query()->find($deliveryId)
             : null;
 
-        if (! $delivery instanceof EmailDelivery) {
+        if (! ($delivery instanceof EmailDelivery)) {
             return;
         }
 

@@ -2,11 +2,9 @@
 
 namespace Database\Factories;
 
-use App\Models\AcademicSession;
 use App\Models\AcademicYear;
-use App\Models\Department;
-use App\Models\School;
 use App\Models\StudentProfile;
+use App\Models\StudentSet;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -22,13 +20,15 @@ class StudentProfileFactory extends Factory
      */
     public function definition(): array
     {
+        $set = StudentSet::factory()->create();
+
         return [
-            'school_id' => School::factory(),
             'user_id' => User::factory()->student(),
-            'department_id' => Department::factory(),
-            'current_academic_year_id' => AcademicYear::factory(),
-            'entry_academic_session_id' => AcademicSession::factory(),
+            'advisor_profile_id' => $set->advisor_profile_id,
+            'student_set_id' => $set->id,
+            'current_academic_year_id' => AcademicYear::query()->oldest('year_number')->first()?->id,
             'registration_number' => fake()->unique()->numerify('20########'),
+            'status' => 'active',
         ];
     }
 }

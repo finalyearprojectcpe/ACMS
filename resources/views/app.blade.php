@@ -4,18 +4,18 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        <meta name="description" content="GradeManager is a unified platform for students, staff, departmental heads, and faculty to manage academic grades, track dues, and streamline payments in a fast, clear and consistent interface.">
+        <meta name="description" content="GradeManager helps course advisers manage student course registrations, academic records, dues, and payments in one clear workspace.">
         <meta property="og:url" content="{{ request()->url() }}">
         <meta property="og:type" content="website">
         <meta property="og:title" content="GradeManager">
-        <meta property="og:description" content="GradeManager is a unified platform for students, staff, departmental heads, and faculty to manage academic grades, track dues, and streamline payments in a fast, clear and consistent interface.">
+        <meta property="og:description" content="GradeManager helps course advisers manage student course registrations, academic records, dues, and payments in one clear workspace.">
         <meta property="og:image" content="{{ url('/ogimage.jpg') }}">
 
         <meta name="twitter:card" content="summary_large_image">
         <meta property="twitter:domain" content="{{ request()->getHost() }}">
         <meta property="twitter:url" content="{{ request()->url() }}">
         <meta name="twitter:title" content="GradeManager">
-        <meta name="twitter:description" content="GradeManager is a unified platform for students, staff, departmental heads, and faculty to manage academic grades, track dues, and streamline payments in a fast, clear and consistent interface.">
+        <meta name="twitter:description" content="GradeManager helps course advisers manage student course registrations, academic records, dues, and payments in one clear workspace.">
         <meta name="twitter:image" content="{{ url('/ogimage.jpg') }}">
 
         <link rel="icon" href="/favicon.ico" sizes="any">

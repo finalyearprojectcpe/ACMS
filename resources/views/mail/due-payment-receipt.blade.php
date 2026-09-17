@@ -13,6 +13,6 @@ Download receipt
 
 The download link is available for seven days. Your receipt remains available from your GradeManager dues page after the link expires.
 
-{{ $schoolName }}<br>
+{{ $institutionName }}<br>
 GradeManager
 </x-mail::message>

@@ -2,8 +2,8 @@
 
 namespace Database\Factories;
 
+use App\Models\AdvisorProfile;
 use App\Models\Course;
-use App\Models\School;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
@@ -25,7 +25,7 @@ class CourseFactory extends Factory
         $title = Str::title(fake()->unique()->words(3, true));
 
         return [
-            'school_id' => School::factory(),
+            'advisor_profile_id' => AdvisorProfile::factory(),
             'code' => $code,
             'title' => $title,
             'slug' => Str::slug("{$code} {$title}"),

@@ -19,7 +19,6 @@ import type {
     DashboardStudentHome,
     DashboardStudentHomeCourse,
     DashboardStudentHomeDue,
-    DashboardStudentHomeResit,
 } from '@/types';
 
 type StudentHomeDashboardProps = {
@@ -36,29 +35,6 @@ export function StudentHomeDashboard({ home }: StudentHomeDashboardProps) {
 
     return (
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-            <div className="grid gap-3 md:grid-cols-3">
-                <MetricBlock
-                    label="CGPA"
-                    value={home.cgpa ?? 'Not available'}
-                    detail="Cumulative grade point average"
-                />
-                <MetricBlock
-                    label="Total Units"
-                    value={home.totalCourseUnits}
-                    detail={
-                        semesterLabel
-                            ? `For ${semesterLabel}`
-                            : 'No active registration period'
-                    }
-                />
-                <MetricBlock
-                    label="Course Adviser"
-                    value={home.courseAdvisor}
-                    detail="Reviews course registration"
-                    valueClassName="text-lg"
-                />
-            </div>
-
             <SolidCard>
                 <CardHeader className="flex flex-row items-center justify-between gap-3 border-b border-border">
                     <CardTitle>
@@ -80,33 +56,38 @@ export function StudentHomeDashboard({ home }: StudentHomeDashboardProps) {
                 </CardContent>
             </SolidCard>
 
-            <div className="grid gap-4 lg:grid-cols-2">
-                <SolidCard>
-                    <CardHeader className="flex flex-row items-center justify-between gap-3 border-b border-border">
-                        <CardTitle>Pending Dues</CardTitle>
-                        <Link
-                            href={dashboardSection({ section: 'dues' })}
-                            className="text-xs font-medium text-link"
-                        >
-                            View dues
-                        </Link>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                        <DueList dues={home.pendingDues} />
-                    </CardContent>
-                </SolidCard>
-
-                <DangerCard>
-                    <CardHeader className="border-b border-red-200 bg-red-50/60 py-4 dark:border-red-500/30 dark:bg-red-950/20">
-                        <CardTitle className="text-red-800 dark:text-red-200">
-                            Pending Carryover Courses
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                        <ResitList resits={home.resits} />
-                    </CardContent>
-                </DangerCard>
+            <div className="grid gap-3 md:grid-cols-2">
+                <MetricBlock
+                    label="Total Units"
+                    value={home.totalCourseUnits}
+                    detail={
+                        semesterLabel
+                            ? `For ${semesterLabel}`
+                            : 'No active registration period'
+                    }
+                />
+                <MetricBlock
+                    label="Course Adviser"
+                    value={home.courseAdvisor}
+                    detail="Reviews course registration"
+                    valueClassName="text-lg"
+                />
             </div>
+
+            <SolidCard>
+                <CardHeader className="flex flex-row items-center justify-between gap-3 border-b border-border">
+                    <CardTitle>Pending Dues</CardTitle>
+                    <Link
+                        href={dashboardSection({ section: 'dues' })}
+                        className="text-xs font-medium text-link"
+                    >
+                        View dues
+                    </Link>
+                </CardHeader>
+                <CardContent className="p-0">
+                    <DueList dues={home.pendingDues} />
+                </CardContent>
+            </SolidCard>
         </div>
     );
 }
@@ -114,14 +95,6 @@ export function StudentHomeDashboard({ home }: StudentHomeDashboardProps) {
 function SolidCard({ children }: { children: ReactNode }) {
     return (
         <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
-            {children}
-        </Card>
-    );
-}
-
-function DangerCard({ children }: { children: ReactNode }) {
-    return (
-        <Card className="border border-red-200 bg-background py-0 shadow-sm ring-1 ring-red-200/80 dark:border-red-500/30 dark:ring-red-500/20">
             {children}
         </Card>
     );
@@ -242,35 +215,6 @@ function DueList({ dues }: { dues: DashboardStudentHomeDue[] }) {
                     >
                         Pay now
                     </Link>
-                </div>
-            ))}
-        </div>
-    );
-}
-
-function ResitList({ resits }: { resits: DashboardStudentHomeResit[] }) {
-    if (resits.length === 0) {
-        return <EmptyLine>No carryover courses.</EmptyLine>;
-    }
-
-    return (
-        <div className="divide-y">
-            {resits.map((resit) => (
-                <div
-                    key={`${resit.code}-${resit.resitWindow}`}
-                    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 py-3 odd:bg-muted/25"
-                >
-                    <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold text-foreground">
-                            {resit.code}
-                        </div>
-                        <div className="truncate text-xs text-muted-foreground">
-                            {resit.title}
-                        </div>
-                    </div>
-                    <div className="text-right text-sm font-medium tabular-nums">
-                        {resit.units} units
-                    </div>
                 </div>
             ))}
         </div>

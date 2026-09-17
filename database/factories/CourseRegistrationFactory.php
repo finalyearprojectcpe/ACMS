@@ -5,9 +5,8 @@ namespace Database\Factories;
 use App\Models\AcademicSession;
 use App\Models\AcademicYearSemester;
 use App\Models\CourseRegistration;
-use App\Models\Department;
-use App\Models\School;
 use App\Models\StudentProfile;
+use App\Models\StudentSet;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -22,20 +21,21 @@ class CourseRegistrationFactory extends Factory
      */
     public function definition(): array
     {
-        $school = School::factory()->create();
-        $department = Department::factory()->create();
+        $set = StudentSet::factory()->create();
+        $studentProfile = StudentProfile::factory()->create([
+            'advisor_profile_id' => $set->advisor_profile_id,
+            'student_set_id' => $set->id,
+        ]);
 
         return [
-            'school_id' => $school->id,
-            'department_id' => $department->id,
-            'student_profile_id' => StudentProfile::factory()->create([
-                'school_id' => $school->id,
-                'department_id' => $department->id,
-            ])->id,
+            'advisor_profile_id' => $set->advisor_profile_id,
+            'student_set_id' => $set->id,
+            'student_profile_id' => $studentProfile->id,
             'academic_session_id' => AcademicSession::factory()->create([
-                'school_id' => $school->id,
+                'advisor_profile_id' => $set->advisor_profile_id,
             ])->id,
             'academic_year_semester_id' => AcademicYearSemester::factory(),
+            'reviewer_advisor_profile_id' => null,
             'status' => CourseRegistration::StatusDraft,
             'feedback_note' => null,
             'submitted_at' => null,

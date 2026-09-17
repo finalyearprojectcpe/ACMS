@@ -52,7 +52,7 @@ class LoginRequest extends FormRequest
     {
         $user = $this->user();
 
-        if (! $user instanceof User) {
+        if (! ($user instanceof User)) {
             return;
         }
 
