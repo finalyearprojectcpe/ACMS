@@ -2,8 +2,6 @@
 
 namespace App\Http\Requests;
 
-use App\AccountType;
-use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -15,11 +13,7 @@ class StoreCourseRegistrationRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        $user = $this->user();
-
-        return $user instanceof User
-            && $user->account_type === AccountType::Student
-            && $user->studentProfile !== null;
+        return $this->user()?->isStudent() === true;
     }
 
     /**

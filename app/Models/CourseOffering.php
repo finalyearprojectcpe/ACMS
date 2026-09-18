@@ -5,6 +5,8 @@ namespace App\Models;
 use App\CourseCategory;
 use Database\Factories\CourseOfferingFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -70,6 +72,24 @@ class CourseOffering extends Model
             'course_offering_id',
             'prerequisite_course_id',
         )->withTimestamps();
+    }
+
+    #[Scope]
+    protected function availableAsPrerequisiteFor(
+        Builder $query,
+        StudentSet $studentSet,
+        AcademicSession $academicSession,
+        AcademicYearSemester $targetSemester,
+    ): void {
+        $query
+            ->whereBelongsTo($studentSet)
+            ->whereNull('archived_at')
+            ->where(function (Builder $query) use ($academicSession, $targetSemester): void {
+                $query->where('academic_session_id', '<', $academicSession->id)
+                    ->orWhere(fn (Builder $query) => $query
+                        ->whereBelongsTo($academicSession)
+                        ->where('academic_year_semester_id', '<', $targetSemester->id));
+            });
     }
 
     /**

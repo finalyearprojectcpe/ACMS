@@ -55,6 +55,18 @@ class User extends Authenticatable
         return $this->hasOne(AdvisorProfile::class);
     }
 
+    public function isAdviser(): bool
+    {
+        return $this->account_type === AccountType::Adviser
+            && $this->advisorProfile !== null;
+    }
+
+    public function isStudent(): bool
+    {
+        return $this->account_type === AccountType::Student
+            && $this->studentProfile !== null;
+    }
+
     public function profilePhotoUrl(): ?string
     {
         if (! is_string($this->profile_photo_path) || $this->profile_photo_path === '') {

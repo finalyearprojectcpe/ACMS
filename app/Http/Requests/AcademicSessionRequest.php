@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests;
 
-use App\AccountType;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -13,7 +12,7 @@ class AcademicSessionRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user()?->account_type === AccountType::Adviser;
+        return $this->user()?->isAdviser() === true;
     }
 
     /**

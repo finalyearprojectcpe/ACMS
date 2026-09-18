@@ -13,8 +13,7 @@ class ImportAdvisedStudentsRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->account_type === \App\AccountType::Adviser
-            && $this->user()?->advisorProfile !== null;
+        return $this->user()?->isAdviser() === true;
     }
 
     /**

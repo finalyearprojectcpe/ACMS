@@ -80,14 +80,7 @@ class CourseDashboardData
         $target = $this->academicContext->academicYearSemester($level, $semester);
         $previous = CourseOffering::query()
             ->with(['course', 'academicYearSemester.academicYear', 'academicYearSemester.semester'])
-            ->where('student_set_id', $set->id)
-            ->whereNull('archived_at')
-            ->where(function ($query) use ($session, $target): void {
-                $query->where('academic_session_id', '<', $session->id)
-                    ->orWhere(fn ($query) => $query
-                        ->where('academic_session_id', $session->id)
-                        ->where('academic_year_semester_id', '<', $target->id));
-            })
+            ->availableAsPrerequisiteFor($set, $session, $target)
             ->get()
             ->unique('course_id')
             ->sortBy(fn (CourseOffering $item): string => sprintf(

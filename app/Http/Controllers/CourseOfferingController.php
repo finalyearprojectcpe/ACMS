@@ -131,15 +131,8 @@ class CourseOfferingController extends Controller
         }
 
         $valid = CourseOffering::query()
-            ->where('student_set_id', $set->id)
+            ->availableAsPrerequisiteFor($set, $session, $target)
             ->whereIn('course_id', $ids)
-            ->whereNull('archived_at')
-            ->where(function ($query) use ($session, $target): void {
-                $query->where('academic_session_id', '<', $session->id)
-                    ->orWhere(fn ($query) => $query
-                        ->where('academic_session_id', $session->id)
-                        ->where('academic_year_semester_id', '<', $target->id));
-            })
             ->pluck('course_id')
             ->unique();
 

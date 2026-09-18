@@ -31,8 +31,7 @@ class DashboardAccess
     {
         $user = $this->user($request);
         abort_unless(
-            $user->account_type === AccountType::Adviser
-                && $user->advisorProfile instanceof AdvisorProfile,
+            $user->isAdviser(),
             403,
         );
 
@@ -43,8 +42,7 @@ class DashboardAccess
     {
         $user = $this->user($request);
         abort_unless(
-            $user->account_type === AccountType::Student
-                && $user->studentProfile instanceof StudentProfile,
+            $user->isStudent(),
             403,
         );
 
@@ -58,7 +56,7 @@ class DashboardAccess
 
     public function advisorFor(User $user): AdvisorProfile
     {
-        $advisor = $user->account_type === AccountType::Adviser
+        $advisor = $user->isAdviser()
             ? $user->advisorProfile
             : $user->studentProfile?->advisorProfile;
         abort_unless($advisor instanceof AdvisorProfile, 404);

@@ -195,13 +195,7 @@ class DueDashboardData
 
     private function dueStudent(StudentDueAssignment $assignment): array
     {
-        $payment = $assignment->latestPayment;
-
-        if ($payment instanceof DuePayment
-            && $payment->receipt_status === null
-            && $payment->paystack_transaction_id !== null) {
-            $payment = $this->receipts->queue($payment);
-        }
+        $payment = $this->queueReceiptWhenNeeded($assignment->latestPayment);
 
         return [
             'id' => (int) $assignment->id,
@@ -251,13 +245,7 @@ class DueDashboardData
 
     private function studentPaidDue(StudentDueAssignment $assignment): array
     {
-        $payment = $assignment->latestPayment;
-
-        if ($payment instanceof DuePayment
-            && $payment->receipt_status === null
-            && $payment->paystack_transaction_id !== null) {
-            $payment = $this->receipts->queue($payment);
-        }
+        $payment = $this->queueReceiptWhenNeeded($assignment->latestPayment);
 
         return [
             'id' => (int) $assignment->id,
@@ -267,6 +255,17 @@ class DueDashboardData
             'paidAt' => $assignment->paid_at?->toFormattedDateString() ?? 'Paid',
             ...$this->receipt($payment),
         ];
+    }
+
+    private function queueReceiptWhenNeeded(?DuePayment $payment): ?DuePayment
+    {
+        if ($payment instanceof DuePayment
+            && $payment->receipt_status === null
+            && $payment->paystack_transaction_id !== null) {
+            return $this->receipts->queue($payment);
+        }
+
+        return $payment;
     }
 
     private function receipt(?DuePayment $payment): array

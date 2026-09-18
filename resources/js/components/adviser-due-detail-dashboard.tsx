@@ -1,11 +1,10 @@
-import { Link, router, usePoll } from '@inertiajs/react';
+import { Link, router } from '@inertiajs/react';
 import {
     RiArchiveLine,
     RiDownload2Line,
     RiEditLine,
     RiHistoryLine,
 } from '@remixicon/react';
-import { useEffect } from 'react';
 
 import {
     createStudentDueWaiver,
@@ -49,6 +48,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useReceiptWorkPolling } from '@/hooks/use-receipt-work-polling';
 import type { DashboardAdviserDueDetail } from '@/types';
 
 export function AdviserDueDetailDashboard({
@@ -64,21 +64,7 @@ export function AdviserDueDetailDashboard({
                 student.receiptEmailStatus ?? '',
             ),
     );
-    const { start: startReceiptPoll, stop: stopReceiptPoll } = usePoll(
-        3000,
-        {},
-        { autoStart: false },
-    );
-
-    useEffect(() => {
-        if (hasReceiptWork) {
-            startReceiptPoll();
-        } else {
-            stopReceiptPoll();
-        }
-
-        return stopReceiptPoll;
-    }, [hasReceiptWork, startReceiptPoll, stopReceiptPoll]);
+    useReceiptWorkPolling(hasReceiptWork);
 
     return (
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">

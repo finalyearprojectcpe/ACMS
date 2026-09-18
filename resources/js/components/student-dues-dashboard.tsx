@@ -1,6 +1,5 @@
-import { Link, usePoll } from '@inertiajs/react';
+import { Link } from '@inertiajs/react';
 import { RiCheckboxCircleFill } from '@remixicon/react';
-import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 
 import { DashboardMetric } from '@/components/dashboard-metric';
@@ -15,6 +14,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useReceiptWorkPolling } from '@/hooks/use-receipt-work-polling';
 import type {
     DashboardStudentDue,
     DashboardStudentDues,
@@ -33,21 +33,7 @@ export function StudentDuesDashboard({ dues }: StudentDuesDashboardProps) {
                 due.receiptEmailStatus ?? '',
             ),
     );
-    const { start: startReceiptPoll, stop: stopReceiptPoll } = usePoll(
-        3000,
-        {},
-        { autoStart: false },
-    );
-
-    useEffect(() => {
-        if (hasReceiptWork) {
-            startReceiptPoll();
-        } else {
-            stopReceiptPoll();
-        }
-
-        return stopReceiptPoll;
-    }, [hasReceiptWork, startReceiptPoll, stopReceiptPoll]);
+    useReceiptWorkPolling(hasReceiptWork);
 
     return (
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
