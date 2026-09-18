@@ -7,7 +7,6 @@ import {
     LevelSemesterRailGroup,
     levelSemesterRailItemClassName,
 } from '@/components/level-semester-rail';
-import { qualifiedSemesterLabel } from '@/components/qualified-semester';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field, FieldLabel } from '@/components/ui/field';
@@ -27,6 +26,13 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import {
+    academicSemesterOrder,
+    qualifiedSemesterLabel,
+    semesterLabel,
+    sessionDisplayName,
+    shortLevelLabel,
+} from '@/lib/academic';
 import type {
     DashboardAcademicSession,
     DashboardLevel,
@@ -453,42 +459,13 @@ function PrerequisiteBadges({
     );
 }
 
-export function sessionDisplayName(
-    session: Pick<DashboardAcademicSession, 'name'> | null | undefined,
-): string {
-    if (!session) {
-        return 'No active session';
-    }
-
-    if (/session$/i.test(session.name)) {
-        return session.name;
-    }
-
-    return `${session.name} Session`;
-}
-
 function compareSemesters(
     first: DashboardAdviserCourseScheduleSemester,
     second: DashboardAdviserCourseScheduleSemester,
 ): number {
-    const order = { harmattan: 0, rain: 1 };
-
     return (
-        (order[first.slug as keyof typeof order] ?? 99) -
-        (order[second.slug as keyof typeof order] ?? 99)
+        academicSemesterOrder(first.slug) - academicSemesterOrder(second.slug)
     );
-}
-
-function shortLevelLabel(level: string): string {
-    return level.replace(/\s*Level$/i, 'L');
-}
-
-function semesterLabel(semester: string): string {
-    if (/semester$/i.test(semester)) {
-        return semester;
-    }
-
-    return `${semester} Semester`;
 }
 
 function plural(count: number, singular: string): string {

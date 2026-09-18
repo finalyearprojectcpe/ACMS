@@ -9,6 +9,7 @@ import {
 import { ActionLink } from '@/components/action-link';
 import { CopyableValue } from '@/components/copyable-value';
 import { CourseCategoryBadge } from '@/components/course-category-badge';
+import { CourseRegistrationStatusBadge } from '@/components/course-registration-status-badge';
 import { PersonCell } from '@/components/person-cell';
 import { QualifiedSemester } from '@/components/qualified-semester';
 import { StudentSetChoiceLabel } from '@/components/student-set-label';
@@ -168,7 +169,9 @@ function RegistrationsTable({
                                 {registration.totalUnits}
                             </TableCell>
                             <TableCell>
-                                <StatusBadge status={registration.status} />
+                                <CourseRegistrationStatusBadge
+                                    status={registration.status}
+                                />
                             </TableCell>
                             <TableCell className="pr-4 text-right">
                                 <ActionLink href={registration.reviewUrl}>
@@ -250,7 +253,7 @@ function RegistrationReview({
                         </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                        <StatusBadge status={review.status} />
+                        <CourseRegistrationStatusBadge status={review.status} />
                         <Badge
                             variant="outline"
                             className="border-border bg-muted/60 text-foreground"
@@ -469,25 +472,4 @@ function groupCoursesByCategory(courses: DashboardCourseRegistrationCourse[]) {
             ),
         }))
         .filter((group) => group.courses.length > 0);
-}
-
-function StatusBadge({ status }: { status: string }) {
-    return (
-        <Badge variant="outline" className={statusBadgeClass(status)}>
-            {status}
-        </Badge>
-    );
-}
-
-function statusBadgeClass(status: string): string {
-    return (
-        {
-            'In review':
-                'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-300',
-            Approved:
-                'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-300',
-            Returned:
-                'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-300',
-        }[status] ?? 'border-border bg-secondary text-secondary-foreground'
-    );
 }

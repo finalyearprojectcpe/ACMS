@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
+import { DashboardMetric } from '@/components/dashboard-metric';
 import { PersonCell } from '@/components/person-cell';
-import { studentSetText } from '@/components/student-set-label';
+import { studentSetListText } from '@/components/student-set-label';
+import { TableEmptyRow } from '@/components/table-empty-row';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     Table,
@@ -20,17 +22,18 @@ type AdviserHomeDashboardProps = {
 };
 
 export function AdviserHomeDashboard({ home }: AdviserHomeDashboardProps) {
-    const assignedSet = assignedSetLabel(home.assignedSets);
+    const assignedSet = studentSetListText(home.assignedSets);
 
     return (
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
             <div className="grid gap-3 sm:grid-cols-2">
-                <MetricBlock
+                <DashboardMetric
                     label="Total Students"
                     value={home.totalStudents}
                     detail={assignedSet}
+                    truncateDetail
                 />
-                <MetricBlock
+                <DashboardMetric
                     label="Maximum Course Units"
                     value={home.maximumCourseUnits}
                     detail="Current semester limit"
@@ -43,37 +46,6 @@ export function AdviserHomeDashboard({ home }: AdviserHomeDashboardProps) {
                 </DashboardCard>
             </div>
         </div>
-    );
-}
-
-function MetricBlock({
-    label,
-    value,
-    detail,
-}: {
-    label: string;
-    value: ReactNode;
-    detail: string;
-}) {
-    return (
-        <Card
-            size="sm"
-            className="border border-border bg-background shadow-sm ring-1 ring-border/70"
-        >
-            <CardHeader>
-                <CardTitle className="text-xs text-muted-foreground">
-                    {label}
-                </CardTitle>
-            </CardHeader>
-            <CardContent>
-                <div className="text-3xl font-semibold tracking-normal tabular-nums">
-                    {value}
-                </div>
-                <div className="mt-1 truncate text-xs text-muted-foreground">
-                    {detail}
-                </div>
-            </CardContent>
-        </Card>
     );
 }
 
@@ -141,38 +113,11 @@ function RecentPaymentsTable({
                         </TableRow>
                     ))
                 ) : (
-                    <EmptyTableRow colSpan={4}>
+                    <TableEmptyRow colSpan={4}>
                         No recent payments.
-                    </EmptyTableRow>
+                    </TableEmptyRow>
                 )}
             </TableBody>
         </Table>
     );
-}
-
-function EmptyTableRow({
-    children,
-    colSpan,
-}: {
-    children: string;
-    colSpan: number;
-}) {
-    return (
-        <TableRow>
-            <TableCell
-                colSpan={colSpan}
-                className="px-4 py-6 text-muted-foreground"
-            >
-                {children}
-            </TableCell>
-        </TableRow>
-    );
-}
-
-function assignedSetLabel(sets: DashboardAdviserHome['assignedSets']): string {
-    if (sets.length === 0) {
-        return 'No assigned set';
-    }
-
-    return sets.map((set) => studentSetText(set)).join(', ');
 }

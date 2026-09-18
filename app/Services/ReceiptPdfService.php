@@ -13,7 +13,10 @@ use LaravelDaily\Invoices\Invoice;
 
 class ReceiptPdfService
 {
-    public function __construct(private readonly ReceiptUrlService $receiptUrls) {}
+    public function __construct(
+        private readonly ReceiptUrlService $receiptUrls,
+        private readonly CurrencyFormatter $currency,
+    ) {}
 
     public function generate(DuePayment $payment): string
     {
@@ -62,7 +65,7 @@ class ReceiptPdfService
             ->filename('receipt-'.$payment->receipt_number)
             ->setCustomData([
                 'payment' => $payment,
-                'amount' => sprintf('NGN %s', number_format($payment->amount_kobo / 100, 2)),
+                'amount' => $this->currency->nairaFromKobo((int) $payment->amount_kobo),
                 'logo' => 'data:image/png;base64,'.base64_encode((string) file_get_contents(public_path('logo.png'))),
                 'qrCode' => $qrCode,
                 'verificationUrl' => $verificationUrl,

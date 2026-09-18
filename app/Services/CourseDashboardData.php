@@ -5,7 +5,6 @@ namespace App\Services;
 use App\CourseCategory;
 use App\Models\AcademicSession;
 use App\Models\AcademicYear;
-use App\Models\AcademicYearSemester;
 use App\Models\AdvisorProfile;
 use App\Models\Course;
 use App\Models\CourseOffering;
@@ -19,7 +18,6 @@ use App\Models\StudentSet;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 
 class CourseDashboardData
 {
@@ -79,7 +77,7 @@ class CourseDashboardData
         Semester $semester,
         ?CourseOffering $offering = null,
     ): array {
-        $target = $this->yearSemester($level, $semester);
+        $target = $this->academicContext->academicYearSemester($level, $semester);
         $previous = CourseOffering::query()
             ->with(['course', 'academicYearSemester.academicYear', 'academicYearSemester.semester'])
             ->where('student_set_id', $set->id)
@@ -135,7 +133,7 @@ class CourseDashboardData
 
     public function studentHome(StudentProfile $student): array
     {
-        $current = $this->currentRegistrationContext($student, required: false);
+        $current = $this->academicContext->registrationContext($student);
         $registration = $current === null ? null : CourseRegistration::query()
             ->with('items')
             ->where('student_profile_id', $student->id)
@@ -174,7 +172,7 @@ class CourseDashboardData
 
     public function studentRegistration(StudentProfile $student): array
     {
-        [$session, $slot] = $this->currentRegistrationContext($student, required: true);
+        [$session, $slot] = $this->academicContext->requireRegistrationContext($student);
         $plan = $this->registrationPlanner->plan($student, $session, $slot);
         $registration = CourseRegistration::query()
             ->with('items')
@@ -257,7 +255,7 @@ class CourseDashboardData
         AcademicYear $level,
         Semester $semester,
     ): array {
-        $slot = $this->yearSemester($level, $semester);
+        $slot = $this->academicContext->academicYearSemester($level, $semester);
         $offerings = CourseOffering::query()
             ->with(['course', 'prerequisiteCourses'])
             ->where('student_set_id', $set->id)
@@ -379,46 +377,5 @@ class CourseDashboardData
     private function categoryLabel(string $category): string
     {
         return CourseCategory::tryFrom($category)?->label() ?? Str::headline($category);
-    }
-
-    /** @return array{0: AcademicSession, 1: AcademicYearSemester}|null */
-    private function currentRegistrationContext(StudentProfile $student, bool $required): ?array
-    {
-        $session = $this->academicContext->currentSession($student->advisorProfile)
-            ?? $student->advisorProfile->academicSessions()->latest('starts_on')->first();
-        $year = $session instanceof AcademicSession
-            ? $this->academicContext->academicYearForStudent($student, $session)
-            : null;
-        $semester = $session instanceof AcademicSession
-            ? $this->academicContext->currentSemesterInstance($session)?->semester
-            : null;
-        $semester ??= Semester::query()->orderBy('sort_order')->first();
-
-        if (! ($session instanceof AcademicSession)
-            || ! ($year instanceof AcademicYear)
-            || ! ($semester instanceof Semester)) {
-            if ($required) {
-                throw ValidationException::withMessages([
-                    'registration' => 'Course registration is not available until the current academic session and semester are configured.',
-                ]);
-            }
-
-            return null;
-        }
-
-        return [
-            $session,
-            $this->yearSemester($year, $semester)->loadMissing(['academicYear', 'semester']),
-        ];
-    }
-
-    private function yearSemester(
-        AcademicYear $year,
-        Semester $semester,
-    ): AcademicYearSemester {
-        return AcademicYearSemester::query()
-            ->whereBelongsTo($year)
-            ->whereBelongsTo($semester)
-            ->firstOrFail();
     }
 }

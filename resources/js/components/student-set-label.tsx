@@ -1,12 +1,16 @@
 import { Badge } from '@/components/ui/badge';
+import { shortLevelLabel } from '@/lib/academic';
 import { cn } from '@/lib/utils';
 import type { DashboardAcademicSession, DashboardLevel } from '@/types';
 
-type StudentSetLabelProps = {
+export type StudentSetTextContext = {
     entrySession: DashboardAcademicSession | null;
     currentLevel: DashboardLevel | null;
     minimumYearsToDegree?: number | null;
     isGraduated?: boolean;
+};
+
+type StudentSetLabelProps = StudentSetTextContext & {
     className?: string;
 };
 
@@ -87,13 +91,17 @@ export function studentSetText({
     currentLevel,
     minimumYearsToDegree,
     isGraduated,
-}: {
-    entrySession: DashboardAcademicSession | null;
-    currentLevel: DashboardLevel | null;
-    minimumYearsToDegree?: number | null;
-    isGraduated?: boolean;
-}): string {
+}: StudentSetTextContext): string {
     return `${studentSetName(entrySession)} · ${studentSetLevelText(currentLevel, minimumYearsToDegree, isGraduated)}`;
+}
+
+export function studentSetListText(
+    sets: StudentSetTextContext[],
+    emptyLabel = 'No assigned set',
+): string {
+    return sets.length === 0
+        ? emptyLabel
+        : sets.map((set) => studentSetText(set)).join(', ');
 }
 
 export function studentSetLevelText(
@@ -116,15 +124,5 @@ export function studentSetLevelText(
         return 'Graduated';
     }
 
-    return shortLevelTitle(currentLevel.title);
-}
-
-function shortLevelTitle(level: string): string {
-    const match = level.match(/^(\d+)00 Level$/);
-
-    if (match) {
-        return `${match[1]}00L`;
-    }
-
-    return level.replace(' Level', 'L');
+    return shortLevelLabel(currentLevel.title);
 }

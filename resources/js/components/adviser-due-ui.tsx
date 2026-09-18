@@ -1,32 +1,4 @@
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { TableCell, TableRow } from '@/components/ui/table';
-
-export function DueMetric({
-    label,
-    value,
-}: {
-    label: string;
-    value: string | number;
-}) {
-    return (
-        <Card
-            size="sm"
-            className="border border-border bg-background shadow-sm ring-1 ring-border/70"
-        >
-            <CardHeader>
-                <CardTitle className="text-xs text-muted-foreground">
-                    {label}
-                </CardTitle>
-            </CardHeader>
-            <CardContent>
-                <div className="text-2xl font-semibold tracking-normal tabular-nums">
-                    {value}
-                </div>
-            </CardContent>
-        </Card>
-    );
-}
 
 export function DueStatusBadge({ status }: { status: string }) {
     const className =
@@ -55,24 +27,5 @@ export function PaymentStatusBadge({ status }: { status: string }) {
         <Badge variant="outline" className={className}>
             {status}
         </Badge>
-    );
-}
-
-export function DueEmptyRow({
-    colSpan,
-    children,
-}: {
-    colSpan: number;
-    children: string;
-}) {
-    return (
-        <TableRow>
-            <TableCell
-                colSpan={colSpan}
-                className="px-4 py-8 text-muted-foreground"
-            >
-                {children}
-            </TableCell>
-        </TableRow>
     );
 }

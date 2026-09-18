@@ -4,11 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\AdviserCourseOfferingRequest;
 use App\Models\AcademicSession;
-use App\Models\AcademicYear;
 use App\Models\AcademicYearSemester;
 use App\Models\Course;
 use App\Models\CourseOffering;
-use App\Models\Semester;
 use App\Models\StudentSet;
 use App\Services\AcademicContextService;
 use App\Services\DashboardAccess;
@@ -30,10 +28,11 @@ class CourseOfferingController extends Controller
     ): RedirectResponse {
         $advisor = $this->access->advisor($request);
         $set = $this->access->selectedStudentSet($request, $advisor);
-        $year = $this->resolveLevel($level, $set);
-        $semesterModel = $this->resolveSemester($semester);
-        $session = $this->requiredSessionForSetYear($set, $year);
-        $slot = $this->yearSemester($year, $semesterModel);
+        $context = $this->academicContext->courseOfferingContext($set, $level, $semester);
+        $year = $context['year'];
+        $semesterModel = $context['semester'];
+        $session = $context['session'];
+        $slot = $context['slot'];
         $validated = $request->validated();
         $course = Course::query()->updateOrCreate(
             ['advisor_profile_id' => $advisor->id, 'code' => $validated['code']],
@@ -77,11 +76,12 @@ class CourseOfferingController extends Controller
     ): RedirectResponse {
         $advisor = $this->access->advisor($request);
         $set = $this->access->studentSet($advisor, (int) $offering->student_set_id);
-        $year = $this->resolveLevel($level, $set);
-        $semesterModel = $this->resolveSemester($semester);
-        $session = $this->requiredSessionForSetYear($set, $year);
-        $slot = $this->yearSemester($year, $semesterModel);
-        $this->ensureOfferingContext($offering, $set, $session, $year, $semesterModel);
+        $context = $this->academicContext->courseOfferingContext($set, $level, $semester);
+        $year = $context['year'];
+        $semesterModel = $context['semester'];
+        $session = $context['session'];
+        $slot = $context['slot'];
+        $this->ensureOfferingContext($offering, $set, $session, $slot);
         $validated = $request->validated();
         $offering->course->forceFill([
             'code' => $validated['code'],
@@ -108,44 +108,6 @@ class CourseOfferingController extends Controller
             'level' => $year->slug,
             'semester' => $semesterModel->slug,
         ])->with('success', 'Course offering updated.');
-    }
-
-    private function resolveLevel(string $slug, StudentSet $set): AcademicYear
-    {
-        return AcademicYear::query()
-            ->where('slug', $slug)
-            ->where('year_number', '<=', $set->minimum_years_to_degree)
-            ->firstOrFail();
-    }
-
-    private function resolveSemester(string $slug): Semester
-    {
-        return Semester::query()->where('slug', $slug)->firstOrFail();
-    }
-
-    private function yearSemester(
-        AcademicYear $year,
-        Semester $semester,
-    ): AcademicYearSemester {
-        return AcademicYearSemester::query()
-            ->whereBelongsTo($year)
-            ->whereBelongsTo($semester)
-            ->firstOrFail();
-    }
-
-    private function requiredSessionForSetYear(
-        StudentSet $set,
-        AcademicYear $year,
-    ): AcademicSession {
-        $session = $this->academicContext->sessionForSetYear($set, $year);
-
-        if (! $session instanceof AcademicSession) {
-            throw ValidationException::withMessages([
-                'session' => 'Create the academic session for this student set and level before continuing.',
-            ]);
-        }
-
-        return $session;
     }
 
     /** @param array<int, int|string> $ids
@@ -198,10 +160,8 @@ class CourseOfferingController extends Controller
         CourseOffering $offering,
         StudentSet $set,
         AcademicSession $session,
-        AcademicYear $year,
-        Semester $semester,
+        AcademicYearSemester $slot,
     ): void {
-        $slot = $this->yearSemester($year, $semester);
         abort_unless(
             $offering->student_set_id === $set->id
                 && $offering->academic_session_id === $session->id

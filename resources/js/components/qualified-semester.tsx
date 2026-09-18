@@ -1,4 +1,7 @@
+import { qualifiedSemesterLabel } from '@/lib/academic';
 import { cn } from '@/lib/utils';
+
+export { qualifiedSemesterLabel } from '@/lib/academic';
 
 type QualifiedSemesterProps = {
     level: string;
@@ -16,23 +19,4 @@ export function QualifiedSemester({
             {qualifiedSemesterLabel(level, semester)}
         </span>
     );
-}
-
-export function qualifiedSemesterLabel(
-    level: string,
-    semester: string,
-): string {
-    return `${shortLevel(level)} ${semesterName(semester)}`;
-}
-
-function shortLevel(level: string): string {
-    return level.replace(/\s*Level$/i, 'L');
-}
-
-function semesterName(semester: string): string {
-    if (/semester$/i.test(semester)) {
-        return semester;
-    }
-
-    return `${semester} Semester`;
 }

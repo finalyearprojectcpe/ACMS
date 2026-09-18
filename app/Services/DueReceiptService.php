@@ -12,6 +12,7 @@ class DueReceiptService
     public function __construct(
         private readonly EmailDeliveryService $emailDelivery,
         private readonly ReceiptUrlService $receiptUrls,
+        private readonly CurrencyFormatter $currency,
     ) {}
 
     public function queue(DuePayment $payment, bool $force = false): DuePayment
@@ -82,7 +83,7 @@ class DueReceiptService
         return $this->emailDelivery->sendDuePaymentReceipt(
             $delivery,
             dueName: $payment->assignment->due->title,
-            amount: sprintf('NGN %s', number_format($payment->amount_kobo / 100, 2)),
+            amount: $this->currency->nairaFromKobo((int) $payment->amount_kobo),
             receiptNumber: (string) $payment->receipt_number,
             downloadUrl: $this->receiptUrls->temporaryDownloadUrl($payment),
             disk: (string) $payment->receipt_disk,

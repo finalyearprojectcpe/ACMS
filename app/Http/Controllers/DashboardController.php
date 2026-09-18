@@ -3,13 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\AccountType;
-use App\Models\AcademicSession;
 use App\Models\AcademicYear;
-use App\Models\AcademicYearSemester;
 use App\Models\CourseOffering;
 use App\Models\CourseRegistration;
 use App\Models\Due;
-use App\Models\Semester;
 use App\Models\StudentDueAssignment;
 use App\Models\StudentProfile;
 use App\Models\StudentSet;
@@ -20,7 +17,6 @@ use App\Services\DashboardAccess;
 use App\Services\DashboardPresenter;
 use App\Services\DueDashboardData;
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response as InertiaResponse;
 
@@ -94,12 +90,15 @@ class DashboardController extends Controller
     {
         $advisor = $this->access->advisor($request);
         $set = $this->access->selectedStudentSet($request, $advisor);
-        $academicYear = $this->resolveLevel($level, $set);
-        $semesterModel = $this->resolveSemester($semester);
-        $session = $this->requiredSessionForSetYear($set, $academicYear);
+        $context = $this->academicContext->courseOfferingContext($set, $level, $semester);
 
         return $this->renderDashboard($request, 'courses', overrides: [
-            'adviserCourseOfferingForm' => $this->courses->offeringForm($set, $session, $academicYear, $semesterModel),
+            'adviserCourseOfferingForm' => $this->courses->offeringForm(
+                $set,
+                $context['session'],
+                $context['year'],
+                $context['semester'],
+            ),
         ]);
     }
 
@@ -111,19 +110,22 @@ class DashboardController extends Controller
     ): InertiaResponse {
         $advisor = $this->access->advisor($request);
         $set = $this->access->studentSet($advisor, (int) $offering->student_set_id);
-        $year = $this->resolveLevel($level, $set);
-        $semesterModel = $this->resolveSemester($semester);
-        $session = $this->requiredSessionForSetYear($set, $year);
-        $slot = $this->yearSemester($year, $semesterModel);
+        $context = $this->academicContext->courseOfferingContext($set, $level, $semester);
         abort_unless(
             (int) $offering->student_set_id === (int) $set->id
-                && (int) $offering->academic_session_id === (int) $session->id
-                && (int) $offering->academic_year_semester_id === (int) $slot->id,
+                && (int) $offering->academic_session_id === (int) $context['session']->id
+                && (int) $offering->academic_year_semester_id === (int) $context['slot']->id,
             404,
         );
 
         return $this->renderDashboard($request, 'courses', overrides: [
-            'adviserCourseOfferingForm' => $this->courses->offeringForm($set, $session, $year, $semesterModel, $offering),
+            'adviserCourseOfferingForm' => $this->courses->offeringForm(
+                $set,
+                $context['session'],
+                $context['year'],
+                $context['semester'],
+                $offering,
+            ),
         ]);
     }
 
@@ -243,33 +245,5 @@ class DashboardController extends Controller
     private function dashboardRole(User $user): string
     {
         return $user->account_type === AccountType::Adviser ? 'adviser' : 'student';
-    }
-
-    private function resolveLevel(string $slug, StudentSet $set): AcademicYear
-    {
-        return AcademicYear::query()->where('slug', $slug)->where('year_number', '<=', $set->minimum_years_to_degree)->firstOrFail();
-    }
-
-    private function resolveSemester(string $slug): Semester
-    {
-        return Semester::query()->where('slug', $slug)->firstOrFail();
-    }
-
-    private function yearSemester(AcademicYear $year, Semester $semester): AcademicYearSemester
-    {
-        return AcademicYearSemester::query()->whereBelongsTo($year)->whereBelongsTo($semester)->firstOrFail();
-    }
-
-    private function requiredSessionForSetYear(StudentSet $set, AcademicYear $year): AcademicSession
-    {
-        $session = $this->academicContext->sessionForSetYear($set, $year);
-
-        if (! ($session instanceof AcademicSession)) {
-            throw ValidationException::withMessages([
-                'session' => 'Create the academic session for this student set and level before continuing.',
-            ]);
-        }
-
-        return $session;
     }
 }

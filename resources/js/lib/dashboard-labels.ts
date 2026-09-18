@@ -1,4 +1,4 @@
-import { studentSetText } from '@/components/student-set-label';
+import { studentSetListText } from '@/components/student-set-label';
 import type {
     DashboardContext,
     DashboardProgramme,
@@ -53,7 +53,7 @@ function adviserSetLabel(
         return null;
     }
 
-    return sets
-        .map((set) => studentSetText({ ...set, minimumYearsToDegree }))
-        .join(', ');
+    return studentSetListText(
+        sets.map((set) => ({ ...set, minimumYearsToDegree })),
+    );
 }

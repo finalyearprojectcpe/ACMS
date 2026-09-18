@@ -4,13 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ReturnCourseRegistrationRequest;
 use App\Http\Requests\StoreCourseRegistrationRequest;
-use App\Models\AcademicSession;
-use App\Models\AcademicYear;
-use App\Models\AcademicYearSemester;
 use App\Models\CourseRegistration;
 use App\Models\CourseRegistrationItem;
-use App\Models\Semester;
-use App\Models\StudentProfile;
 use App\Services\AcademicContextService;
 use App\Services\CourseRegistrationPlanner;
 use App\Services\DashboardAccess;
@@ -31,7 +26,7 @@ class CourseRegistrationController extends Controller
         CourseRegistrationPlanner $planner,
     ): RedirectResponse {
         $student = $this->access->student($request);
-        [$session, $slot] = $this->currentRegistrationContext($student);
+        [$session, $slot] = $this->academicContext->requireRegistrationContext($student);
         $validated = $request->validated();
         $selected = collect($planner->selectedOptionsFromPayload(
             $planner->plan($student, $session, $slot),
@@ -152,35 +147,5 @@ class CourseRegistrationController extends Controller
 
         return to_route('dashboard.course-registration.show', ['courseRegistration' => $courseRegistration])
             ->with('success', 'Course registration returned to the student.');
-    }
-
-    /** @return array{0: AcademicSession, 1: AcademicYearSemester} */
-    private function currentRegistrationContext(StudentProfile $student): array
-    {
-        $session = $this->academicContext->currentSession($student->advisorProfile)
-            ?? $student->advisorProfile->academicSessions()->latest('starts_on')->first();
-        $year = $session instanceof AcademicSession
-            ? $this->academicContext->academicYearForStudent($student, $session)
-            : null;
-        $semester = $session instanceof AcademicSession
-            ? $this->academicContext->currentSemesterInstance($session)?->semester
-            : null;
-        $semester ??= Semester::query()->orderBy('sort_order')->first();
-
-        if (! ($session instanceof AcademicSession)
-            || ! ($year instanceof AcademicYear)
-            || ! ($semester instanceof Semester)) {
-            throw ValidationException::withMessages([
-                'registration' => 'Course registration is not available until the current academic session and semester are configured.',
-            ]);
-        }
-
-        $slot = AcademicYearSemester::query()
-            ->whereBelongsTo($year)
-            ->whereBelongsTo($semester)
-            ->firstOrFail()
-            ->loadMissing(['academicYear', 'semester']);
-
-        return [$session, $slot];
     }
 }

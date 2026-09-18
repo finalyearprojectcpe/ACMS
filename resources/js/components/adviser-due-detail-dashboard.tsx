@@ -19,14 +19,14 @@ import {
 } from '@/actions/App/Http/Controllers/DueController';
 import { ActionLink } from '@/components/action-link';
 import {
-    DueEmptyRow,
-    DueMetric,
     DueStatusBadge,
     PaymentStatusBadge,
 } from '@/components/adviser-due-ui';
 import { CopyableValue } from '@/components/copyable-value';
+import { DashboardMetric } from '@/components/dashboard-metric';
 import { PersonCell } from '@/components/person-cell';
 import { ReceiptAction } from '@/components/receipt-action';
+import { TableEmptyRow } from '@/components/table-empty-row';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -114,16 +114,30 @@ export function AdviserDueDetailDashboard({
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                <DueMetric label="Paid" value={detail.due.paidCount} />
-                <DueMetric label="Pending" value={detail.due.pendingCount} />
-                <DueMetric label="Waived" value={detail.due.waivedCount} />
-                <DueMetric
+                <DashboardMetric
+                    label="Paid"
+                    value={detail.due.paidCount}
+                    valueClassName="text-2xl"
+                />
+                <DashboardMetric
+                    label="Pending"
+                    value={detail.due.pendingCount}
+                    valueClassName="text-2xl"
+                />
+                <DashboardMetric
+                    label="Waived"
+                    value={detail.due.waivedCount}
+                    valueClassName="text-2xl"
+                />
+                <DashboardMetric
                     label="Collected"
                     value={detail.due.collectedAmount}
+                    valueClassName="text-2xl"
                 />
-                <DueMetric
+                <DashboardMetric
                     label="Outstanding"
                     value={detail.due.outstandingAmount}
+                    valueClassName="text-2xl"
                 />
             </div>
 
@@ -204,9 +218,9 @@ export function AdviserDueDetailDashboard({
                                         </TableRow>
                                     ))
                                 ) : (
-                                    <DueEmptyRow colSpan={5}>
+                                    <TableEmptyRow colSpan={5} className="py-8">
                                         No students assigned yet.
-                                    </DueEmptyRow>
+                                    </TableEmptyRow>
                                 )}
                             </TableBody>
                         </Table>

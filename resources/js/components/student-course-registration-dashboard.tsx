@@ -9,6 +9,7 @@ import { useMemo, useState } from 'react';
 
 import { store as storeCourseRegistration } from '@/actions/App/Http/Controllers/CourseRegistrationController';
 import { CourseCategoryBadge } from '@/components/course-category-badge';
+import { CourseRegistrationStatusBadge } from '@/components/course-registration-status-badge';
 import { QualifiedSemester } from '@/components/qualified-semester';
 import {
     AlertDialog,
@@ -21,7 +22,6 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -219,7 +219,9 @@ export function StudentCourseRegistrationDashboard({
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <StatusBadge status={registration.reviewStatus} />
+                        <CourseRegistrationStatusBadge
+                            status={registration.reviewStatus}
+                        />
                         <span className="text-sm text-muted-foreground">
                             <span className="font-semibold text-foreground tabular-nums">
                                 {selectedUnits}
@@ -401,7 +403,9 @@ function PreviousRegistrations({
                                         {registration.semester.session} Session
                                     </div>
                                 </div>
-                                <StatusBadge status={registration.status} />
+                                <CourseRegistrationStatusBadge
+                                    status={registration.status}
+                                />
                             </CardHeader>
                             <CardContent className="p-0">
                                 <ReadonlyCoursesTable
@@ -460,14 +464,6 @@ function ReadonlyCoursesTable({
     );
 }
 
-function StatusBadge({ status }: { status: string }) {
-    return (
-        <Badge variant="outline" className={statusBadgeClass(status)}>
-            {status}
-        </Badge>
-    );
-}
-
 function Notice({
     children,
     title,
@@ -489,20 +485,6 @@ function Notice({
             {title ? <div className="font-semibold">{title}</div> : null}
             <div className={title ? 'mt-1' : undefined}>{children}</div>
         </div>
-    );
-}
-
-function statusBadgeClass(status: string): string {
-    return (
-        {
-            'In review':
-                'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-300',
-            Approved:
-                'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-300',
-            Returned:
-                'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-300',
-            Draft: 'border-border bg-secondary text-secondary-foreground',
-        }[status] ?? 'border-border bg-secondary text-secondary-foreground'
     );
 }
 

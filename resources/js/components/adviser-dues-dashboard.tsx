@@ -6,11 +6,9 @@ import {
 } from '@remixicon/react';
 
 import { ActionLink } from '@/components/action-link';
-import {
-    DueEmptyRow,
-    DueMetric,
-    DueStatusBadge,
-} from '@/components/adviser-due-ui';
+import { DueStatusBadge } from '@/components/adviser-due-ui';
+import { DashboardMetric } from '@/components/dashboard-metric';
+import { TableEmptyRow } from '@/components/table-empty-row';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -65,21 +63,25 @@ export function AdviserDuesDashboard({ dues }: { dues: DashboardAdviserDues }) {
             ) : null}
 
             <div className="grid gap-3 md:grid-cols-4">
-                <DueMetric
+                <DashboardMetric
                     label="Expected"
                     value={dues.metrics.expectedAmount}
+                    valueClassName="text-2xl"
                 />
-                <DueMetric
+                <DashboardMetric
                     label="Collected"
                     value={dues.metrics.collectedAmount}
+                    valueClassName="text-2xl"
                 />
-                <DueMetric
+                <DashboardMetric
                     label="Outstanding"
                     value={dues.metrics.outstandingAmount}
+                    valueClassName="text-2xl"
                 />
-                <DueMetric
+                <DashboardMetric
                     label="Students Owing"
                     value={dues.metrics.studentsOwing}
+                    valueClassName="text-2xl"
                 />
             </div>
 
@@ -167,9 +169,9 @@ export function AdviserDuesDashboard({ dues }: { dues: DashboardAdviserDues }) {
                                         </TableRow>
                                     ))
                                 ) : (
-                                    <DueEmptyRow colSpan={6}>
+                                    <TableEmptyRow colSpan={6} className="py-8">
                                         No dues created yet.
-                                    </DueEmptyRow>
+                                    </TableEmptyRow>
                                 )}
                             </TableBody>
                         </Table>

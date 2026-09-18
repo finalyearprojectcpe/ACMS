@@ -2,6 +2,7 @@ import { Link } from '@inertiajs/react';
 import type { ReactNode } from 'react';
 
 import { section as dashboardSection } from '@/actions/App/Http/Controllers/DashboardController';
+import { DashboardMetric } from '@/components/dashboard-metric';
 import {
     QualifiedSemester,
     qualifiedSemesterLabel,
@@ -57,7 +58,7 @@ export function StudentHomeDashboard({ home }: StudentHomeDashboardProps) {
             </SolidCard>
 
             <div className="grid gap-3 md:grid-cols-2">
-                <MetricBlock
+                <DashboardMetric
                     label="Total Units"
                     value={home.totalCourseUnits}
                     detail={
@@ -66,7 +67,7 @@ export function StudentHomeDashboard({ home }: StudentHomeDashboardProps) {
                             : 'No active registration period'
                     }
                 />
-                <MetricBlock
+                <DashboardMetric
                     label="Course Adviser"
                     value={home.courseAdvisor}
                     detail="Reviews course registration"
@@ -96,44 +97,6 @@ function SolidCard({ children }: { children: ReactNode }) {
     return (
         <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
             {children}
-        </Card>
-    );
-}
-
-function MetricBlock({
-    label,
-    value,
-    detail,
-    valueClassName,
-}: {
-    label: string;
-    value: ReactNode;
-    detail: string;
-    valueClassName?: string;
-}) {
-    return (
-        <Card
-            size="sm"
-            className="border border-border bg-background shadow-sm ring-1 ring-border/70"
-        >
-            <CardHeader>
-                <CardTitle className="text-xs text-muted-foreground">
-                    {label}
-                </CardTitle>
-            </CardHeader>
-            <CardContent>
-                <div
-                    className={[
-                        'font-semibold tracking-normal tabular-nums',
-                        valueClassName ?? 'text-3xl',
-                    ].join(' ')}
-                >
-                    {value}
-                </div>
-                <div className="mt-1 text-xs text-muted-foreground">
-                    {detail}
-                </div>
-            </CardContent>
         </Card>
     );
 }

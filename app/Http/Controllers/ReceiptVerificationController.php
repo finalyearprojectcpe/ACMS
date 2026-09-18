@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\DuePayment;
+use App\Services\CurrencyFormatter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -11,6 +12,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReceiptVerificationController extends Controller
 {
+    public function __construct(private readonly CurrencyFormatter $currency) {}
+
     public function show(Request $request, string $paystackTransactionId): InertiaResponse
     {
         if (! $request->hasValidSignature(absolute: false)) {
@@ -29,7 +32,7 @@ class ReceiptVerificationController extends Controller
                 'transactionId' => $payment->paystack_transaction_id,
                 'institution' => $payment->advisorProfile->institution_name ?: config('app.name'),
                 'due' => $payment->assignment->due->title,
-                'amount' => sprintf('NGN %s', number_format($payment->amount_kobo / 100, 2)),
+                'amount' => $this->currency->nairaFromKobo((int) $payment->amount_kobo),
                 'paidAt' => $payment->paid_at?->format('F j, Y \a\t g:i A'),
                 'registrationNumber' => $this->maskRegistrationNumber($registrationNumber),
             ],

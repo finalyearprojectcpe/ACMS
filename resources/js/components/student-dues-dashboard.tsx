@@ -3,7 +3,9 @@ import { RiCheckboxCircleFill } from '@remixicon/react';
 import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 
+import { DashboardMetric } from '@/components/dashboard-metric';
 import { ReceiptAction } from '@/components/receipt-action';
+import { TableEmptyRow } from '@/components/table-empty-row';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     Table,
@@ -50,12 +52,12 @@ export function StudentDuesDashboard({ dues }: StudentDuesDashboardProps) {
     return (
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
             <div className="grid gap-3 md:grid-cols-2">
-                <SummaryBlock
+                <DashboardMetric
                     label="Paid Amount"
                     value={dues.paidAmount}
                     detail={`${dues.paid.length} completed payments`}
                 />
-                <SummaryBlock
+                <DashboardMetric
                     label="Total Dues"
                     value={dues.totalDues}
                     detail="Pending and paid records"
@@ -70,37 +72,6 @@ export function StudentDuesDashboard({ dues }: StudentDuesDashboardProps) {
                 <PaidDuesTable dues={dues.paid} />
             </DuesCard>
         </div>
-    );
-}
-
-function SummaryBlock({
-    label,
-    value,
-    detail,
-}: {
-    label: string;
-    value: string | number;
-    detail: string;
-}) {
-    return (
-        <Card
-            size="sm"
-            className="border border-border bg-background shadow-sm ring-1 ring-border/70"
-        >
-            <CardHeader>
-                <CardTitle className="text-xs text-muted-foreground">
-                    {label}
-                </CardTitle>
-            </CardHeader>
-            <CardContent>
-                <div className="text-3xl font-semibold tracking-normal tabular-nums">
-                    {value}
-                </div>
-                <div className="mt-1 text-xs text-muted-foreground">
-                    {detail}
-                </div>
-            </CardContent>
-        </Card>
     );
 }
 
@@ -176,7 +147,7 @@ function PendingDuesTable({ dues }: { dues: DashboardStudentDue[] }) {
                         </TableRow>
                     ))
                 ) : (
-                    <EmptyTableRow colSpan={5}>No pending dues.</EmptyTableRow>
+                    <TableEmptyRow colSpan={5}>No pending dues.</TableEmptyRow>
                 )}
             </TableBody>
         </Table>
@@ -228,28 +199,9 @@ function PaidDuesTable({ dues }: { dues: DashboardStudentPaidDue[] }) {
                         </TableRow>
                     ))
                 ) : (
-                    <EmptyTableRow colSpan={5}>No paid dues.</EmptyTableRow>
+                    <TableEmptyRow colSpan={5}>No paid dues.</TableEmptyRow>
                 )}
             </TableBody>
         </Table>
-    );
-}
-
-function EmptyTableRow({
-    children,
-    colSpan,
-}: {
-    children: string;
-    colSpan: number;
-}) {
-    return (
-        <TableRow>
-            <TableCell
-                colSpan={colSpan}
-                className="px-4 py-6 text-muted-foreground"
-            >
-                {children}
-            </TableCell>
-        </TableRow>
     );
 }

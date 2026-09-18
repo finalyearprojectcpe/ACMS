@@ -13,7 +13,10 @@ import {
 import { ActionLink } from '@/components/action-link';
 import { CopyableValue } from '@/components/copyable-value';
 import { PersonCell } from '@/components/person-cell';
-import { studentSetText } from '@/components/student-set-label';
+import {
+    studentSetListText,
+    studentSetText,
+} from '@/components/student-set-label';
 import { StudentSetPicker } from '@/components/student-set-picker';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -247,10 +250,6 @@ function assignedSetLabel(
     sets: DashboardAdviserStudents['assignedSets'],
     selectedSetId: string,
 ): string {
-    if (sets.length === 0) {
-        return 'No assigned set';
-    }
-
     if (selectedSetId !== 'all') {
         const selectedSet = sets.find(
             (set) => set.entrySession.id.toString() === selectedSetId,
@@ -261,5 +260,5 @@ function assignedSetLabel(
         }
     }
 
-    return sets.map((set) => studentSetText(set)).join(', ');
+    return studentSetListText(sets);
 }

@@ -4,6 +4,12 @@ import { useMemo } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+    academicLevelNumber,
+    academicSemesterOrder,
+    semesterName,
+    shortLevelLabel,
+} from '@/lib/academic';
 
 export type CoursePrerequisiteOption = {
     id: number;
@@ -211,7 +217,7 @@ function groupPrerequisitesByPeriod(
     const groups = new Map<string, PrerequisitePeriodGroup>();
 
     for (const option of options) {
-        const semester = semesterLabel(option.semester);
+        const semester = semesterName(option.semester);
         const id = `${option.level}-${semester}`;
 
         if (!groups.has(id)) {
@@ -235,33 +241,9 @@ function groupPrerequisitesByPeriod(
 
     return [...groups.values()].sort(
         (first, second) =>
-            levelNumber(first.level) - levelNumber(second.level) ||
-            semesterOrder(first.semester) - semesterOrder(second.semester),
+            academicLevelNumber(first.level) -
+                academicLevelNumber(second.level) ||
+            academicSemesterOrder(first.semester) -
+                academicSemesterOrder(second.semester),
     );
-}
-
-function shortLevelLabel(level: string): string {
-    return level.replace(/\s*Level$/i, 'L');
-}
-
-function levelNumber(level: string): number {
-    const match = level.match(/^(\d+)/);
-
-    return match ? Number(match[1]) : 999;
-}
-
-function semesterLabel(semester: string): string {
-    if (semester.toLowerCase().includes('rain')) {
-        return 'Rain';
-    }
-
-    if (semester.toLowerCase().includes('harmattan')) {
-        return 'Harmattan';
-    }
-
-    return semester.replace(/\s*Semester$/i, '');
-}
-
-function semesterOrder(semester: string): number {
-    return semester === 'Harmattan' ? 0 : semester === 'Rain' ? 1 : 99;
 }

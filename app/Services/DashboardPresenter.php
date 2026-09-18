@@ -16,6 +16,7 @@ class DashboardPresenter
     public function __construct(
         private readonly AcademicContextService $academicContext,
         private readonly AccessCodeGenerator $accessCodes,
+        private readonly CurrencyFormatter $currency,
     ) {}
 
     public function adviserHome(AdvisorProfile $advisor, Collection $sets, Collection $levels): array
@@ -261,7 +262,7 @@ class DashboardPresenter
 
     public function amount(int $amountKobo): string
     {
-        return 'NGN '.number_format($amountKobo / 100, 2);
+        return $this->currency->nairaFromKobo($amountKobo);
     }
 
     /** @return array{0: string, 1: string} */
