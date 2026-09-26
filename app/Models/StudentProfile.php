@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['user_id', 'advisor_profile_id', 'student_set_id', 'current_academic_year_id', 'registration_number', 'status'])]
+#[Fillable(['user_id', 'advisor_profile_id', 'student_set_id', 'registration_number', 'status'])]
 class StudentProfile extends Model
 {
     /** @use HasFactory<StudentProfileFactory> */
@@ -38,22 +38,6 @@ class StudentProfile extends Model
     public function studentSet(): BelongsTo
     {
         return $this->belongsTo(StudentSet::class);
-    }
-
-    /**
-     * @return BelongsTo<AcademicYear, $this>
-     */
-    public function currentAcademicYear(): BelongsTo
-    {
-        return $this->belongsTo(AcademicYear::class, 'current_academic_year_id');
-    }
-
-    /**
-     * @return BelongsTo<AcademicYear, $this>
-     */
-    public function currentLevel(): BelongsTo
-    {
-        return $this->currentAcademicYear();
     }
 
     /**

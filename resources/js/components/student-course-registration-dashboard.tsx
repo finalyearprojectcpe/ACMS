@@ -8,7 +8,7 @@ import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 
 import { store as storeCourseRegistration } from '@/actions/App/Http/Controllers/CourseRegistrationController';
-import { CourseCategoryBadge } from '@/components/course-category-badge';
+import { CourseRegistrationCourseTable } from '@/components/course-registration-course-table';
 import { CourseRegistrationStatusBadge } from '@/components/course-registration-status-badge';
 import { QualifiedSemester } from '@/components/qualified-semester';
 import {
@@ -24,20 +24,11 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
     Collapsible,
     CollapsibleContent,
     CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import type {
     DashboardCourseRegistrationCourse,
@@ -64,11 +55,13 @@ export function StudentCourseRegistrationDashboard({
         (sum, course) => sum + course.units,
         0,
     );
+    const exceedsMaximumUnits =
+        registration.available &&
+        selectedUnits > registration.maximumCourseUnits;
     const initialSelectedKeys = useMemo(
         () => new Set(registration.selectedCourses.map(courseKey)),
         [registration.selectedCourses],
     );
-    const exceedsMaximum = selectedUnits > registration.maximumCourseUnits;
     const isLocked = ['In review', 'Approved'].includes(
         registration.reviewStatus,
     );
@@ -80,6 +73,32 @@ export function StudentCourseRegistrationDashboard({
     const displayCourses = isLocked
         ? selectedCourses
         : registration.courseGroups.flatMap((group) => group.courses);
+
+    if (!registration.available || !registration.currentSemester) {
+        return (
+            <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+                <Card className="border border-border bg-background">
+                    <CardContent className="py-10 text-center">
+                        <div className="font-medium">
+                            Course registration is closed
+                        </div>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                            {registration.unavailableReason}
+                        </p>
+                    </CardContent>
+                </Card>
+                {registration.previousRegistrations.length > 0 ? (
+                    <PreviousRegistrations
+                        registrations={registration.previousRegistrations}
+                        open={isHistoryOpen}
+                        onOpenChange={setIsHistoryOpen}
+                    />
+                ) : null}
+            </div>
+        );
+    }
+
+    const currentSemester = registration.currentSemester;
 
     function toggleCourse(course: DashboardCourseRegistrationCourse) {
         if (isLocked) {
@@ -99,7 +118,7 @@ export function StudentCourseRegistrationDashboard({
 
     function submit(action: 'save' | 'submit') {
         router.post(
-            storeCourseRegistration(),
+            storeCourseRegistration().url,
             {
                 action,
                 items: selectedCourses.map((course) => ({
@@ -116,22 +135,23 @@ export function StudentCourseRegistrationDashboard({
                 <div>
                     <h1 className="text-lg font-semibold tracking-normal">
                         <QualifiedSemester
-                            level={registration.currentSemester.level}
-                            semester={registration.currentSemester.name}
+                            level={currentSemester.level}
+                            semester={currentSemester.name}
                         />{' '}
                         Course Registration
                     </h1>
                     <div className="text-xs text-muted-foreground">
-                        {registration.currentSemester.session} Session
+                        {currentSemester.session} Session
                     </div>
                 </div>
                 {!isLocked && (
                     <div className="flex flex-wrap items-center gap-3">
                         <span className="text-sm text-muted-foreground">
                             <span className="font-semibold text-foreground tabular-nums">
-                                {selectedUnits}
+                                {selectedUnits}/
+                                {registration.maximumCourseUnits}
                             </span>{' '}
-                            / {registration.maximumCourseUnits} units
+                            units
                         </span>
                         <div className="flex gap-2">
                             <Button
@@ -140,8 +160,8 @@ export function StudentCourseRegistrationDashboard({
                                 size="sm"
                                 disabled={
                                     selectedCourses.length === 0 ||
-                                    exceedsMaximum ||
-                                    !isDirty
+                                    !isDirty ||
+                                    exceedsMaximumUnits
                                 }
                                 onClick={() => submit('save')}
                             >
@@ -155,8 +175,7 @@ export function StudentCourseRegistrationDashboard({
                                         size="sm"
                                         disabled={
                                             selectedCourses.length === 0 ||
-                                            exceedsMaximum ||
-                                            exceedsMaximum
+                                            exceedsMaximumUnits
                                         }
                                     >
                                         <RiSendPlaneLine />
@@ -200,11 +219,14 @@ export function StudentCourseRegistrationDashboard({
                 </Notice>
             ) : null}
 
-            {exceedsMaximum ? (
+            {exceedsMaximumUnits ? (
                 <Notice tone="danger">
-                    You have selected {selectedUnits} units. The maximum for
-                    this registration is {registration.maximumCourseUnits}{' '}
-                    units.
+                    Remove at least{' '}
+                    {selectedUnits - registration.maximumCourseUnits}{' '}
+                    {selectedUnits - registration.maximumCourseUnits === 1
+                        ? 'unit'
+                        : 'units'}{' '}
+                    before saving or submitting this registration.
                 </Notice>
             ) : null}
 
@@ -224,18 +246,24 @@ export function StudentCourseRegistrationDashboard({
                         />
                         <span className="text-sm text-muted-foreground">
                             <span className="font-semibold text-foreground tabular-nums">
-                                {selectedUnits}
+                                {selectedUnits}/
+                                {registration.maximumCourseUnits}
                             </span>{' '}
-                            / {registration.maximumCourseUnits} units
+                            units
                         </span>
                     </div>
                 </CardHeader>
                 <CardContent className="p-0">
-                    <CourseOptionsTable
+                    <CourseRegistrationCourseTable
                         courses={displayCourses}
                         selectedKeys={selectedKeys}
-                        isLocked={isLocked}
-                        onToggleCourse={toggleCourse}
+                        selectable={!isLocked}
+                        onToggleCourse={isLocked ? undefined : toggleCourse}
+                        emptyLabel={
+                            isLocked
+                                ? 'No courses in this registration.'
+                                : 'No courses available.'
+                        }
                     />
                 </CardContent>
             </Card>
@@ -248,105 +276,6 @@ export function StudentCourseRegistrationDashboard({
                 />
             ) : null}
         </div>
-    );
-}
-
-function CourseOptionsTable({
-    courses,
-    isLocked,
-    onToggleCourse,
-    selectedKeys,
-}: {
-    courses: DashboardCourseRegistrationCourse[];
-    isLocked: boolean;
-    onToggleCourse: (course: DashboardCourseRegistrationCourse) => void;
-    selectedKeys: Set<string>;
-}) {
-    return (
-        <Table className="text-sm">
-            <TableHeader>
-                <TableRow>
-                    {!isLocked && (
-                        <TableHead className="w-12 px-4">Take</TableHead>
-                    )}
-                    <TableHead className="w-[18%]">Course</TableHead>
-                    <TableHead>Title</TableHead>
-                    <TableHead className="w-[10%] text-center">Units</TableHead>
-                    <TableHead className="hidden w-[18%] md:table-cell">
-                        Category
-                    </TableHead>
-                    <TableHead className="w-[14%] pr-4 text-right">
-                        Category
-                    </TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                {courses.length === 0 ? (
-                    <TableRow>
-                        <TableCell
-                            colSpan={isLocked ? 4 : 5}
-                            className="px-4 py-8 text-center text-muted-foreground"
-                        >
-                            {isLocked
-                                ? 'No courses in this registration.'
-                                : 'No courses available.'}
-                        </TableCell>
-                    </TableRow>
-                ) : (
-                    courses.map((course) => {
-                        const selected = selectedKeys.has(courseKey(course));
-
-                        return (
-                            <TableRow
-                                key={courseKey(course)}
-                                className="odd:bg-muted/25"
-                            >
-                                {!isLocked && (
-                                    <TableCell className="px-4">
-                                        <Checkbox
-                                            checked={selected}
-                                            aria-label={`Select ${course.code}`}
-                                            onCheckedChange={() =>
-                                                onToggleCourse(course)
-                                            }
-                                        />
-                                    </TableCell>
-                                )}
-                                <TableCell className="font-semibold">
-                                    {course.code}
-                                </TableCell>
-                                <TableCell>
-                                    <div className="min-w-0">
-                                        <div className="font-medium">
-                                            {course.title}
-                                        </div>
-                                        {course.prerequisites.length > 0 ? (
-                                            <div className="text-xs text-muted-foreground">
-                                                Requires{' '}
-                                                {course.prerequisites.join(
-                                                    ', ',
-                                                )}
-                                            </div>
-                                        ) : null}
-                                    </div>
-                                </TableCell>
-                                <TableCell className="text-center font-semibold tabular-nums">
-                                    {course.units}
-                                </TableCell>
-                                <TableCell className="hidden md:table-cell">
-                                    {course.category}
-                                </TableCell>
-                                <TableCell className="pr-4 text-right">
-                                    <CourseCategoryBadge
-                                        category={course.categoryValue}
-                                    />
-                                </TableCell>
-                            </TableRow>
-                        );
-                    })
-                )}
-            </TableBody>
-        </Table>
     );
 }
 
@@ -408,7 +337,7 @@ function PreviousRegistrations({
                                 />
                             </CardHeader>
                             <CardContent className="p-0">
-                                <ReadonlyCoursesTable
+                                <CourseRegistrationCourseTable
                                     courses={registration.courses}
                                 />
                             </CardContent>
@@ -417,50 +346,6 @@ function PreviousRegistrations({
                 </div>
             </CollapsibleContent>
         </Collapsible>
-    );
-}
-
-function ReadonlyCoursesTable({
-    courses,
-}: {
-    courses: DashboardCourseRegistrationCourse[];
-}) {
-    return (
-        <Table className="text-sm">
-            <TableHeader>
-                <TableRow>
-                    <TableHead className="w-[20%] px-4">Course</TableHead>
-                    <TableHead>Title</TableHead>
-                    <TableHead className="w-[12%] text-center">Units</TableHead>
-                    <TableHead className="w-[18%] pr-4 text-right">
-                        Category
-                    </TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                {courses.map((course) => (
-                    <TableRow
-                        key={courseKey(course)}
-                        className="odd:bg-muted/25"
-                    >
-                        <TableCell className="px-4 font-semibold">
-                            {course.code}
-                        </TableCell>
-                        <TableCell className="font-medium">
-                            {course.title}
-                        </TableCell>
-                        <TableCell className="text-center font-semibold tabular-nums">
-                            {course.units}
-                        </TableCell>
-                        <TableCell className="pr-4 text-right">
-                            <CourseCategoryBadge
-                                category={course.categoryValue}
-                            />
-                        </TableCell>
-                    </TableRow>
-                ))}
-            </TableBody>
-        </Table>
     );
 }
 

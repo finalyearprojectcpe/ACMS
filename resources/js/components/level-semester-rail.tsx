@@ -3,10 +3,18 @@ import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 const levelSemesterRailItemBaseClassName =
-    'relative flex min-h-11 w-full items-center justify-start! rounded-sm border border-transparent bg-transparent px-3 py-2.5 text-left text-base font-medium text-muted-foreground transition-colors before:absolute before:top-1/2 before:-left-[1.0625rem] before:h-px before:w-3 before:bg-border hover:bg-muted/70 hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none';
+    'relative flex min-h-11 w-full items-center justify-start! rounded-sm border border-transparent bg-transparent px-3 py-2.5 text-left text-sm font-medium text-muted-foreground transition-colors before:absolute before:top-1/2 before:-left-[1.0625rem] before:h-px before:w-3 before:bg-border hover:bg-muted/70 hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none';
 
-export function LevelSemesterRail({ children }: { children: ReactNode }) {
-    return <div className="grid w-full gap-7 p-3">{children}</div>;
+export function LevelSemesterRail({
+    children,
+    className,
+}: {
+    children: ReactNode;
+    className?: string;
+}) {
+    return (
+        <div className={cn('grid w-full gap-7 p-3', className)}>{children}</div>
+    );
 }
 
 export function LevelSemesterRailGroup({
@@ -32,7 +40,7 @@ export function levelSemesterRailItemClassName(isActive: boolean): string {
     return cn(
         levelSemesterRailItemBaseClassName,
         isActive &&
-            'bg-primary text-primary-foreground shadow-sm before:bg-primary hover:bg-primary hover:text-primary-foreground',
+            'bg-primary font-semibold text-primary-foreground shadow-sm before:bg-primary hover:bg-primary hover:text-primary-foreground',
     );
 }
 

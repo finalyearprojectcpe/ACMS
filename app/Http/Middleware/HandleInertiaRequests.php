@@ -44,7 +44,9 @@ class HandleInertiaRequests extends Middleware
                 'user' => $user === null ? null : [
                     'id' => $user->id,
                     'account_type' => $user->account_type,
+                    'title' => $user->title?->value,
                     'name' => $user->name,
+                    'display_name' => $user->displayName(),
                     'email' => $user->email,
                     'avatar' => $user->profilePhotoUrl(),
                     'email_verified_at' => $user->email_verified_at,

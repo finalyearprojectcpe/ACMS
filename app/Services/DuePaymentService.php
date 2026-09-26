@@ -78,7 +78,7 @@ class DuePaymentService
                 'advisor_profile_id' => $assignment->studentProfile->advisor_profile_id,
                 'payment_account_id' => $paymentAccount->id,
                 'provider' => DuePayment::ProviderPaystack,
-                'reference' => $this->newReference($assignment),
+                'reference' => $this->newReference(),
                 'status' => DuePayment::StatusInitialized,
                 'amount_kobo' => $assignment->amount_kobo,
                 'currency' => $assignment->due->currency,
@@ -353,13 +353,8 @@ class DuePaymentService
         ];
     }
 
-    private function newReference(StudentDueAssignment $assignment): string
+    private function newReference(): string
     {
-        return sprintf(
-            'DUE-%d-%d-%s',
-            $assignment->due_id,
-            $assignment->student_profile_id,
-            Str::upper(Str::random(16)),
-        );
+        return 'GM-'.Str::upper(Str::random(24));
     }
 }

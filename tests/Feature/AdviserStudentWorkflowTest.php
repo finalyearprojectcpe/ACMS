@@ -1,74 +1,23 @@
 <?php
 
-use App\AccountStatus;
 use App\Models\AcademicSession;
+use App\Models\AcademicYear;
 use App\Models\AdvisorProfile;
 use App\Models\StudentProfile;
 use App\Models\StudentSet;
 use App\Models\User;
+use Database\Seeders\AcademicStructureSeeder;
 use Inertia\Testing\AssertableInertia as Assert;
 
-test('an adviser adds a student to an owned set', function () {
+test('the adviser set page shows its signup link and joined students', function () {
     $advisor = AdvisorProfile::factory()->create();
     $set = StudentSet::factory()->create(['advisor_profile_id' => $advisor->id]);
-
-    $this->actingAs($advisor->user)->post(route('dashboard.students.store'), [
-        'student_set_id' => $set->id,
-        'registration_number' => '2025001234',
-        'access_code' => '',
-    ])->assertRedirect(route('dashboard.section', ['section' => 'students']));
-
-    $student = StudentProfile::query()->where('registration_number', '2025001234')->firstOrFail();
-
-    expect($student->advisor_profile_id)->toBe($advisor->id)
-        ->and($student->student_set_id)->toBe($set->id)
-        ->and($student->user->status)->toBe(AccountStatus::Pending)
-        ->and($student->user->access_code)->toHaveLength(8);
-});
-
-test('an adviser cannot add a student to another advisers set', function () {
-    $advisor = AdvisorProfile::factory()->create();
-    $otherSet = StudentSet::factory()->create();
-
-    $this->actingAs($advisor->user)->post(route('dashboard.students.store'), [
-        'student_set_id' => $otherSet->id,
-        'registration_number' => '2025001234',
-    ])->assertSessionHasErrors('student_set_id');
-
-    expect($advisor->students()->count())->toBe(0);
-});
-
-test('spreadsheet batches provision students with their supplied or generated access codes', function () {
-    $advisor = AdvisorProfile::factory()->create();
-    $session = AcademicSession::factory()->create(['advisor_profile_id' => $advisor->id]);
-    $set = StudentSet::factory()->create([
-        'advisor_profile_id' => $advisor->id,
-        'entry_academic_session_id' => $session->id,
+    $studentUser = User::factory()->student()->create([
+        'name' => 'Adaeze Okoro',
+        'email' => 'adaeze@futo.edu',
     ]);
-
-    $this->actingAs($advisor->user)->post(route('dashboard.students.import.store'), [
-        'student_set_id' => $set->id,
-        'file_name' => 'students.xlsx',
-        'import_key' => 'student-import-test',
-        'rows' => [
-            ['registrationNumber' => '2025000001', 'accessCode' => 'FIRST-CODE'],
-            ['registrationNumber' => '2025000002', 'accessCode' => ''],
-        ],
-    ])->assertRedirect(route('dashboard.section', ['section' => 'students']));
-
-    $students = $advisor->students()->with('user')->orderBy('registration_number')->get();
-
-    expect($students)->toHaveCount(2)
-        ->and($students[0]->user->access_code)->toBe('FIRST-CODE')
-        ->and($students[1]->user->access_code)->toHaveLength(8);
-});
-
-test('the student list is scoped to the adviser and links to registration-number profiles', function () {
-    $advisor = AdvisorProfile::factory()->create();
-    $set = StudentSet::factory()->create(['advisor_profile_id' => $advisor->id]);
-    $user = User::factory()->student()->create(['name' => 'Adaeze Okoro']);
     StudentProfile::factory()->create([
-        'user_id' => $user->id,
+        'user_id' => $studentUser->id,
         'advisor_profile_id' => $advisor->id,
         'student_set_id' => $set->id,
         'registration_number' => '2025001234',
@@ -76,13 +25,55 @@ test('the student list is scoped to the adviser and links to registration-number
     StudentProfile::factory()->create();
 
     $this->actingAs($advisor->user)
-        ->get(route('dashboard.section', ['section' => 'students']))
+        ->get(route('student-sets.show', $set->routeParameters()))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
+            ->where('dashboard.adviserStudents.assignedSets.0.signupUrl', $set->signupUrl())
+            ->where('dashboard.adviserStudents.assignedSets.0.signupEnabled', true)
             ->has('dashboard.adviserStudents.students', 1)
             ->where('dashboard.adviserStudents.students.0.fullName', 'Adaeze Okoro')
             ->where(
                 'dashboard.adviserStudents.students.0.profileUrl',
                 route('dashboard.students.show', ['registrationNumber' => '2025001234']),
             ));
+});
+
+test('an adviser can close reopen and replace their set signup link', function () {
+    $advisor = AdvisorProfile::factory()->create();
+    $set = StudentSet::factory()->create(['advisor_profile_id' => $advisor->id]);
+    $this->seed(AcademicStructureSeeder::class);
+    $year = AcademicYear::query()->where('year_number', 1)->firstOrFail();
+    AcademicSession::factory()->create([
+        'student_set_id' => $set->id,
+        'academic_year_id' => $year->id,
+    ]);
+    $parameters = $set->routeParameters();
+    $originalToken = $set->invite_token;
+
+    $this->actingAs($advisor->user)
+        ->patch(route('student-sets.update', $parameters), ['student_signup_enabled' => false, 'current_academic_year_id' => $year->id])
+        ->assertRedirect();
+    expect($set->refresh()->student_signup_enabled)->toBeFalse();
+
+    $this->patch(route('student-sets.update', $parameters), ['student_signup_enabled' => true, 'current_academic_year_id' => $year->id])
+        ->assertRedirect();
+    expect($set->refresh()->student_signup_enabled)->toBeTrue();
+
+    $this->patch(route('student-sets.invite.rotate', $parameters))
+        ->assertRedirect();
+    expect($set->refresh()->invite_token)->not->toBe($originalToken);
+
+    $this->get(route('student-invitations.show', ['studentSet' => $originalToken]))
+        ->assertNotFound();
+});
+
+test('an adviser cannot manage another advisers signup link', function () {
+    $advisor = AdvisorProfile::factory()->create();
+    $otherSet = StudentSet::factory()->create();
+
+    $this->actingAs($advisor->user)
+        ->patch(route('student-sets.invite.rotate', $otherSet->routeParameters()))
+        ->assertNotFound();
+
+    expect($otherSet->refresh()->student_signup_enabled)->toBeTrue();
 });

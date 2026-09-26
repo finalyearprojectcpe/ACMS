@@ -2,10 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\AccountType;
 use App\Http\Requests\StoreAdviserPaymentAccountRequest;
-use App\Http\Requests\UpdateAdviserPasswordRequest;
-use App\Http\Requests\UpdateProfilePhotoRequest;
+use App\Http\Requests\UpdateAdviserProfileRequest;
 use App\Http\Requests\UpdateStudentProfileRequest;
 use App\Models\Due;
 use App\Models\DuePayment;
@@ -33,7 +31,7 @@ class AdviserAccountController extends Controller
         $validated = $request->validated();
         $bank = $this->paystackBankFromCode($paystack, $validated['bank_code']);
         $current = PaymentAccount::currentFor($advisor) ?? PaymentAccount::latestFor($advisor);
-        $description = sprintf('%s payout account for %s', $validated['label'], $advisor->user->name);
+        $description = sprintf('%s payout account for %s', $validated['label'], $advisor->user->displayName());
 
         try {
             $resolved = $paystack->resolveAccount($validated['account_number'], $validated['bank_code']);
@@ -109,45 +107,94 @@ class AdviserAccountController extends Controller
                 ]);
         });
 
-        return to_route('dashboard.section', ['section' => 'payment-settings'])
+        return to_route('dashboard.section', ['section' => 'settings'])
             ->with('success', 'Payout account saved. New payments will use this account.');
     }
 
-    public function updatePassword(UpdateAdviserPasswordRequest $request): RedirectResponse
+    public function updateProfile(UpdateAdviserProfileRequest $request): RedirectResponse
     {
         $user = $this->access->user($request);
-        abort_unless($user->account_type === AccountType::Adviser, 403);
-        $user->forceFill(['password' => $request->validated('password')])->save();
+        $validated = $request->validated();
+        $disk = User::profilePhotoDisk();
+        $previousPhoto = $user->profile_photo_path;
+        $newPhoto = $request->file('profile_photo')?->store('profile-photos', $disk);
 
-        return to_route('dashboard.section', ['section' => 'profile-settings'])
-            ->with('success', 'Password changed.');
+        if ($request->hasFile('profile_photo') && ! is_string($newPhoto)) {
+            throw new \RuntimeException('The profile photo could not be stored.');
+        }
+
+        $changes = [
+            'title' => $validated['title'],
+            'name' => $validated['name'],
+        ];
+
+        if (is_string($newPhoto)) {
+            $changes['profile_photo_path'] = $newPhoto;
+        }
+
+        if ($request->filled('password')) {
+            $changes['password'] = $validated['password'];
+        }
+
+        try {
+            DB::transaction(fn () => $user->forceFill($changes)->save());
+        } catch (\Throwable $exception) {
+            if (is_string($newPhoto)) {
+                Storage::disk($disk)->delete($newPhoto);
+            }
+
+            throw $exception;
+        }
+
+        if (is_string($newPhoto) && is_string($previousPhoto) && $previousPhoto !== '') {
+            Storage::disk($disk)->delete($previousPhoto);
+        }
+
+        return to_route('dashboard.section', ['section' => 'settings'])
+            ->with('success', 'Profile saved.');
     }
 
     public function updateStudentProfile(UpdateStudentProfileRequest $request): RedirectResponse
     {
         $student = $this->access->student($request);
+        $user = $student->user;
         $validated = $request->validated();
-        $student->user->forceFill([
+        $disk = User::profilePhotoDisk();
+        $previousPhoto = $user->profile_photo_path;
+        $newPhoto = $request->file('profile_photo')?->store('profile-photos', $disk);
+
+        if ($request->hasFile('profile_photo') && ! is_string($newPhoto)) {
+            throw new \RuntimeException('The profile photo could not be stored.');
+        }
+
+        $changes = [
             'name' => Str::squish($validated['surname'].' '.$validated['other_names']),
-        ])->save();
+        ];
+
+        if (is_string($newPhoto)) {
+            $changes['profile_photo_path'] = $newPhoto;
+        }
+
+        if ($request->filled('password')) {
+            $changes['password'] = $validated['password'];
+        }
+
+        try {
+            DB::transaction(fn () => $user->forceFill($changes)->save());
+        } catch (\Throwable $exception) {
+            if (is_string($newPhoto)) {
+                Storage::disk($disk)->delete($newPhoto);
+            }
+
+            throw $exception;
+        }
+
+        if (is_string($newPhoto) && is_string($previousPhoto) && $previousPhoto !== '') {
+            Storage::disk($disk)->delete($previousPhoto);
+        }
 
         return to_route('dashboard.section', ['section' => 'profile-settings'])
             ->with('success', 'Profile saved.');
-    }
-
-    public function updateProfilePhoto(UpdateProfilePhotoRequest $request): RedirectResponse
-    {
-        $user = $this->access->user($request);
-        $disk = User::profilePhotoDisk();
-        $previous = $user->profile_photo_path;
-        $path = $request->file('profile_photo')->store('profile-photos', $disk);
-        $user->forceFill(['profile_photo_path' => $path])->save();
-
-        if (is_string($previous) && $previous !== '') {
-            Storage::disk($disk)->delete($previous);
-        }
-
-        return back()->with('success', 'Profile photo updated.');
     }
 
     /** @return array<string, mixed> */

@@ -6,6 +6,6 @@ class CurrencyFormatter
 {
     public function nairaFromKobo(int $amountKobo): string
     {
-        return 'NGN '.number_format($amountKobo / 100, 2);
+        return '₦'.number_format($amountKobo / 100, 2);
     }
 }

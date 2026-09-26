@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\CourseCategory;
+use App\Models\Concerns\HasPublicId;
 use Database\Factories\CourseOfferingFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -11,12 +11,15 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['student_set_id', 'course_id', 'academic_session_id', 'academic_year_semester_id', 'course_title', 'credit_units', 'category', 'archived_at'])]
+#[Fillable(['course_id', 'academic_session_semester_id', 'course_title', 'credit_units', 'is_elective'])]
 class CourseOffering extends Model
 {
     /** @use HasFactory<CourseOfferingFactory> */
     use HasFactory;
+
+    use HasPublicId;
 
     protected static function booted(): void
     {
@@ -26,15 +29,8 @@ class CourseOffering extends Model
                 : Course::query()->find($offering->course_id);
 
             $offering->course_title ??= $course?->title;
-            $offering->credit_units ??= $course?->credit_units;
-            $offering->category ??= CourseCategory::Normal;
+            $offering->is_elective ??= false;
         });
-    }
-
-    /** @return BelongsTo<StudentSet, $this> */
-    public function studentSet(): BelongsTo
-    {
-        return $this->belongsTo(StudentSet::class);
     }
 
     /**
@@ -45,20 +41,10 @@ class CourseOffering extends Model
         return $this->belongsTo(Course::class);
     }
 
-    /**
-     * @return BelongsTo<AcademicSession, $this>
-     */
-    public function academicSession(): BelongsTo
+    /** @return BelongsTo<AcademicSessionSemester, $this> */
+    public function academicSessionSemester(): BelongsTo
     {
-        return $this->belongsTo(AcademicSession::class);
-    }
-
-    /**
-     * @return BelongsTo<AcademicYearSemester, $this>
-     */
-    public function academicYearSemester(): BelongsTo
-    {
-        return $this->belongsTo(AcademicYearSemester::class);
+        return $this->belongsTo(AcademicSessionSemester::class);
     }
 
     /**
@@ -74,21 +60,30 @@ class CourseOffering extends Model
         )->withTimestamps();
     }
 
+    /** @return HasMany<CourseRegistrationItem, $this> */
+    public function registrationItems(): HasMany
+    {
+        return $this->hasMany(CourseRegistrationItem::class);
+    }
+
     #[Scope]
     protected function availableAsPrerequisiteFor(
         Builder $query,
         StudentSet $studentSet,
-        AcademicSession $academicSession,
-        AcademicYearSemester $targetSemester,
+        AcademicSessionSemester $targetSemester,
     ): void {
+        $targetSemester->loadMissing(['academicSession', 'semester']);
+
         $query
-            ->whereBelongsTo($studentSet)
-            ->whereNull('archived_at')
-            ->where(function (Builder $query) use ($academicSession, $targetSemester): void {
-                $query->where('academic_session_id', '<', $academicSession->id)
-                    ->orWhere(fn (Builder $query) => $query
-                        ->whereBelongsTo($academicSession)
-                        ->where('academic_year_semester_id', '<', $targetSemester->id));
+            ->whereHas('course', fn (Builder $query) => $query->whereBelongsTo($studentSet))
+            ->whereHas('academicSessionSemester', function (Builder $query) use ($targetSemester): void {
+                $query->whereHas('academicSession', fn (Builder $query) => $query
+                    ->where('start_year', '<', $targetSemester->academicSession->start_year))
+                    ->orWhere(function (Builder $query) use ($targetSemester): void {
+                        $query->where('academic_session_id', $targetSemester->academic_session_id)
+                            ->whereHas('semester', fn (Builder $query) => $query
+                                ->where('sort_order', '<', $targetSemester->semester->sort_order));
+                    });
             });
     }
 
@@ -98,9 +93,8 @@ class CourseOffering extends Model
     protected function casts(): array
     {
         return [
-            'category' => CourseCategory::class,
             'credit_units' => 'integer',
-            'archived_at' => 'datetime',
+            'is_elective' => 'boolean',
         ];
     }
 }

@@ -18,10 +18,7 @@ import {
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
-import {
-    advisor as advisorSignup,
-    student as studentSignup,
-} from '@/routes/signup';
+import { advisor as advisorSignup } from '@/routes/signup';
 
 export function LoginForm({ className, ...props }: ComponentProps<'div'>) {
     const form = useForm({
@@ -97,28 +94,21 @@ export function LoginForm({ className, ...props }: ComponentProps<'div'>) {
                             >
                                 {form.processing ? 'Logging in...' : 'Log in'}
                             </Button>
-                            <FieldDescription className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center">
-                                <span>New to GradeManager?</span>
-                                <Button
-                                    asChild
-                                    variant="link"
-                                    className="h-auto p-0 text-xs"
-                                >
-                                    <Link href={studentSignup()}>
-                                        Create student account
-                                    </Link>
-                                </Button>
-                                <span className="text-muted-foreground">/</span>
+                            <FieldDescription className="text-center">
+                                New course adviser?{' '}
                                 <Button
                                     asChild
                                     variant="link"
                                     className="h-auto p-0 text-xs"
                                 >
                                     <Link href={advisorSignup()}>
-                                        Create adviser account
+                                        Create account
                                     </Link>
                                 </Button>
                             </FieldDescription>
+                            <p className="text-center text-xs text-muted-foreground">
+                                Students join through their class signup link.
+                            </p>
                         </AuthFormActions>
                     </Field>
                 </FieldGroup>

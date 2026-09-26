@@ -13,10 +13,7 @@ test('active users can reset their password with a single-use link', function ()
         'email' => 'teacher@example.edu',
         'password' => 'old-password',
     ]);
-    AdvisorProfile::factory()->create([
-        'user_id' => $user->id,
-        'institution_name' => 'Federal University of Technology Owerri',
-    ]);
+    AdvisorProfile::factory()->create(['user_id' => $user->id]);
 
     $this->post(route('password.email'), ['email' => 'teacher@example.edu'])
         ->assertRedirect()
@@ -30,7 +27,7 @@ test('active users can reset their password with a single-use link', function ()
         ->where('email', $user->email)
         ->exists())->toBeTrue()
         ->and((new PasswordResetMail($delivery))->render())
-        ->toContain('Federal University of Technology Owerri');
+        ->toContain('your GradeManager account');
 
     $this->get($resetUrl)
         ->assertOk()

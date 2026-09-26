@@ -30,7 +30,7 @@ class ReceiptVerificationController extends Controller
                 'status' => $payment->status === DuePayment::StatusReversed ? 'reversed' : 'valid',
                 'receiptNumber' => $payment->receipt_number,
                 'transactionId' => $payment->paystack_transaction_id,
-                'institution' => $payment->advisorProfile->institution_name ?: config('app.name'),
+                'courseAdviser' => $payment->advisorProfile->user->displayName(),
                 'due' => $payment->assignment->due->title,
                 'amount' => $this->currency->nairaFromKobo((int) $payment->amount_kobo),
                 'paidAt' => $payment->paid_at?->format('F j, Y \a\t g:i A'),
@@ -61,7 +61,7 @@ class ReceiptVerificationController extends Controller
     private function payment(string $paystackTransactionId): DuePayment
     {
         return DuePayment::query()
-            ->with(['assignment.due', 'advisorProfile', 'studentProfile.user'])
+            ->with(['assignment.due', 'advisorProfile.user', 'studentProfile.user'])
             ->where('paystack_transaction_id', $paystackTransactionId)
             ->whereIn('status', [DuePayment::StatusSuccess, DuePayment::StatusReversed])
             ->firstOrFail();

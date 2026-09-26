@@ -1,18 +1,19 @@
 import { Link, router } from '@inertiajs/react';
 import {
     RiArchiveLine,
-    RiDownload2Line,
     RiEditLine,
     RiHistoryLine,
+    RiInformationLine,
 } from '@remixicon/react';
+import { useMemo, useState } from 'react';
 
 import {
     createStudentDueWaiver,
     editAdviserDue,
+    showStudentProfile,
 } from '@/actions/App/Http/Controllers/DashboardController';
 import {
     archive as archiveAdviserDue,
-    exportMethod as exportAdviserDue,
     restore as restoreAdviserDue,
     restoreAssignment as restoreStudentDue,
 } from '@/actions/App/Http/Controllers/DueController';
@@ -22,7 +23,6 @@ import {
     PaymentStatusBadge,
 } from '@/components/adviser-due-ui';
 import { CopyableValue } from '@/components/copyable-value';
-import { DashboardMetric } from '@/components/dashboard-metric';
 import { PersonCell } from '@/components/person-cell';
 import { ReceiptAction } from '@/components/receipt-action';
 import { TableEmptyRow } from '@/components/table-empty-row';
@@ -39,7 +39,15 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import {
     Table,
     TableBody,
@@ -48,6 +56,11 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useReceiptWorkPolling } from '@/hooks/use-receipt-work-polling';
 import type { DashboardAdviserDueDetail } from '@/types';
 
@@ -57,6 +70,20 @@ export function AdviserDueDetailDashboard({
     detail: DashboardAdviserDueDetail;
 }) {
     const isArchived = detail.due.status === 'Archived';
+    const [search, setSearch] = useState('');
+    const [status, setStatus] = useState('all');
+    const visibleStudents = useMemo(
+        () =>
+            detail.students.filter(
+                (student) =>
+                    (status === 'all' ||
+                        student.status.toLowerCase() === status) &&
+                    `${student.studentName} ${student.registrationNumber}`
+                        .toLowerCase()
+                        .includes(search.trim().toLowerCase()),
+            ),
+        [detail.students, search, status],
+    );
     const hasReceiptWork = detail.students.some(
         (student) =>
             ['pending', 'processing'].includes(student.receiptStatus ?? '') ||
@@ -68,6 +95,9 @@ export function AdviserDueDetailDashboard({
 
     return (
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">
+            <ActionLink href={detail.due.listUrl}>
+                Back to Student Dues
+            </ActionLink>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -77,19 +107,14 @@ export function AdviserDueDetailDashboard({
                         <DueStatusBadge status={detail.due.status} />
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">
-                        {detail.due.set} · {detail.due.amount}
+                        {detail.due.set} · {detail.due.period} ·{' '}
+                        {detail.due.amount}
                     </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                    <Button variant="outline" asChild>
-                        <a href={exportAdviserDue(detail.due.id).url} download>
-                            <RiDownload2Line />
-                            Export Payments
-                        </a>
-                    </Button>
                     {!isArchived ? (
                         <Button variant="outline" asChild>
-                            <Link href={editAdviserDue(detail.due.id)}>
+                            <Link href={editAdviserDue(detail.due.publicId)}>
                                 <RiEditLine />
                                 Edit Due
                             </Link>
@@ -99,37 +124,43 @@ export function AdviserDueDetailDashboard({
                 </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                <DashboardMetric
-                    label="Paid"
-                    value={detail.due.paidCount}
-                    valueClassName="text-2xl"
-                />
-                <DashboardMetric
-                    label="Pending"
-                    value={detail.due.pendingCount}
-                    valueClassName="text-2xl"
-                />
-                <DashboardMetric
-                    label="Waived"
-                    value={detail.due.waivedCount}
-                    valueClassName="text-2xl"
-                />
-                <DashboardMetric
-                    label="Collected"
-                    value={detail.due.collectedAmount}
-                    valueClassName="text-2xl"
-                />
-                <DashboardMetric
-                    label="Outstanding"
-                    value={detail.due.outstandingAmount}
-                    valueClassName="text-2xl"
-                />
-            </div>
-
-            <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
-                <CardHeader className="border-b border-border">
-                    <CardTitle>Students</CardTitle>
+            <Card className="gap-0 border border-border bg-background py-0 shadow-sm ring-1 ring-border/70">
+                <CardHeader className="gap-3 border-b border-border p-5">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <CardTitle>Payments</CardTitle>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                                {detail.due.paidCount} paid ·{' '}
+                                {detail.due.pendingCount} unpaid ·{' '}
+                                {detail.due.waivedCount} waived · Collected{' '}
+                                {detail.due.collectedAmount} · Outstanding{' '}
+                                {detail.due.outstandingAmount}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        <Input
+                            aria-label="Search students"
+                            placeholder="Search name or reg no."
+                            value={search}
+                            onChange={(event) => setSearch(event.target.value)}
+                            className="min-w-48 flex-1 bg-background sm:max-w-xs"
+                        />
+                        <Select value={status} onValueChange={setStatus}>
+                            <SelectTrigger
+                                aria-label="Payment status"
+                                className="w-36"
+                            >
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All</SelectItem>
+                                <SelectItem value="paid">Paid</SelectItem>
+                                <SelectItem value="unpaid">Unpaid</SelectItem>
+                                <SelectItem value="waived">Waived</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
                 </CardHeader>
                 <CardContent className="p-0">
                     <ScrollArea className="max-h-[36rem]">
@@ -148,14 +179,17 @@ export function AdviserDueDetailDashboard({
                                     <TableHead className="w-[14%] text-center">
                                         Status
                                     </TableHead>
+                                    <TableHead className="text-center">
+                                        Paid At
+                                    </TableHead>
                                     <TableHead className="w-[16%] pr-4 text-right">
                                         Action
                                     </TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {detail.students.length > 0 ? (
-                                    detail.students.map((student) => (
+                                {visibleStudents.length > 0 ? (
+                                    visibleStudents.map((student) => (
                                         <TableRow
                                             key={student.id}
                                             className="odd:bg-background even:bg-muted/25"
@@ -165,6 +199,11 @@ export function AdviserDueDetailDashboard({
                                                     name={student.studentName}
                                                     avatar={
                                                         student.studentAvatar
+                                                    }
+                                                    href={
+                                                        showStudentProfile(
+                                                            student.registrationNumber,
+                                                        ).url
                                                     }
                                                 />
                                             </TableCell>
@@ -181,22 +220,26 @@ export function AdviserDueDetailDashboard({
                                                 {student.amount}
                                             </TableCell>
                                             <TableCell className="text-center">
-                                                <div className="grid justify-items-center gap-1">
+                                                <div className="flex items-center justify-center gap-1.5">
                                                     <PaymentStatusBadge
                                                         status={student.status}
                                                     />
-                                                    {student.waiverReason ? (
-                                                        <span className="max-w-40 truncate text-xs text-muted-foreground">
-                                                            {
+                                                    {student.status ===
+                                                    'Waived' ? (
+                                                        <WaiverReason
+                                                            reason={
                                                                 student.waiverReason
                                                             }
-                                                        </span>
+                                                        />
                                                     ) : null}
                                                 </div>
                                             </TableCell>
+                                            <TableCell className="text-center text-muted-foreground">
+                                                {student.paidAt ?? '—'}
+                                            </TableCell>
                                             <TableCell className="pr-4 text-right">
                                                 <StudentDueAction
-                                                    dueId={detail.due.id}
+                                                    dueId={detail.due.publicId}
                                                     student={student}
                                                     isArchived={isArchived}
                                                 />
@@ -204,8 +247,10 @@ export function AdviserDueDetailDashboard({
                                         </TableRow>
                                     ))
                                 ) : (
-                                    <TableEmptyRow colSpan={5} className="py-8">
-                                        No students assigned yet.
+                                    <TableEmptyRow colSpan={6} className="py-8">
+                                        {detail.students.length
+                                            ? 'No matching students.'
+                                            : 'No students assigned yet.'}
                                     </TableEmptyRow>
                                 )}
                             </TableBody>
@@ -217,12 +262,35 @@ export function AdviserDueDetailDashboard({
     );
 }
 
+function WaiverReason({ reason }: { reason: string | null }) {
+    const [open, setOpen] = useState(false);
+    const explanation = reason?.trim() || 'No reason provided.';
+
+    return (
+        <Tooltip open={open} onOpenChange={setOpen}>
+            <TooltipTrigger asChild>
+                <button
+                    type="button"
+                    aria-label={`Waiver reason: ${explanation}`}
+                    onClick={() => setOpen((current) => !current)}
+                    className="inline-flex size-7 items-center justify-center text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                >
+                    <RiInformationLine className="size-4" />
+                </button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-64 break-words">
+                {explanation}
+            </TooltipContent>
+        </Tooltip>
+    );
+}
+
 function StudentDueAction({
     dueId,
     student,
     isArchived,
 }: {
-    dueId: number;
+    dueId: string;
     student: DashboardAdviserDueDetail['students'][number];
     isArchived: boolean;
 }) {
@@ -230,12 +298,12 @@ function StudentDueAction({
         return <ReceiptAction receipt={student} />;
     }
 
-    if (student.status === 'Pending' && !isArchived) {
+    if (student.status === 'Unpaid' && !isArchived) {
         return (
             <ActionLink
                 href={createStudentDueWaiver({
                     due: dueId,
-                    studentDueAssignment: student.id,
+                    studentDueAssignment: student.publicId,
                 })}
             >
                 Waive
@@ -247,7 +315,7 @@ function StudentDueAction({
         return (
             <RestoreStudentDueAction
                 dueId={dueId}
-                assignmentId={student.id}
+                assignmentId={student.publicId}
                 studentName={student.studentName}
             />
         );
@@ -307,8 +375,8 @@ function DueLifecycleAction({
                         onClick={() =>
                             router.patch(
                                 (isArchived
-                                    ? restoreAdviserDue(due.id)
-                                    : archiveAdviserDue(due.id)
+                                    ? restoreAdviserDue(due.publicId)
+                                    : archiveAdviserDue(due.publicId)
                                 ).url,
                             )
                         }
@@ -326,8 +394,8 @@ function RestoreStudentDueAction({
     assignmentId,
     studentName,
 }: {
-    dueId: number;
-    assignmentId: number;
+    dueId: string;
+    assignmentId: string;
     studentName: string;
 }) {
     return (

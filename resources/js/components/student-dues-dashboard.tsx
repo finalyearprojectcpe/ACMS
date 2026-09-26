@@ -46,11 +46,11 @@ export function StudentDuesDashboard({ dues }: StudentDuesDashboardProps) {
                 <DashboardMetric
                     label="Total Dues"
                     value={dues.totalDues}
-                    detail="Pending and paid records"
+                    detail="Unpaid and paid records"
                 />
             </div>
 
-            <DuesCard title="Pending Dues">
+            <DuesCard title="Unpaid Dues">
                 <PendingDuesTable dues={dues.pending} />
             </DuesCard>
 
@@ -133,7 +133,7 @@ function PendingDuesTable({ dues }: { dues: DashboardStudentDue[] }) {
                         </TableRow>
                     ))
                 ) : (
-                    <TableEmptyRow colSpan={5}>No pending dues.</TableEmptyRow>
+                    <TableEmptyRow colSpan={5}>No unpaid dues.</TableEmptyRow>
                 )}
             </TableBody>
         </Table>

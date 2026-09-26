@@ -2,7 +2,7 @@
 
 namespace Database\Factories;
 
-use App\Models\AcademicYear;
+use App\Models\AdvisorProfile;
 use App\Models\StudentProfile;
 use App\Models\StudentSet;
 use App\Models\User;
@@ -20,13 +20,12 @@ class StudentProfileFactory extends Factory
      */
     public function definition(): array
     {
-        $set = StudentSet::factory()->create();
-
         return [
             'user_id' => User::factory()->student(),
-            'advisor_profile_id' => $set->advisor_profile_id,
-            'student_set_id' => $set->id,
-            'current_academic_year_id' => AcademicYear::query()->oldest('year_number')->first()?->id,
+            'advisor_profile_id' => AdvisorProfile::factory(),
+            'student_set_id' => fn (array $attributes): int => StudentSet::factory()->create([
+                'advisor_profile_id' => $attributes['advisor_profile_id'],
+            ])->id,
             'registration_number' => fake()->unique()->numerify('20########'),
             'status' => 'active',
         ];

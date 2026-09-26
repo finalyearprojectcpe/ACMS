@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\AccountStatus;
 use App\AccountType;
+use App\Honorific;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
@@ -28,13 +29,11 @@ class UserFactory extends Factory
     {
         return [
             'account_type' => AccountType::Student,
+            'title' => null,
             'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
-            'access_code' => null,
-            'access_code_used_at' => null,
-            'activated_at' => now(),
             'disabled_at' => null,
             'status' => AccountStatus::Active,
             'remember_token' => Str::random(10),
@@ -68,17 +67,7 @@ class UserFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'account_type' => AccountType::Adviser,
-        ]);
-    }
-
-    public function pendingActivation(string $accessCode = 'ACCESS123'): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'access_code' => $accessCode,
-            'access_code_used_at' => null,
-            'activated_at' => null,
-            'status' => AccountStatus::Pending,
-            'password' => Hash::make(Str::random(32)),
+            'title' => Honorific::Dr,
         ]);
     }
 }

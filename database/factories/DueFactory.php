@@ -21,7 +21,7 @@ class DueFactory extends Factory
     {
         $set = StudentSet::factory()->create();
         $academicSession = AcademicSession::factory()->create([
-            'advisor_profile_id' => $set->advisor_profile_id,
+            'student_set_id' => $set->id,
         ]);
 
         return [

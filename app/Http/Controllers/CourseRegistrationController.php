@@ -26,24 +26,17 @@ class CourseRegistrationController extends Controller
         CourseRegistrationPlanner $planner,
     ): RedirectResponse {
         $student = $this->access->student($request);
-        [$session, $slot] = $this->academicContext->requireRegistrationContext($student);
+        $semester = $this->academicContext->requireRegistrationContext($student);
         $validated = $request->validated();
         $selected = collect($planner->selectedOptionsFromPayload(
-            $planner->plan($student, $session, $slot),
+            $planner->plan($student, $semester),
             $validated['items'],
+            $semester->maximum_course_units,
         ));
-        $maximumUnits = (int) $student->studentSet->maximum_course_units;
-
-        if ((int) $selected->sum('units') > $maximumUnits) {
-            throw ValidationException::withMessages([
-                'items' => "Selected courses cannot be more than {$maximumUnits} units for this semester.",
-            ]);
-        }
 
         $registration = CourseRegistration::query()->firstOrNew([
             'student_profile_id' => $student->id,
-            'academic_session_id' => $session->id,
-            'academic_year_semester_id' => $slot->id,
+            'academic_session_semester_id' => $semester->id,
         ]);
 
         if ($registration->exists && ! $registration->isEditableByStudent()) {
@@ -52,15 +45,11 @@ class CourseRegistrationController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($student, $session, $slot, $registration, $selected, $validated): void {
+        DB::transaction(function () use ($student, $semester, $registration, $selected, $validated): void {
             $isSubmit = $validated['action'] === 'submit';
             $registration->forceFill([
-                'advisor_profile_id' => $student->advisor_profile_id,
-                'student_set_id' => $student->student_set_id,
                 'student_profile_id' => $student->id,
-                'academic_session_id' => $session->id,
-                'academic_year_semester_id' => $slot->id,
-                'reviewer_advisor_profile_id' => $student->advisor_profile_id,
+                'academic_session_semester_id' => $semester->id,
                 'status' => $isSubmit
                     ? CourseRegistration::StatusSubmitted
                     : CourseRegistration::StatusDraft,
@@ -73,7 +62,7 @@ class CourseRegistrationController extends Controller
             foreach ($selected as $course) {
                 $registration->items()->create([
                     'course_offering_id' => $course['courseOfferingId'],
-                    'category' => $course['categoryValue'],
+                    'is_elective' => $course['isElective'],
                     'course_code' => $course['code'],
                     'course_title' => $course['title'],
                     'credit_units' => $course['units'],
@@ -89,63 +78,62 @@ class CourseRegistrationController extends Controller
 
     public function approve(
         Request $request,
-        CourseRegistration $courseRegistration,
         CourseRegistrationPlanner $planner,
+        string $registrationNumber,
+        string $sessionYears,
+        string $semester,
     ): RedirectResponse {
         $advisor = $this->access->advisor($request);
-        $this->access->ensureOwnsRegistration($advisor, $courseRegistration);
+        $courseRegistration = $this->access->registrationByRoute($advisor, $registrationNumber, $sessionYears, $semester);
         abort_unless($courseRegistration->status === CourseRegistration::StatusSubmitted, 404);
         $courseRegistration->loadMissing([
             'studentProfile',
-            'academicSession',
-            'academicYearSemester',
+            'academicSessionSemester.academicSession',
             'items',
-            'studentSet',
         ]);
-        $selected = $planner->selectedOptionsFromPayload(
+        if ($courseRegistration->academicSessionSemester->results_published_at !== null) {
+            throw ValidationException::withMessages([
+                'registration' => 'Results for this semester are already published. This registration cannot be approved.',
+            ]);
+        }
+        $planner->selectedOptionsFromPayload(
             $planner->plan(
                 $courseRegistration->studentProfile,
-                $courseRegistration->academicSession,
-                $courseRegistration->academicYearSemester,
+                $courseRegistration->academicSessionSemester,
             ),
             $courseRegistration->items->map(fn (CourseRegistrationItem $item): array => [
                 'course_offering_id' => (int) $item->course_offering_id,
             ])->all(),
+            $courseRegistration->academicSessionSemester->maximum_course_units,
         );
-
-        if ((int) collect($selected)->sum('units') > (int) $courseRegistration->studentSet->maximum_course_units) {
-            throw ValidationException::withMessages([
-                'registration' => 'This registration is above the course-unit limit. Return it to the student for correction.',
-            ]);
-        }
 
         $courseRegistration->forceFill([
             'status' => CourseRegistration::StatusApproved,
-            'reviewer_advisor_profile_id' => $advisor->id,
             'feedback_note' => null,
             'reviewed_at' => now(),
         ])->save();
 
-        return to_route('dashboard.course-registration.show', ['courseRegistration' => $courseRegistration])
+        return to_route('dashboard.course-registration.show', $courseRegistration->reviewRouteParameters())
             ->with('success', 'Course registration approved.');
     }
 
     public function returnForCorrection(
         ReturnCourseRegistrationRequest $request,
-        CourseRegistration $courseRegistration,
+        string $registrationNumber,
+        string $sessionYears,
+        string $semester,
     ): RedirectResponse {
         $advisor = $this->access->advisor($request);
-        $this->access->ensureOwnsRegistration($advisor, $courseRegistration);
+        $courseRegistration = $this->access->registrationByRoute($advisor, $registrationNumber, $sessionYears, $semester);
         abort_unless($courseRegistration->status === CourseRegistration::StatusSubmitted, 404);
         $courseRegistration->forceFill([
             'status' => CourseRegistration::StatusReturned,
-            'reviewer_advisor_profile_id' => $advisor->id,
             'feedback_note' => $request->string('feedback_note')->trim()->toString()
                 ?: 'Review the selected courses and submit the registration again.',
             'reviewed_at' => now(),
         ])->save();
 
-        return to_route('dashboard.course-registration.show', ['courseRegistration' => $courseRegistration])
+        return to_route('dashboard.course-registration.show', $courseRegistration->reviewRouteParameters())
             ->with('success', 'Course registration returned to the student.');
     }
 }

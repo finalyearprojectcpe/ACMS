@@ -98,7 +98,6 @@ class PasswordResetService
             ->with(['advisorProfile', 'studentProfile'])
             ->where('email', $email)
             ->where('status', AccountStatus::Active->value)
-            ->whereNotNull('activated_at')
             ->whereNull('disabled_at')
             ->first();
     }

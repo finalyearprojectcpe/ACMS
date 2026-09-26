@@ -14,24 +14,16 @@ return new class extends Migration
         // Stores a student's semester course registration for adviser review and approval.
         Schema::create('course_registrations', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('advisor_profile_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('student_set_id')->constrained()->cascadeOnDelete();
             $table->foreignId('student_profile_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('academic_session_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('academic_year_semester_id')->constrained()->restrictOnDelete();
-            $table->foreignId('reviewer_advisor_profile_id')->nullable()->constrained('advisor_profiles')->nullOnDelete();
+            $table->foreignId('academic_session_semester_id')->constrained()->cascadeOnDelete();
             $table->string('status')->default('draft');
             $table->text('feedback_note')->nullable();
             $table->timestamp('submitted_at')->nullable();
             $table->timestamp('reviewed_at')->nullable();
             $table->timestamps();
 
-            $table->unique(
-                ['student_profile_id', 'academic_session_id', 'academic_year_semester_id'],
-                'course_registrations_student_session_year_semester_unique'
-            );
-            $table->index(['student_set_id', 'academic_session_id', 'status'], 'course_registrations_set_session_status_index');
-            $table->index(['reviewer_advisor_profile_id', 'status'], 'course_registrations_reviewer_status_index');
+            $table->unique(['student_profile_id', 'academic_session_semester_id']);
+            $table->index(['academic_session_semester_id', 'status']);
         });
 
         // Stores the individual courses selected on a student's semester registration.
@@ -39,14 +31,27 @@ return new class extends Migration
             $table->id();
             $table->foreignId('course_registration_id')->constrained()->cascadeOnDelete();
             $table->foreignId('course_offering_id')->constrained()->restrictOnDelete();
-            $table->string('category');
+            $table->boolean('is_elective')->default(false);
             $table->string('course_code');
             $table->string('course_title');
             $table->unsignedTinyInteger('credit_units');
+            $table->string('grade', 1)->nullable();
+            $table->timestamp('graded_at')->nullable();
             $table->timestamps();
 
             $table->unique(['course_registration_id', 'course_offering_id'], 'course_registration_items_registration_offering_unique');
             $table->index('course_offering_id');
+        });
+
+        Schema::create('grade_corrections', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('course_registration_item_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('changed_by_user_id')->constrained('users')->restrictOnDelete();
+            $table->string('old_grade', 1);
+            $table->string('new_grade', 1);
+            $table->timestamp('created_at');
+
+            $table->index(['course_registration_item_id', 'created_at']);
         });
     }
 
@@ -55,6 +60,7 @@ return new class extends Migration
      */
     public function down(): void
     {
+        Schema::dropIfExists('grade_corrections');
         Schema::dropIfExists('course_registration_items');
         Schema::dropIfExists('course_registrations');
     }

@@ -2,10 +2,8 @@
 
 namespace Database\Factories;
 
-use App\CourseCategory;
 use App\Models\AcademicSession;
-use App\Models\AcademicYearSemester;
-use App\Models\AdvisorProfile;
+use App\Models\AcademicSessionSemester;
 use App\Models\Course;
 use App\Models\CourseOffering;
 use App\Models\StudentSet;
@@ -23,21 +21,19 @@ class CourseOfferingFactory extends Factory
      */
     public function definition(): array
     {
-        $advisor = AdvisorProfile::factory()->create();
-        $set = StudentSet::factory()->create(['advisor_profile_id' => $advisor->id]);
-        $course = Course::factory()->create(['advisor_profile_id' => $advisor->id]);
+        $set = StudentSet::factory()->create();
+        $course = Course::factory()->create(['student_set_id' => $set->id]);
+        $session = AcademicSession::factory()->create(['student_set_id' => $set->id]);
+        $semester = AcademicSessionSemester::factory()->create([
+            'academic_session_id' => $session->id,
+        ]);
 
         return [
-            'student_set_id' => $set->id,
             'course_id' => $course->id,
-            'academic_session_id' => AcademicSession::factory()->create([
-                'advisor_profile_id' => $advisor->id,
-            ])->id,
-            'academic_year_semester_id' => AcademicYearSemester::factory(),
+            'academic_session_semester_id' => $semester->id,
             'course_title' => fn (array $attributes): string => Course::query()->findOrFail($attributes['course_id'])->title,
-            'credit_units' => fn (array $attributes): int => (int) Course::query()->findOrFail($attributes['course_id'])->credit_units,
-            'category' => CourseCategory::Normal,
-            'archived_at' => null,
+            'credit_units' => fake()->numberBetween(1, 4),
+            'is_elective' => false,
         ];
     }
 }

@@ -12,19 +12,17 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Stores course adviser and student login accounts plus one-time student activation codes.
+        // Stores course adviser and student login accounts.
         Schema::create('users', function (Blueprint $table) {
             $table->id();
+            $table->string('title', 10)->nullable();
             $table->string('name');
-            $table->string('email')->nullable()->unique();
+            $table->string('email')->unique();
             $table->string('profile_photo_path')->nullable();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
-            $table->string('access_code')->nullable();
-            $table->timestamp('access_code_used_at')->nullable();
-            $table->timestamp('activated_at')->nullable();
             $table->timestamp('disabled_at')->nullable();
-            $table->string('status')->default('pending');
+            $table->string('status')->default('active');
             $table->string('account_type')->default(AccountType::Student->value);
             $table->rememberToken();
             $table->timestamps();

@@ -2,10 +2,11 @@
 
 namespace Database\Factories;
 
-use App\Models\AcademicSession;
+use App\Models\AcademicYear;
 use App\Models\AdvisorProfile;
 use App\Models\StudentSet;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Str;
 
 /**
  * @extends Factory<StudentSet>
@@ -19,18 +20,23 @@ class StudentSetFactory extends Factory
      */
     public function definition(): array
     {
+        $departmentName = fake()->randomElement([
+            'Computer Engineering',
+            'Electrical Engineering',
+            'Mechanical Engineering',
+        ]);
+        $entryStartYear = fake()->numberBetween(2020, 2030);
+
         return [
-            'advisor_profile_id' => fn (array $attributes): int => AdvisorProfile::factory()->create()->id,
-            'entry_academic_session_id' => fn (array $attributes): int => AcademicSession::factory()->create([
-                'advisor_profile_id' => (int) ($attributes['advisor_profile_id'] ?? AdvisorProfile::query()->first()->id),
-            ])->id,
-            'name' => fn (array $attributes): string => AcademicSession::query()
-                ->find((int) ($attributes['entry_academic_session_id'] ?? 0))?->name.' Entry' ?? 'Entry Set',
-            'minimum_years_to_degree' => fn (array $attributes): int => (int) (AdvisorProfile::query()
-                ->find((int) ($attributes['advisor_profile_id'] ?? 0))?->minimum_years_to_degree ?? 4),
-            'maximum_course_units' => fn (array $attributes): int => (int) (AdvisorProfile::query()
-                ->find((int) ($attributes['advisor_profile_id'] ?? 0))?->maximum_course_units ?? 24),
-            'status' => 'active',
+            'advisor_profile_id' => AdvisorProfile::factory(),
+            'department_name' => $departmentName,
+            'department_slug' => Str::slug($departmentName),
+            'entry_start_year' => $entryStartYear,
+            'entry_end_year' => $entryStartYear + 1,
+            'student_signup_enabled' => true,
+            'current_academic_year_id' => fn (): int => AcademicYear::query()
+                ->where('year_number', 1)
+                ->value('id') ?? AcademicYear::factory()->create(['year_number' => 1, 'name' => '100 Level', 'slug' => '100-level'])->id,
         ];
     }
 }

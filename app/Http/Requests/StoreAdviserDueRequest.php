@@ -25,6 +25,8 @@ class StoreAdviserDueRequest extends FormRequest
     {
         return [
             'student_set_id' => ['required', 'integer', 'exists:student_sets,id'],
+            'academic_session_id' => ['required', 'integer', 'exists:academic_sessions,id'],
+            'academic_session_semester_id' => ['nullable', 'integer', 'exists:academic_session_semesters,id'],
             'title' => ['required', 'string', 'max:120'],
             'description' => ['nullable', 'string', 'max:160'],
             'amount_naira' => ['required', 'integer', 'min:100', 'max:1000000'],
@@ -41,7 +43,7 @@ class StoreAdviserDueRequest extends FormRequest
         return [
             'student_set_id.required' => 'Select the student set that should receive this due.',
             'amount_naira.required' => 'Enter the amount students should pay.',
-            'amount_naira.min' => 'The due amount should be at least NGN 100.',
+            'amount_naira.min' => 'The due amount should be at least ₦100.',
             'amount_naira.max' => 'The due amount looks too high. Check it and try again.',
         ];
     }

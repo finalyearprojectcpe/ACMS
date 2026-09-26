@@ -22,6 +22,10 @@ return [
         'key' => env('RESEND_API_KEY'),
     ],
 
+    'assistant' => [
+        'model' => env('OPENROUTER_MODEL', 'openai/gpt-5-mini'),
+    ],
+
     'paystack' => [
         'base_url' => env('PAYSTACK_BASE_URL', 'https://api.paystack.co'),
         'dashboard_url' => env('PAYSTACK_DASHBOARD_URL', 'https://dashboard.paystack.com'),

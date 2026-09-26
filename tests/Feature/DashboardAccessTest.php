@@ -32,11 +32,11 @@ test('dashboard sections are limited to the current account type', function () {
     $student = StudentProfile::factory()->create();
 
     $this->actingAs($advisor->user)
-        ->get(route('dashboard.section', ['section' => 'payment-settings']))
+        ->get(route('dashboard.section', ['section' => 'settings']))
         ->assertOk();
 
     $this->actingAs($student->user)
-        ->get(route('dashboard.section', ['section' => 'payment-settings']))
+        ->get(route('dashboard.section', ['section' => 'settings']))
         ->assertNotFound();
 
     $this->actingAs($student->user)

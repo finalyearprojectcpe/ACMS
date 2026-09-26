@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasPublicId;
 use Database\Factories\StudentDueAssignmentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -24,6 +25,8 @@ class StudentDueAssignment extends Model
 {
     /** @use HasFactory<StudentDueAssignmentFactory> */
     use HasFactory;
+
+    use HasPublicId;
 
     public const string StatusPending = 'pending';
 

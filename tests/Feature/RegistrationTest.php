@@ -1,270 +1,152 @@
 <?php
 
 use App\AccountType;
+use App\Honorific;
+use App\Models\AcademicSession;
 use App\Models\AdvisorProfile;
 use App\Models\StudentProfile;
 use App\Models\StudentSet;
 use App\Models\User;
-use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Hash;
+use Inertia\Testing\AssertableInertia as Assert;
 
-function provisionAdvisorWorkspace(): StudentSet
-{
-    return StudentSet::factory()->create();
-}
-
-function provisionPendingStudent(StudentSet $set, string $registrationNumber = '2021001234', string $accessCode = 'STUDENT-CODE'): User
-{
-    $user = User::factory()
-        ->student()
-        ->pendingActivation($accessCode)
-        ->create([
-            'name' => 'Student User',
-            'email' => null,
-        ]);
-
-    StudentProfile::factory()->create([
-        'user_id' => $user->id,
-        'advisor_profile_id' => $set->advisor_profile_id,
-        'student_set_id' => $set->id,
-        'registration_number' => $registrationNumber,
-    ]);
-
-    return $user;
-}
-
-test('students verify access before activating with an email and password', function () {
-    $set = provisionAdvisorWorkspace();
-    $user = provisionPendingStudent($set);
-
-    $this->post(route('signup.student.verify'), [
-        'registration_number' => '2021001234',
-        'access_code' => 'STUDENT-CODE',
-    ])->assertRedirect(route('signup.student'));
-
-    $this->get(route('signup.student'))
-        ->assertInertia(fn ($page) => $page
-            ->where('activation.step', 'complete')
-            ->where('activation.identifier', '2021001234')
-            ->etc());
-
-    $response = $this->post(route('signup.student.store'), [
-        'email' => 'student@example.com',
-        'password' => 'new-password',
-        'password_confirmation' => 'new-password',
-    ]);
-
-    $response->assertRedirect(route('dashboard'));
-
-    $user->refresh();
-
-    $this->assertAuthenticatedAs($user);
-    expect($user->account_type)->toBe(AccountType::Student)
-        ->and($user->email)->toBe('student@example.com')
-        ->and($user->activated_at)->not->toBeNull()
-        ->and($user->access_code)->toBe('STUDENT-CODE')
-        ->and($user->access_code_used_at)->not->toBeNull()
-        ->and(Hash::check('new-password', $user->password))->toBeTrue()
-        ->and($user->studentProfile->registration_number)->toBe('2021001234');
-});
-
-test('course advisers sign up directly with their programme details', function () {
+test('course advisers create an empty workspace', function () {
     $response = $this->post(route('signup.advisor.store'), [
+        'title' => Honorific::Dr->value,
         'name' => 'Okoro Chinedu',
-        'email' => 'adviser@example.com',
-        'institution_name' => 'Federal University of Technology',
-        'programme_name' => 'Computer Engineering',
-        'programme_abbreviation' => 'CPE',
-        'minimum_years_to_degree' => 4,
-        'maximum_course_units' => 24,
+        'email' => 'adviser@futo.edu',
         'password' => 'new-password',
         'password_confirmation' => 'new-password',
     ]);
 
     $response->assertRedirect(route('dashboard'));
 
-    $user = User::query()->where('email', 'adviser@example.com')->firstOrFail();
+    $user = User::query()->where('email', 'adviser@futo.edu')->firstOrFail();
 
     $this->assertAuthenticatedAs($user);
     expect($user->account_type)->toBe(AccountType::Adviser)
-        ->and($user->advisorProfile->programme_abbreviation)->toBe('CPE')
-        ->and($user->advisorProfile->minimum_years_to_degree)->toBe(4)
-        ->and($user->advisorProfile->academicSessions()->count())->toBe(0)
+        ->and($user->title)->toBe(Honorific::Dr)
+        ->and($user->displayName())->toBe('Dr Okoro Chinedu')
+        ->and(AcademicSession::query()->count())->toBe(0)
         ->and($user->advisorProfile->studentSets()->count())->toBe(0);
 });
 
-test('adviser signup rejects duplicate emails and invalid programme limits', function () {
+test('a student joins the adviser set through its signup link', function () {
+    $set = StudentSet::factory()->create();
+
+    $this->get(route('student-invitations.show', ['studentSet' => $set->invite_token]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('student-invitation')
+            ->where('invitation.available', true)
+            ->where('invitation.studentSet', $set->label())
+            ->where('invitation.courseAdviser', $set->advisorProfile->user->displayName()));
+
+    $response = $this->post(
+        route('student-invitations.store', ['studentSet' => $set->invite_token]),
+        [
+            'surname' => 'Nwosu',
+            'other_names' => 'Adaeze Chioma',
+            'registration_number' => '2024001234',
+            'email' => 'adaeze@futo.edu',
+            'password' => 'new-password',
+            'password_confirmation' => 'new-password',
+        ],
+    );
+
+    $response->assertRedirect(route('dashboard'));
+
+    $user = User::query()->where('email', 'adaeze@futo.edu')->firstOrFail();
+    $student = $user->studentProfile;
+
+    $this->assertAuthenticatedAs($user);
+    expect($user->name)->toBe('Nwosu Adaeze Chioma')
+        ->and(Hash::check('new-password', $user->password))->toBeTrue()
+        ->and($student)->toBeInstanceOf(StudentProfile::class)
+        ->and($student->advisor_profile_id)->toBe($set->advisor_profile_id)
+        ->and($student->student_set_id)->toBe($set->id)
+        ->and($student->registration_number)->toBe('2024001234');
+});
+
+test('closed signup links do not create student accounts', function () {
+    $set = StudentSet::factory()->create(['student_signup_enabled' => false]);
+
+    $this->get(route('student-invitations.show', ['studentSet' => $set->invite_token]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('invitation.available', false));
+
+    $this->post(
+        route('student-invitations.store', ['studentSet' => $set->invite_token]),
+        [
+            'surname' => 'Obi',
+            'other_names' => 'Ikenna',
+            'registration_number' => '2024005678',
+            'email' => 'ikenna@futo.edu',
+            'password' => 'new-password',
+            'password_confirmation' => 'new-password',
+        ],
+    )->assertSessionHasErrors('invitation');
+
+    expect(User::query()->where('email', 'ikenna@futo.edu')->exists())->toBeFalse();
+    $this->assertGuest();
+});
+
+test('student registration numbers are unique within one adviser workspace', function () {
+    $set = StudentSet::factory()->create();
+    $existingUser = User::factory()->student()->create();
+    StudentProfile::factory()->create([
+        'user_id' => $existingUser->id,
+        'advisor_profile_id' => $set->advisor_profile_id,
+        'student_set_id' => $set->id,
+        'registration_number' => '2024001234',
+    ]);
+
+    $this->post(
+        route('student-invitations.store', ['studentSet' => $set->invite_token]),
+        [
+            'surname' => 'Eze',
+            'other_names' => 'Chiamaka',
+            'registration_number' => '2024001234',
+            'email' => 'chiamaka@futo.edu',
+            'password' => 'new-password',
+            'password_confirmation' => 'new-password',
+        ],
+    )->assertSessionHasErrors('registration_number');
+
+    $otherSet = StudentSet::factory()->create();
+    $this->post(
+        route('student-invitations.store', ['studentSet' => $otherSet->invite_token]),
+        [
+            'surname' => 'Eze',
+            'other_names' => 'Chiamaka',
+            'registration_number' => '2024001234',
+            'email' => 'chiamaka@futo.edu',
+            'password' => 'new-password',
+            'password_confirmation' => 'new-password',
+        ],
+    )->assertRedirect(route('dashboard'));
+});
+
+test('legacy signup redirects to course adviser signup', function () {
+    $this->get(route('signup'))->assertRedirect(route('signup.advisor'));
+});
+
+test('adviser signup rejects duplicate emails and unsupported titles', function () {
     $adviser = AdvisorProfile::factory()->create();
 
     $this->from(route('signup.advisor'))->post(route('signup.advisor.store'), [
+        'title' => Honorific::Prof->value,
         'name' => 'Second Adviser',
         'email' => $adviser->user->email,
-        'programme_name' => 'Computer Engineering',
-        'programme_abbreviation' => 'CPE',
-        'minimum_years_to_degree' => 4,
-        'maximum_course_units' => 24,
         'password' => 'new-password',
         'password_confirmation' => 'new-password',
-    ])->assertRedirect(route('signup.advisor'));
-
-    $this->assertGuest();
+    ])->assertSessionHasErrors('email');
 
     $this->from(route('signup.advisor'))->post(route('signup.advisor.store'), [
+        'title' => 'Sir',
         'name' => 'Third Adviser',
-        'email' => 'third@example.com',
-        'programme_name' => 'Computer Engineering',
-        'programme_abbreviation' => 'CPE',
-        'minimum_years_to_degree' => 9,
-        'maximum_course_units' => 24,
+        'email' => 'third@futo.edu',
         'password' => 'new-password',
         'password_confirmation' => 'new-password',
-    ])->assertRedirect(route('signup.advisor'));
-
-    $this->assertGuest();
-});
-
-test('legacy signup route redirects to the student signup page', function () {
-    $response = $this->get(route('signup'));
-
-    $response->assertRedirect(route('signup.student'));
-});
-
-test('student verification requires a registration number', function () {
-    $response = $this->from(route('signup.student'))->post(route('signup.student.verify'), [
-        'access_code' => 'STUDENT-CODE',
-    ]);
-
-    $response->assertRedirect(route('signup.student'));
-    $response->assertSessionHasErrors('registration_number');
-});
-
-test('student verification rejects unknown registration numbers', function () {
-    $response = $this->from(route('signup.student'))->post(route('signup.student.verify'), [
-        'registration_number' => '2021999999',
-        'access_code' => 'STUDENT-CODE',
-    ]);
-
-    $response->assertRedirect(route('signup.student'));
-    $response->assertSessionHasErrors('registration_number');
-});
-
-test('student verification rejects invalid access codes', function () {
-    $set = provisionAdvisorWorkspace();
-    provisionPendingStudent($set);
-
-    $response = $this->from(route('signup.student'))->post(route('signup.student.verify'), [
-        'registration_number' => '2021001234',
-        'access_code' => 'WRONG-CODE',
-    ]);
-
-    $response->assertRedirect(route('signup.student'));
-    $response->assertSessionHasErrors('access_code');
-});
-
-test('student activation requires verified access first', function () {
-    $response = $this->from(route('signup.student'))->post(route('signup.student.store'), [
-        'email' => 'student@example.com',
-        'password' => 'new-password',
-        'password_confirmation' => 'new-password',
-    ]);
-
-    $response->assertRedirect(route('signup.student'));
-    $response->assertSessionHasErrors('password');
-    $this->assertGuest();
-});
-
-test('activation rejects already activated accounts', function () {
-    $set = provisionAdvisorWorkspace();
-    $user = provisionPendingStudent($set);
-
-    $user->forceFill([
-        'activated_at' => now(),
-    ])->save();
-
-    $response = $this->from(route('signup.student'))->post(route('signup.student.verify'), [
-        'registration_number' => '2021001234',
-        'access_code' => 'STUDENT-CODE',
-    ]);
-
-    $response->assertRedirect(route('signup.student'));
-    $response->assertSessionHasErrors('registration_number');
-});
-
-test('registration numbers can repeat across different advisers', function () {
-    $firstSet = provisionAdvisorWorkspace();
-    $secondSet = provisionAdvisorWorkspace();
-
-    $firstStudent = provisionPendingStudent($firstSet, '2021001234', 'FUTO-STUDENT');
-    $secondStudent = provisionPendingStudent($secondSet, '2021001234', 'MIT-STUDENT');
-
-    expect($firstStudent->studentProfile->registration_number)
-        ->toBe($secondStudent->studentProfile->registration_number)
-        ->and($firstStudent->studentProfile->advisor_profile_id)
-        ->not->toBe($secondStudent->studentProfile->advisor_profile_id);
-});
-
-test('emails are globally unique and registration numbers are unique per adviser', function () {
-    $set = provisionAdvisorWorkspace();
-    provisionPendingStudent($set, '2021001234');
-
-    User::factory()->student()->create([
-        'email' => 'shared@example.com',
-    ]);
-    expect(fn () => User::factory()
-        ->student()
-        ->pendingActivation()
-        ->create([
-            'email' => 'shared@example.com',
-        ]))->toThrow(QueryException::class);
-
-    $secondUser = User::factory()
-        ->student()
-        ->pendingActivation()
-        ->create([
-            'email' => null,
-        ]);
-
-    expect(fn () => StudentProfile::factory()->create([
-        'user_id' => $secondUser->id,
-        'advisor_profile_id' => $set->advisor_profile_id,
-        'student_set_id' => $set->id,
-        'registration_number' => '2021001234',
-    ]))->toThrow(QueryException::class);
-});
-
-test('student activation rejects emails already in use', function () {
-    $set = provisionAdvisorWorkspace();
-    provisionPendingStudent($set);
-    User::factory()->student()->create([
-        'email' => 'taken@example.com',
-    ]);
-
-    $this->post(route('signup.student.verify'), [
-        'registration_number' => '2021001234',
-        'access_code' => 'STUDENT-CODE',
-    ])->assertRedirect(route('signup.student'));
-
-    $response = $this->from(route('signup.student'))->post(route('signup.student.store'), [
-        'email' => 'taken@example.com',
-        'password' => 'new-password',
-        'password_confirmation' => 'new-password',
-    ]);
-
-    $response->assertRedirect(route('signup.student'));
-    $response->assertSessionHasErrors('email');
-    $this->assertGuest();
-});
-
-test('unactivated users cannot login before signup activation', function () {
-    $set = provisionAdvisorWorkspace();
-    provisionPendingStudent($set, '2021001234', 'PENDING-CODE');
-
-    $response = $this->from(route('home'))->post(route('login.store'), [
-        'email' => 'pending@example.com',
-        'password' => 'password',
-    ]);
-
-    $response->assertRedirect(route('home'));
-    $response->assertSessionHasErrors('email');
-    $this->assertGuest();
+    ])->assertSessionHasErrors('title');
 });

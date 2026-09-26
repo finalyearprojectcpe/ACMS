@@ -11,19 +11,18 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Stores the reusable course catalog owned by a course adviser.
+        // Stores the course catalog that belongs exclusively to one student set.
         Schema::create('courses', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('advisor_profile_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('student_set_id')->constrained()->cascadeOnDelete();
             $table->string('code');
             $table->string('title');
             $table->string('slug');
-            $table->unsignedTinyInteger('credit_units')->default(3);
             $table->timestamps();
 
-            $table->unique(['advisor_profile_id', 'code']);
-            $table->unique(['advisor_profile_id', 'slug']);
-            $table->index(['advisor_profile_id', 'title']);
+            $table->unique(['student_set_id', 'code']);
+            $table->unique(['student_set_id', 'slug']);
+            $table->index(['student_set_id', 'title']);
         });
     }
 

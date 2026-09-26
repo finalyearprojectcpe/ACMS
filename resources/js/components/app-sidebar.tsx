@@ -1,11 +1,12 @@
 import { Link } from '@inertiajs/react';
 import {
-    RiBankCardLine,
-    RiBookOpenLine,
+    RiAddLine,
     RiCalendarTodoLine,
     RiCashLine,
     RiHome5Line,
     RiLogoutBoxRLine,
+    RiMagicLine,
+    RiFileChartLine,
     RiSettings3Line,
     RiTeamLine,
     RiUser3Line,
@@ -14,8 +15,11 @@ import type { ComponentProps, ComponentType } from 'react';
 
 import { destroy as logoutUser } from '@/actions/App/Http/Controllers/Auth/AuthenticatedSessionController';
 import {
+    createStudentSet,
     home as dashboardHome,
     section as dashboardSection,
+    showStudentSetDues,
+    showCourseSchedule,
 } from '@/actions/App/Http/Controllers/DashboardController';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -27,11 +31,19 @@ import {
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
+    SidebarMenuSub,
+    SidebarMenuSubButton,
+    SidebarMenuSubItem,
     SidebarRail,
 } from '@/components/ui/sidebar';
 import { dashboardSidebarRoleLabel } from '@/lib/dashboard-labels';
 import { initialsFor } from '@/lib/person';
-import type { Auth, DashboardContext } from '@/types';
+import { studentSetRouteParameters } from '@/lib/student-sets';
+import type {
+    Auth,
+    DashboardContext,
+    DashboardStudentSetContext,
+} from '@/types';
 import type { RouteDefinition } from '@/wayfinder';
 
 type DashboardRoute = RouteDefinition<'get'>;
@@ -57,7 +69,8 @@ export function AppSidebar({
 }) {
     const navigation = navigationFor(dashboard);
     const sidebarRoleLabel = dashboardSidebarRoleLabel(dashboard);
-    const profileSettingsSection = 'profile-settings';
+    const profileSection =
+        dashboard.role === 'adviser' ? 'settings' : 'profile-settings';
 
     return (
         <Sidebar collapsible="icon" {...props}>
@@ -87,21 +100,21 @@ export function AppSidebar({
 
             <SidebarContent>
                 <SidebarGroup>
-                    <SidebarMenu>
-                        {navigation.map((item) => (
-                            <SidebarMenuItem key={item.title}>
-                                <SidebarMenuButton
-                                    asChild
-                                    tooltip={item.title}
-                                    isActive={isActive(item, dashboard)}
-                                >
-                                    <Link href={item.href}>
-                                        <item.icon className="size-4" />
-                                        <span>{item.title}</span>
-                                    </Link>
-                                </SidebarMenuButton>
-                            </SidebarMenuItem>
-                        ))}
+                    <SidebarMenu className="gap-3">
+                        {dashboard.role === 'adviser' ? (
+                            <AdviserNavigation
+                                navigation={navigation}
+                                dashboard={dashboard}
+                            />
+                        ) : (
+                            navigation.map((item) => (
+                                <NavigationItem
+                                    key={item.title}
+                                    item={item}
+                                    dashboard={dashboard}
+                                />
+                            ))
+                        )}
                     </SidebarMenu>
                 </SidebarGroup>
             </SidebarContent>
@@ -111,26 +124,26 @@ export function AppSidebar({
                     <SidebarMenuItem>
                         <SidebarMenuButton
                             size="lg"
-                            tooltip={`${user.name} (${user.email})`}
+                            tooltip={`${user.display_name} (${user.email})`}
                             asChild
                         >
                             <Link
                                 href={dashboardSection({
-                                    section: profileSettingsSection,
+                                    section: profileSection,
                                 })}
                             >
                                 <Avatar className="size-8">
                                     <AvatarImage
                                         src={user.avatar ?? undefined}
-                                        alt={`${user.name} avatar`}
+                                        alt={`${user.display_name} avatar`}
                                     />
                                     <AvatarFallback className="text-xs font-medium">
-                                        {initialsFor(user.name)}
+                                        {initialsFor(user.display_name)}
                                     </AvatarFallback>
                                 </Avatar>
                                 <div className="flex min-w-0 flex-col gap-0.5 leading-none">
                                     <span className="truncate font-medium">
-                                        {user.name}
+                                        {user.display_name}
                                     </span>
                                     <span className="truncate text-muted-foreground">
                                         {user.email}
@@ -166,35 +179,28 @@ function adviserNavigation(): NavItem[] {
     return [
         nav('Home', 'home', dashboardHome(), RiHome5Line),
         nav(
-            'Students',
-            'students',
-            dashboardSection({ section: 'students' }),
-            RiTeamLine,
-        ),
-        nav(
-            'Course Offerings',
+            'Courses & Results',
             'courses',
             dashboardSection({ section: 'courses' }),
-            RiBookOpenLine,
-        ),
-        nav(
-            'Course Registrations',
-            'course-registration',
-            dashboardSection({ section: 'course-registration' }),
             RiCalendarTodoLine,
         ),
-        nav('Dues', 'dues', dashboardSection({ section: 'dues' }), RiCashLine),
         nav(
-            'Paystack Settings',
-            'payment-settings',
-            dashboardSection({ section: 'payment-settings' }),
-            RiBankCardLine,
+            'Student Dues',
+            'student-dues',
+            dashboardSection({ section: 'student-dues' }),
+            RiCashLine,
         ),
         nav(
-            'Profile Settings',
-            'profile-settings',
-            dashboardSection({ section: 'profile-settings' }),
+            'Settings',
+            'settings',
+            dashboardSection({ section: 'settings' }),
             RiSettings3Line,
+        ),
+        nav(
+            'Ask AI',
+            'assistant',
+            dashboardSection({ section: 'assistant' }),
+            RiMagicLine,
         ),
     ];
 }
@@ -210,7 +216,13 @@ function studentNavigation(): NavItem[] {
             RiCalendarTodoLine,
         ),
         nav(
-            'Profile Settings',
+            'Results',
+            'results',
+            dashboardSection({ section: 'results' }),
+            RiFileChartLine,
+        ),
+        nav(
+            'Profile',
             'profile-settings',
             dashboardSection({ section: 'profile-settings' }),
             RiUser3Line,
@@ -228,9 +240,186 @@ function nav(
 }
 
 function isActive(item: ActiveItem, dashboard: DashboardContext): boolean {
-    if (item.section !== dashboard.section) {
-        return false;
-    }
+    return item.section === dashboard.section;
+}
 
-    return true;
+function AdviserNavigation({
+    navigation,
+    dashboard,
+}: {
+    navigation: NavItem[];
+    dashboard: DashboardContext;
+}) {
+    const [home, ...remaining] = navigation;
+    const coursesItem = remaining.find((item) => item.section === 'courses');
+    const duesItem = remaining.find((item) => item.section === 'student-dues');
+    const settingsItem = remaining.find((item) => item.section === 'settings');
+    const assistantItem = remaining.find(
+        (item) => item.section === 'assistant',
+    );
+
+    return (
+        <>
+            <NavigationItem item={home} dashboard={dashboard} />
+            <SidebarMenuItem>
+                <div className="flex h-8 items-center gap-2 px-2 text-sm font-medium text-sidebar-foreground group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+                    <RiTeamLine className="size-4 shrink-0" />
+                    <span className="truncate group-data-[collapsible=icon]:hidden">
+                        Student Sets
+                    </span>
+                </div>
+                <SidebarMenuSub className="ml-8 translate-x-0">
+                    {dashboard.advisedSets.map((studentSet) => (
+                        <SidebarMenuSubItem key={studentSet.id}>
+                            <SidebarMenuSubButton
+                                asChild
+                                isActive={
+                                    dashboard.activeStudentSetId ===
+                                        studentSet.id &&
+                                    ['student-sets', 'students'].includes(
+                                        dashboard.section,
+                                    )
+                                }
+                            >
+                                <Link
+                                    href={studentSet.url}
+                                    title={studentSet.name}
+                                    prefetch
+                                >
+                                    <span>{studentSet.name}</span>
+                                </Link>
+                            </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                    ))}
+                    <SidebarMenuSubItem className="flex justify-center">
+                        <SidebarMenuSubButton
+                            asChild
+                            className="w-fit flex-none text-link opacity-80 hover:text-link hover:opacity-100 [&>svg]:text-link"
+                        >
+                            <Link href={createStudentSet()}>
+                                <RiAddLine />
+                                <span>Add a New Set</span>
+                            </Link>
+                        </SidebarMenuSubButton>
+                    </SidebarMenuSubItem>
+                </SidebarMenuSub>
+            </SidebarMenuItem>
+            {coursesItem ? (
+                dashboard.advisedSets.length === 0 ? (
+                    <NavigationItem item={coursesItem} dashboard={dashboard} />
+                ) : (
+                    <SidebarMenuItem>
+                        <div className="flex h-8 items-center gap-2 px-2 text-sm font-medium text-sidebar-foreground group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+                            <RiCalendarTodoLine className="size-4 shrink-0" />
+                            <span className="truncate group-data-[collapsible=icon]:hidden">
+                                Courses &amp; Results
+                            </span>
+                        </div>
+                        <AdviserSetSubmenu
+                            dashboard={dashboard}
+                            section="courses"
+                            hrefForSet={(studentSet) =>
+                                showCourseSchedule(
+                                    studentSetRouteParameters(studentSet),
+                                ).url
+                            }
+                        />
+                    </SidebarMenuItem>
+                )
+            ) : null}
+            {duesItem ? (
+                dashboard.advisedSets.length === 0 ? (
+                    <NavigationItem item={duesItem} dashboard={dashboard} />
+                ) : (
+                    <SidebarMenuItem>
+                        <div className="flex h-8 items-center gap-2 px-2 text-sm font-medium text-sidebar-foreground group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+                            <RiCashLine className="size-4 shrink-0" />
+                            <span className="truncate group-data-[collapsible=icon]:hidden">
+                                Student Dues
+                            </span>
+                        </div>
+                        <AdviserSetSubmenu
+                            dashboard={dashboard}
+                            section="student-dues"
+                            hrefForSet={(studentSet) =>
+                                showStudentSetDues(
+                                    studentSetRouteParameters(studentSet),
+                                ).url
+                            }
+                        />
+                    </SidebarMenuItem>
+                )
+            ) : null}
+            {settingsItem ? (
+                <NavigationItem item={settingsItem} dashboard={dashboard} />
+            ) : null}
+            {assistantItem ? (
+                <NavigationItem item={assistantItem} dashboard={dashboard} />
+            ) : null}
+        </>
+    );
+}
+
+function AdviserSetSubmenu({
+    dashboard,
+    section,
+    hrefForSet,
+}: {
+    dashboard: DashboardContext;
+    section: 'courses' | 'student-dues';
+    hrefForSet: (studentSet: DashboardStudentSetContext) => string;
+}) {
+    return (
+        <SidebarMenuSub className="ml-8 translate-x-0">
+            {dashboard.advisedSets.map((studentSet) => (
+                <SidebarMenuSubItem key={studentSet.id}>
+                    <SidebarMenuSubButton
+                        asChild
+                        isActive={
+                            (section === 'courses'
+                                ? [
+                                      'courses',
+                                      'course-registration',
+                                      'results',
+                                  ].includes(dashboard.section)
+                                : dashboard.section === section) &&
+                            dashboard.activeStudentSetId === studentSet.id
+                        }
+                    >
+                        <Link
+                            href={hrefForSet(studentSet)}
+                            title={studentSet.name}
+                            prefetch
+                        >
+                            <span>{studentSet.name}</span>
+                        </Link>
+                    </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+            ))}
+        </SidebarMenuSub>
+    );
+}
+
+function NavigationItem({
+    item,
+    dashboard,
+}: {
+    item: NavItem;
+    dashboard: DashboardContext;
+}) {
+    return (
+        <SidebarMenuItem>
+            <SidebarMenuButton
+                asChild
+                tooltip={item.title}
+                isActive={isActive(item, dashboard)}
+                className="text-sm font-medium"
+            >
+                <Link href={item.href}>
+                    <item.icon className="size-4" />
+                    <span>{item.title}</span>
+                </Link>
+            </SidebarMenuButton>
+        </SidebarMenuItem>
+    );
 }

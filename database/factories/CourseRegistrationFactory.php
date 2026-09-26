@@ -3,7 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\AcademicSession;
-use App\Models\AcademicYearSemester;
+use App\Models\AcademicSessionSemester;
 use App\Models\CourseRegistration;
 use App\Models\StudentProfile;
 use App\Models\StudentSet;
@@ -28,14 +28,12 @@ class CourseRegistrationFactory extends Factory
         ]);
 
         return [
-            'advisor_profile_id' => $set->advisor_profile_id,
-            'student_set_id' => $set->id,
             'student_profile_id' => $studentProfile->id,
-            'academic_session_id' => AcademicSession::factory()->create([
-                'advisor_profile_id' => $set->advisor_profile_id,
+            'academic_session_semester_id' => AcademicSessionSemester::factory()->create([
+                'academic_session_id' => AcademicSession::factory()->create([
+                    'student_set_id' => $set->id,
+                ])->id,
             ])->id,
-            'academic_year_semester_id' => AcademicYearSemester::factory(),
-            'reviewer_advisor_profile_id' => null,
             'status' => CourseRegistration::StatusDraft,
             'feedback_note' => null,
             'submitted_at' => null,

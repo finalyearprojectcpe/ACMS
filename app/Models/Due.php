@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasPublicId;
 use Database\Factories\DueFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -13,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'advisor_profile_id',
     'student_set_id',
     'academic_session_id',
+    'academic_session_semester_id',
     'payment_account_id',
     'title',
     'description',
@@ -27,6 +29,8 @@ class Due extends Model
 {
     /** @use HasFactory<DueFactory> */
     use HasFactory;
+
+    use HasPublicId;
 
     public const string StatusDraft = 'draft';
 
@@ -56,6 +60,12 @@ class Due extends Model
     public function academicSession(): BelongsTo
     {
         return $this->belongsTo(AcademicSession::class);
+    }
+
+    /** @return BelongsTo<AcademicSessionSemester, $this> */
+    public function academicSessionSemester(): BelongsTo
+    {
+        return $this->belongsTo(AcademicSessionSemester::class);
     }
 
     /**

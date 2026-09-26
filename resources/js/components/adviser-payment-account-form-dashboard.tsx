@@ -1,15 +1,18 @@
-import { useForm } from '@inertiajs/react';
+import { router, useForm } from '@inertiajs/react';
 import {
     RiArrowDownSLine,
     RiBankCardLine,
     RiCheckboxCircleLine,
     RiErrorWarningLine,
+    RiRefreshLine,
     RiSave3Line,
 } from '@remixicon/react';
 import type { FormEvent } from 'react';
 import { useState } from 'react';
 
 import { storePaymentAccount } from '@/actions/App/Http/Controllers/AdviserAccountController';
+import { section as dashboardSection } from '@/actions/App/Http/Controllers/DashboardController';
+import { ActionLink } from '@/components/action-link';
 import { PaymentAccountSummary } from '@/components/payment-account-summary';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
@@ -81,6 +84,23 @@ export function AdviserPaymentAccountFormDashboard({
 
     function requestSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
+        form.clearErrors();
+
+        if (!form.data.bank_code) {
+            form.setError('bank_code', 'Choose the bank for this account.');
+
+            return;
+        }
+
+        if (!/^\d{10,12}$/.test(form.data.account_number)) {
+            form.setError(
+                'account_number',
+                'Enter a valid Nigerian account number.',
+            );
+
+            return;
+        }
+
         setConfirmOpen(true);
     }
 
@@ -91,7 +111,12 @@ export function AdviserPaymentAccountFormDashboard({
     }
 
     return (
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
+        <div
+            className={`mx-auto flex w-full flex-col gap-4 ${currentAccount ? 'max-w-5xl' : 'max-w-3xl'}`}
+        >
+            <ActionLink href={dashboardSection({ section: 'settings' })}>
+                Back to Settings
+            </ActionLink>
             <div className="flex flex-col gap-2">
                 <h1 className="text-xl font-semibold tracking-normal">
                     {currentAccount
@@ -104,7 +129,9 @@ export function AdviserPaymentAccountFormDashboard({
                 </p>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+            <div
+                className={`grid gap-4 ${currentAccount ? 'lg:grid-cols-[minmax(0,1fr)_18rem]' : ''}`}
+            >
                 <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
                     <CardForm onSubmit={requestSubmit}>
                         <CardHeader className="gap-2 border-b border-border">
@@ -181,6 +208,15 @@ export function AdviserPaymentAccountFormDashboard({
                                     <AlertDescription>
                                         {accountForm.bankOptionsError}
                                     </AlertDescription>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="mt-2"
+                                        onClick={() => router.reload()}
+                                    >
+                                        <RiRefreshLine /> Try Again
+                                    </Button>
                                 </Alert>
                             ) : null}
 
@@ -234,7 +270,7 @@ export function AdviserPaymentAccountFormDashboard({
                                 {form.errors.payment_account}
                             </FieldError>
                         </CardContent>
-                        <CardFooter className="justify-end bg-muted/20">
+                        <CardFooter className="justify-end bg-background">
                             <Button
                                 type="submit"
                                 disabled={form.processing || !bankOptionsLoaded}
@@ -246,11 +282,13 @@ export function AdviserPaymentAccountFormDashboard({
                     </CardForm>
                 </Card>
 
-                <PaymentAccountSummary
-                    accounts={accountForm.accounts}
-                    compact
-                    title="Current Payout Account"
-                />
+                {currentAccount ? (
+                    <PaymentAccountSummary
+                        accounts={accountForm.accounts}
+                        compact
+                        title="Current Account"
+                    />
+                ) : null}
             </div>
 
             <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>

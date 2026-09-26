@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasPublicId;
 use Database\Factories\DuePaymentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -42,6 +43,8 @@ class DuePayment extends Model
 {
     /** @use HasFactory<DuePaymentFactory> */
     use HasFactory;
+
+    use HasPublicId;
 
     /** @var list<string> */
     protected $hidden = ['access_code', 'authorization_url', 'provider_payload'];

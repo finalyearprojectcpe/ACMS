@@ -12,12 +12,6 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
     'user_id',
-    'institution_name',
-    'programme_name',
-    'programme_abbreviation',
-    'minimum_years_to_degree',
-    'maximum_course_units',
-    'timezone',
 ])]
 class AdvisorProfile extends Model
 {
@@ -28,12 +22,6 @@ class AdvisorProfile extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
-    }
-
-    /** @return HasMany<AcademicSession, $this> */
-    public function academicSessions(): HasMany
-    {
-        return $this->hasMany(AcademicSession::class);
     }
 
     /** @return HasMany<StudentSet, $this> */
@@ -48,12 +36,6 @@ class AdvisorProfile extends Model
         return $this->hasMany(StudentProfile::class);
     }
 
-    /** @return HasMany<Course, $this> */
-    public function courses(): HasMany
-    {
-        return $this->hasMany(Course::class);
-    }
-
     /** @return HasMany<Due, $this> */
     public function dues(): HasMany
     {
@@ -66,12 +48,8 @@ class AdvisorProfile extends Model
         return $this->hasOne(PaymentAccount::class);
     }
 
-    /** @return array<string, string> */
-    protected function casts(): array
+    public function assistantConversations(): HasMany
     {
-        return [
-            'minimum_years_to_degree' => 'integer',
-            'maximum_course_units' => 'integer',
-        ];
+        return $this->hasMany(AssistantConversation::class);
     }
 }

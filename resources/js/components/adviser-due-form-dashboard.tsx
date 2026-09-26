@@ -1,6 +1,5 @@
 import { Link, useForm } from '@inertiajs/react';
 import {
-    RiBankCardLine,
     RiErrorWarningLine,
     RiSave3Line,
     RiSendPlaneLine,
@@ -11,7 +10,7 @@ import {
     store as storeAdviserDue,
     update as updateAdviserDue,
 } from '@/actions/App/Http/Controllers/DueController';
-import { StudentSetPicker } from '@/components/student-set-picker';
+import { ActionLink } from '@/components/action-link';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
     AlertDialog,
@@ -40,11 +39,21 @@ import {
     FieldLabel,
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { formatNaira } from '@/lib/currency';
 import type { DashboardAdviserDueForm } from '@/types';
 
 type DueFormData = {
     student_set_id: string;
+    academic_session_id: string;
+    academic_session_semester_id: string;
     title: string;
     description: string;
     amount_naira: string;
@@ -58,28 +67,36 @@ export function AdviserDueFormDashboard({
 }) {
     const dueForm = useForm<DueFormData>({
         student_set_id: form.defaults.studentSetId?.toString() ?? '',
+        academic_session_id: form.defaults.academicSessionId?.toString() ?? '',
+        academic_session_semester_id:
+            form.defaults.academicSessionSemesterId?.toString() ?? 'whole',
         title: form.defaults.title,
         description: form.defaults.description,
         amount_naira: form.defaults.amountNaira,
         due_on: form.defaults.dueOn,
     });
     const payoutAccount = form.paymentAccounts[0] ?? null;
+    const selectedSession = form.sessions.find(
+        (session) => session.id.toString() === dueForm.data.academic_session_id,
+    );
     const publishedAmountChanged =
         form.mode === 'edit' &&
         form.due?.status === 'Published' &&
         Number(dueForm.data.amount_naira) !== Number(form.defaults.amountNaira);
-    const updatedAmount = new Intl.NumberFormat('en-NG', {
-        style: 'currency',
-        currency: 'NGN',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2,
-    }).format(Number(dueForm.data.amount_naira) || 0);
+    const updatedAmount = formatNaira(Number(dueForm.data.amount_naira) || 0);
 
     function submit(action: 'draft' | 'publish') {
-        dueForm.transform((data) => ({ ...data, action }));
+        dueForm.transform((data) => ({
+            ...data,
+            academic_session_semester_id:
+                data.academic_session_semester_id === 'whole'
+                    ? null
+                    : data.academic_session_semester_id,
+            action,
+        }));
         dueForm.submit(
             form.mode === 'edit' && form.due
-                ? updateAdviserDue(form.due.id)
+                ? updateAdviserDue(form.due.publicId)
                 : storeAdviserDue(),
             { onFinish: () => dueForm.transform((data) => data) },
         );
@@ -91,90 +108,121 @@ export function AdviserDueFormDashboard({
 
     return (
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
-            <div>
-                <h1 className="text-xl font-semibold tracking-normal">
-                    {form.mode === 'edit' ? 'Edit Due' : 'Create Due'}
-                </h1>
-                <p className="mt-1 text-sm text-muted-foreground">
-                    {form.mode === 'edit'
-                        ? 'Update the details students see for this due.'
-                        : 'Save a draft or publish the due to students.'}
-                </p>
-            </div>
-
-            <Alert
-                className={
-                    payoutAccount
-                        ? 'border-green-200 bg-green-50 text-green-900 dark:border-green-400/30 dark:bg-green-400/10 dark:text-green-100'
-                        : 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-100'
-                }
-            >
-                {payoutAccount ? (
-                    <RiBankCardLine className="size-4" />
-                ) : (
-                    <RiErrorWarningLine className="size-4" />
-                )}
-                <AlertTitle>
-                    {payoutAccount
-                        ? 'Payout account ready'
-                        : 'Payout account needed'}
-                </AlertTitle>
-                <AlertDescription>
-                    {payoutAccount ? (
-                        <>
-                            Payments will settle into{' '}
-                            <strong>{payoutAccount.label}</strong>.
-                        </>
-                    ) : (
-                        <>
-                            You can save a draft. Connect an account in{' '}
-                            <Link
-                                href={form.paymentSettingsUrl}
-                                className="font-medium text-link underline-offset-4 hover:underline"
-                            >
-                                Paystack Settings
-                            </Link>{' '}
-                            before publishing.
-                        </>
-                    )}
-                </AlertDescription>
-            </Alert>
-
-            <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
-                <CardForm onSubmit={preventSubmit}>
-                    <CardHeader className="border-b border-border">
-                        <CardTitle>Due Details</CardTitle>
+            <Card className="gap-0 border border-border bg-background py-0 shadow-sm ring-1 ring-border/70">
+                <CardForm onSubmit={preventSubmit} className="gap-0">
+                    <CardHeader className="gap-1 border-b border-border p-5">
+                        <CardTitle className="text-xl">
+                            {form.mode === 'edit' ? 'Edit Due' : 'Create Due'}
+                        </CardTitle>
+                        <p className="text-sm text-muted-foreground">
+                            {form.selectedSetName}
+                        </p>
                     </CardHeader>
                     <CardContent className="grid gap-5 p-5">
-                        <Field
-                            data-invalid={Boolean(
-                                dueForm.errors.student_set_id,
-                            )}
-                        >
-                            <FieldLabel>Student Set</FieldLabel>
-                            <StudentSetPicker
-                                value={dueForm.data.student_set_id}
-                                onValueChange={(value) =>
-                                    dueForm.setData('student_set_id', value)
-                                }
-                                options={form.assignedSets.map((set) => ({
-                                    value: set.id.toString(),
-                                    entrySession: set.entrySession,
-                                    currentLevel: set.currentLevel,
-                                    minimumYearsToDegree:
-                                        set.minimumYearsToDegree,
-                                    meta: set.advisorName ?? undefined,
-                                }))}
-                                ariaLabel="Student set"
-                                disabled={
-                                    form.mode === 'edit' &&
-                                    !form.due?.canChangeSet
-                                }
-                            />
-                            <FieldError>
-                                {dueForm.errors.student_set_id}
-                            </FieldError>
-                        </Field>
+                        {!payoutAccount ? (
+                            <Alert className="border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-100">
+                                <RiErrorWarningLine className="size-4" />
+                                <AlertTitle>Payout account needed</AlertTitle>
+                                <AlertDescription>
+                                    Save a draft now, or{' '}
+                                    <ActionLink href={form.paymentSettingsUrl}>
+                                        connect a payout account
+                                    </ActionLink>{' '}
+                                    to publish.
+                                </AlertDescription>
+                            </Alert>
+                        ) : null}
+                        <FieldError>{dueForm.errors.student_set_id}</FieldError>
+                        <FieldGroup className="grid gap-5 sm:grid-cols-2">
+                            <Field
+                                data-invalid={Boolean(
+                                    dueForm.errors.academic_session_id,
+                                )}
+                            >
+                                <FieldLabel>Academic Session</FieldLabel>
+                                <Select
+                                    value={dueForm.data.academic_session_id}
+                                    disabled={
+                                        !form.due?.canChangePeriod &&
+                                        form.mode === 'edit'
+                                    }
+                                    onValueChange={(value) =>
+                                        dueForm.setData({
+                                            ...dueForm.data,
+                                            academic_session_id: value,
+                                            academic_session_semester_id:
+                                                'whole',
+                                        })
+                                    }
+                                >
+                                    <SelectTrigger className="w-full">
+                                        <SelectValue placeholder="Select a session" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {form.sessions.map((session) => (
+                                            <SelectItem
+                                                key={session.id}
+                                                value={session.id.toString()}
+                                            >
+                                                {session.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <FieldError>
+                                    {dueForm.errors.academic_session_id}
+                                </FieldError>
+                            </Field>
+                            <Field
+                                data-invalid={Boolean(
+                                    dueForm.errors.academic_session_semester_id,
+                                )}
+                            >
+                                <FieldLabel>Applies To</FieldLabel>
+                                <Select
+                                    value={
+                                        dueForm.data
+                                            .academic_session_semester_id
+                                    }
+                                    disabled={
+                                        !selectedSession ||
+                                        (!form.due?.canChangePeriod &&
+                                            form.mode === 'edit')
+                                    }
+                                    onValueChange={(value) =>
+                                        dueForm.setData(
+                                            'academic_session_semester_id',
+                                            value,
+                                        )
+                                    }
+                                >
+                                    <SelectTrigger className="w-full">
+                                        <SelectValue placeholder="Select a period" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="whole">
+                                            Whole Session
+                                        </SelectItem>
+                                        {selectedSession?.semesters.map(
+                                            (semester) => (
+                                                <SelectItem
+                                                    key={semester.id}
+                                                    value={semester.id.toString()}
+                                                >
+                                                    {semester.name}
+                                                </SelectItem>
+                                            ),
+                                        )}
+                                    </SelectContent>
+                                </Select>
+                                <FieldError>
+                                    {
+                                        dueForm.errors
+                                            .academic_session_semester_id
+                                    }
+                                </FieldError>
+                            </Field>
+                        </FieldGroup>
                         <Field data-invalid={Boolean(dueForm.errors.title)}>
                             <FieldLabel htmlFor="due-title">
                                 Due Name
@@ -218,7 +266,7 @@ export function AdviserDueFormDashboard({
                                 )}
                             >
                                 <FieldLabel htmlFor="due-amount">
-                                    Amount (NGN)
+                                    Amount (₦)
                                 </FieldLabel>
                                 <Input
                                     id="due-amount"
@@ -264,6 +312,9 @@ export function AdviserDueFormDashboard({
                         </FieldGroup>
                     </CardContent>
                     <CardFooter className="justify-end gap-2 bg-muted/20">
+                        <Button type="button" variant="ghost" asChild>
+                            <Link href={form.returnUrl}>Cancel</Link>
+                        </Button>
                         {form.mode === 'edit' &&
                         form.due?.status === 'Published' ? (
                             publishedAmountChanged ? (

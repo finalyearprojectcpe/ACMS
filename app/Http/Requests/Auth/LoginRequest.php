@@ -57,8 +57,7 @@ class LoginRequest extends FormRequest
         }
 
         if (
-            $user->activated_at === null
-            || $user->disabled_at !== null
+            $user->disabled_at !== null
             || $user->status !== AccountStatus::Active
         ) {
             Auth::guard('web')->logout();

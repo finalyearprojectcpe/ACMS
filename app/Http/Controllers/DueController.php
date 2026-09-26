@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreAdviserDueRequest;
 use App\Http\Requests\WaiveStudentDueRequest;
+use App\Models\AcademicSessionSemester;
 use App\Models\Due;
 use App\Models\DuePayment;
 use App\Models\EmailDelivery;
@@ -15,15 +16,12 @@ use App\Services\DuePaymentService;
 use App\Services\DueReceiptService;
 use App\Services\PaystackException;
 use App\Services\PaystackWebhookService;
-use App\Services\Spreadsheet\DuePaymentsWorkbook;
-use App\Services\Spreadsheet\SpreadsheetExportService;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -41,18 +39,17 @@ class DueController extends Controller
         $advisor = $this->access->advisor($request);
         $set = $this->access->studentSet($advisor, $request->integer('student_set_id'));
         $validated = $request->validated();
-        $session = $advisor->academicSessions()
-            ->whereDate('starts_on', '<=', today())
-            ->whereDate('ends_on', '>=', today())
-            ->first() ?? $advisor->academicSessions()->latest('starts_on')->first();
+        $session = $set->academicSessions()->find($validated['academic_session_id']);
         $isPublishing = $validated['action'] === 'publish';
         $account = PaymentAccount::currentFor($advisor);
 
         if ($session === null) {
             throw ValidationException::withMessages([
-                'student_set_id' => 'Add an academic session before creating a due.',
+                'academic_session_id' => 'Select a session in this student set.',
             ]);
         }
+
+        $semester = $this->semesterForSession($session->id, $validated['academic_session_semester_id'] ?? null);
 
         if ($isPublishing && ! ($account instanceof PaymentAccount)) {
             throw ValidationException::withMessages([
@@ -64,6 +61,7 @@ class DueController extends Controller
             'advisor_profile_id' => $advisor->id,
             'student_set_id' => $set->id,
             'academic_session_id' => $session->id,
+            'academic_session_semester_id' => $semester?->id,
             'payment_account_id' => $account?->id,
             'title' => $validated['title'],
             'description' => $validated['description'] ?? null,
@@ -89,12 +87,28 @@ class DueController extends Controller
         abort_if($due->status === Due::StatusArchived, 404);
         $validated = $request->validated();
         $set = $this->access->studentSet($advisor, $request->integer('student_set_id'));
+        $session = $set->academicSessions()->find($validated['academic_session_id']);
+        if ($session === null) {
+            throw ValidationException::withMessages([
+                'academic_session_id' => 'Select a session in this student set.',
+            ]);
+        }
+        $semester = $this->semesterForSession($session->id, $validated['academic_session_semester_id'] ?? null);
         $amountKobo = (int) $validated['amount_naira'] * 100;
         $wasPublished = $due->status === Due::StatusPublished;
 
         if ($wasPublished && (int) $due->student_set_id !== (int) $set->id) {
             throw ValidationException::withMessages([
                 'student_set_id' => 'The student set cannot change after a due is published. Create a separate due for another set.',
+            ]);
+        }
+
+        if ($wasPublished && (
+            (int) $due->academic_session_id !== (int) $session->id
+            || (int) $due->academic_session_semester_id !== (int) $semester?->id
+        )) {
+            throw ValidationException::withMessages([
+                'academic_session_id' => 'The session and semester cannot change after a due is published.',
             ]);
         }
 
@@ -107,10 +121,12 @@ class DueController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($due, $set, $validated, $amountKobo, $wasPublished, $isPublishing, $account): void {
+        DB::transaction(function () use ($due, $set, $session, $semester, $validated, $amountKobo, $wasPublished, $isPublishing, $account): void {
             $amountChanged = (int) $due->amount_kobo !== $amountKobo;
             $due->forceFill([
                 'student_set_id' => $set->id,
+                'academic_session_id' => $session->id,
+                'academic_session_semester_id' => $semester?->id,
                 'payment_account_id' => $account?->id ?? $due->payment_account_id,
                 'title' => $validated['title'],
                 'description' => $validated['description'] ?? null,
@@ -129,6 +145,24 @@ class DueController extends Controller
 
         return to_route('dashboard.dues.show', ['due' => $due])
             ->with('success', $isPublishing ? 'Due published for the selected set.' : 'Due details updated.');
+    }
+
+    private function semesterForSession(int $sessionId, ?int $semesterId): ?AcademicSessionSemester
+    {
+        if ($semesterId === null) {
+            return null;
+        }
+
+        $semester = AcademicSessionSemester::query()
+            ->where('academic_session_id', $sessionId)
+            ->find($semesterId);
+        if (! $semester instanceof AcademicSessionSemester) {
+            throw ValidationException::withMessages([
+                'academic_session_semester_id' => 'Select a semester in the chosen session.',
+            ]);
+        }
+
+        return $semester;
     }
 
     public function archive(Request $request, Due $due): RedirectResponse
@@ -195,21 +229,6 @@ class DueController extends Controller
 
         return to_route('dashboard.dues.show', ['due' => $due])
             ->with('success', 'Payment requirement restored for this student.');
-    }
-
-    public function export(
-        Request $request,
-        Due $due,
-        DuePaymentsWorkbook $workbook,
-        SpreadsheetExportService $exports,
-    ): StreamedResponse {
-        $advisor = $this->access->advisor($request);
-        $this->access->ensureOwnsDue($advisor, $due);
-
-        return $exports->download(
-            $workbook->build($due),
-            Str::lower($advisor->programme_abbreviation).'-'.Str::slug($due->title).'-payments-'.now()->format('Y-m-d').'.xlsx',
-        );
     }
 
     public function startPayment(

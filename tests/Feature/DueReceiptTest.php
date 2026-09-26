@@ -54,7 +54,7 @@ test('confirmed Paystack payments queue, store, email, verify, and download PDF 
         ->and($payment->receiptEmailDelivery)->not->toBeNull()
         ->and($payment->receiptEmailDelivery->metadata['attachment']['path'])->toBe($payment->receipt_path)
         ->and((new DuePaymentReceiptMail($payment->receiptEmailDelivery))->render())
-        ->toContain('Federal University of Technology Owerri');
+        ->toContain($fixture['advisorName']);
     Queue::assertPushed(SendEmailDelivery::class);
 
     Config::set('services.resend.key', 're_test_key');
@@ -91,7 +91,7 @@ test('confirmed Paystack payments queue, store, email, verify, and download PDF 
             ->component('receipt-verification')
             ->where('receipt.status', 'valid')
             ->where('receipt.transactionId', '987654321')
-            ->where('receipt.amount', 'NGN 15,000.00')
+            ->where('receipt.amount', '₦15,000.00')
             ->etc());
 });
 
@@ -147,22 +147,22 @@ test('a late completion keeps the exact older checkout amount after a due amount
 });
 
 /**
- * @return array{studentUser: User, payment: DuePayment, assignment: StudentDueAssignment, due: Due, advisorProfileId: int, paymentAccountId: int}
+ * @return array{studentUser: User, payment: DuePayment, assignment: StudentDueAssignment, due: Due, advisorProfileId: int, advisorName: string, paymentAccountId: int}
  */
 function createDueReceiptFixture(): array
 {
-    $advisor = AdvisorProfile::factory()->create([
-        'institution_name' => 'Federal University of Technology Owerri',
-    ]);
-    $currentSession = AcademicSession::factory()->create([
-        'advisor_profile_id' => $advisor->id,
-        'name' => '2025/2026',
-        'starts_on' => '2025-09-01',
-        'ends_on' => '2026-08-31',
-    ]);
+    $advisor = AdvisorProfile::factory()->create();
     $set = StudentSet::factory()->create([
         'advisor_profile_id' => $advisor->id,
-        'entry_academic_session_id' => $currentSession->id,
+        'department_name' => 'Computer Engineering',
+        'department_slug' => 'computer-engineering',
+        'entry_start_year' => 2025,
+        'entry_end_year' => 2026,
+    ]);
+    $currentSession = AcademicSession::factory()->create([
+        'student_set_id' => $set->id,
+        'start_year' => 2025,
+        'end_year' => 2026,
     ]);
     $studentUser = User::factory()->student()->create([
         'name' => 'Chinaza Okafor',
@@ -217,12 +217,13 @@ function createDueReceiptFixture(): array
         'assignment' => $assignment,
         'due' => $due,
         'advisorProfileId' => (int) $set->advisor_profile_id,
+        'advisorName' => $advisor->user->displayName(),
         'paymentAccountId' => (int) $paymentAccount->id,
     ];
 }
 
 /**
- * @param  array{payment: DuePayment, assignment: StudentDueAssignment, due: Due, advisorProfileId: int, paymentAccountId: int}  $fixture
+ * @param  array{payment: DuePayment, assignment: StudentDueAssignment, due: Due, advisorProfileId: int, advisorName: string, paymentAccountId: int}  $fixture
  * @return array<string, mixed>
  */
 function successfulPaystackData(array $fixture): array

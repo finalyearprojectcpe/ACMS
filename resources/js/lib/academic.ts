@@ -11,12 +11,14 @@ export function academicLevelNumber(level: string): number {
 }
 
 export function semesterName(semester: string): string {
-    if (semester.toLowerCase().includes('rain')) {
-        return 'Rain';
+    const normalized = semester.toLowerCase();
+
+    if (normalized.includes('first') || normalized.includes('1st')) {
+        return '1st';
     }
 
-    if (semester.toLowerCase().includes('harmattan')) {
-        return 'Harmattan';
+    if (normalized.includes('second') || normalized.includes('2nd')) {
+        return '2nd';
     }
 
     return semester.replace(/\s*Semester$/i, '');
@@ -29,7 +31,7 @@ export function semesterLabel(semester: string): string {
 export function academicSemesterOrder(semester: string): number {
     const name = semesterName(semester);
 
-    return name === 'Harmattan' ? 0 : name === 'Rain' ? 1 : 99;
+    return name === '1st' ? 0 : name === '2nd' ? 1 : 99;
 }
 
 export function qualifiedSemesterLabel(

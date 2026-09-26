@@ -16,16 +16,16 @@ test('authenticated users are redirected away from login and signup', function (
     $response = $this->actingAs($user)->get(route($route));
 
     $response->assertRedirect(route('dashboard'));
-})->with(['home', 'signup', 'signup.student', 'signup.advisor']);
+})->with(['home', 'signup', 'signup.advisor']);
 
 test('demo users are seeded with profiles and can login', function () {
     $this->seed(DatabaseSeeder::class);
 
     $adviser = User::query()
-        ->where('email', 'adviser@demo.edu')
+        ->where('email', 'staff1@futo.edu')
         ->firstOrFail();
     $student = User::query()
-        ->where('email', 'student1@demo.edu')
+        ->where('email', 'student1@futo.edu')
         ->firstOrFail();
 
     expect($adviser->account_type)->toBe(AccountType::Adviser)
@@ -36,7 +36,7 @@ test('demo users are seeded with profiles and can login', function () {
         ->and($student->studentProfile->registration_number)->toBe('2024000001');
 
     $response = $this->post(route('login.store'), [
-        'email' => 'adviser@demo.edu',
+        'email' => 'staff1@futo.edu',
         'password' => 'password',
     ]);
 

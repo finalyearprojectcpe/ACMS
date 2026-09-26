@@ -22,7 +22,7 @@ class ReceiptPdfService
     {
         $payment->loadMissing([
             'assignment.due',
-            'advisorProfile',
+            'advisorProfile.user',
             'studentProfile.user',
         ]);
 
@@ -38,10 +38,9 @@ class ReceiptPdfService
             margin: 8,
         ))->build()->getDataUri();
         $seller = new Party([
-            'name' => $payment->advisorProfile->institution_name
-                ?: $payment->advisorProfile->programme_name,
+            'name' => $payment->advisorProfile->user->displayName(),
             'custom_fields' => [
-                'Programme' => $payment->advisorProfile->programme_name,
+                'Role' => 'Course Adviser',
             ],
         ]);
         $buyer = new Party([
@@ -59,7 +58,7 @@ class ReceiptPdfService
             ->date($payment->paid_at ?? now())
             ->dateFormat('F j, Y')
             ->currencyCode($payment->currency)
-            ->currencySymbol('NGN')
+            ->currencySymbol('₦')
             ->currencyFormat('{SYMBOL} {VALUE}')
             ->currencyThousandsSeparator(',')
             ->filename('receipt-'.$payment->receipt_number)

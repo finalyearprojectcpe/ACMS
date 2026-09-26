@@ -1,30 +1,26 @@
-import { Link, useForm } from '@inertiajs/react';
-import { RiCheckLine, RiFileWarningLine, RiSearchLine } from '@remixicon/react';
-import { useMemo, useState } from 'react';
+import { useForm } from '@inertiajs/react';
+import {
+    RiArrowLeftLine,
+    RiCheckLine,
+    RiFileWarningLine,
+} from '@remixicon/react';
+import { useState } from 'react';
 
 import {
     approve as approveCourseRegistration,
     returnForCorrection as returnCourseRegistration,
 } from '@/actions/App/Http/Controllers/CourseRegistrationController';
+import { showStudentSetRegistrations } from '@/actions/App/Http/Controllers/DashboardController';
 import { ActionLink } from '@/components/action-link';
 import { CopyableValue } from '@/components/copyable-value';
-import { CourseCategoryBadge } from '@/components/course-category-badge';
+import { CourseRegistrationCourseTable } from '@/components/course-registration-course-table';
 import { CourseRegistrationStatusBadge } from '@/components/course-registration-status-badge';
 import { PersonCell } from '@/components/person-cell';
 import { QualifiedSemester } from '@/components/qualified-semester';
-import { StudentSetChoiceLabel } from '@/components/student-set-label';
-import { Badge } from '@/components/ui/badge';
+import { StudentPortrait } from '@/components/student-portrait';
 import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardFooter,
-    CardForm,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
 import { Field, FieldError, FieldLabel } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import {
     Table,
     TableBody,
@@ -34,11 +30,11 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
+import { studentSetRouteParameters } from '@/lib/student-sets';
 import type {
-    DashboardCourseRegistrationCourse,
-    DashboardCourseRegistrationReview,
     DashboardAdviserCourseRegistration,
     DashboardAdviserCourseRegistrationListItem,
+    DashboardCourseRegistrationReview,
 } from '@/types';
 
 type AdviserCourseRegistrationDashboardProps = {
@@ -49,149 +45,111 @@ export function AdviserCourseRegistrationDashboard({
     registration,
 }: AdviserCourseRegistrationDashboardProps) {
     return (
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+        <div className="mx-auto flex w-full max-w-5xl min-w-0 flex-col">
             {registration.review ? (
                 <RegistrationReview review={registration.review} />
-            ) : (
-                <RegistrationIndex registration={registration} />
-            )}
+            ) : null}
         </div>
     );
 }
 
-function RegistrationIndex({
-    registration,
-}: {
-    registration: DashboardAdviserCourseRegistration;
-}) {
-    const [query, setQuery] = useState('');
-    const filteredRegistrations = useMemo(() => {
-        const normalized = query.trim().toLowerCase();
-
-        if (!normalized) {
-            return registration.registrations;
-        }
-
-        return registration.registrations.filter((item) =>
-            [
-                item.student.name,
-                item.student.registrationNumber,
-                item.status,
-                item.semester.level,
-                item.semester.name,
-                item.semester.session,
-            ]
-                .join(' ')
-                .toLowerCase()
-                .includes(normalized),
-        );
-    }, [query, registration.registrations]);
-
-    return (
-        <>
-            <div className="flex flex-col gap-2">
-                <h1 className="text-xl font-semibold tracking-normal">
-                    Course Registrations
-                </h1>
-                <p className="max-w-2xl text-sm text-muted-foreground">
-                    Review course registrations submitted by students in your
-                    assigned sets.
-                </p>
-            </div>
-
-            <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
-                <CardHeader className="gap-3 border-b border-border">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <CardTitle>Submitted Registrations</CardTitle>
-                        <div className="relative w-full sm:w-72">
-                            <RiSearchLine className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                                value={query}
-                                onChange={(event) =>
-                                    setQuery(event.target.value)
-                                }
-                                placeholder="Search registrations"
-                                className="pl-9"
-                            />
-                        </div>
-                    </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                    <RegistrationsTable registrations={filteredRegistrations} />
-                </CardContent>
-            </Card>
-        </>
-    );
-}
-
-function RegistrationsTable({
+export function RegistrationsTable({
     registrations,
+    showStatus,
 }: {
     registrations: DashboardAdviserCourseRegistrationListItem[];
+    showStatus: boolean;
 }) {
     return (
-        <Table className="text-sm">
-            <TableHeader>
-                <TableRow>
-                    <TableHead className="px-4">Student</TableHead>
-                    <TableHead>Semester</TableHead>
-                    <TableHead className="text-center">Units</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="pr-4 text-right">Action</TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                {registrations.length > 0 ? (
-                    registrations.map((registration) => (
-                        <TableRow
-                            key={registration.id}
-                            className="odd:bg-muted/25"
+        <ScrollArea className="h-0 min-h-0 w-full flex-1">
+            <Table
+                className={
+                    showStatus
+                        ? 'min-w-[540px] text-sm'
+                        : 'min-w-[300px] table-fixed text-sm'
+                }
+            >
+                <TableHeader>
+                    <TableRow>
+                        <TableHead
+                            className={
+                                showStatus
+                                    ? 'px-2 sm:px-4'
+                                    : 'w-[60%] px-2 sm:px-4'
+                            }
                         >
-                            <TableCell className="px-4">
-                                <PersonCell
-                                    name={registration.student.name}
-                                    avatar={registration.student.avatar}
-                                    secondary={`Reg No. ${registration.student.registrationNumber}`}
-                                />
-                            </TableCell>
-                            <TableCell>
-                                <div className="font-medium">
-                                    <QualifiedSemester
-                                        level={registration.semester.level}
-                                        semester={registration.semester.name}
+                            Student
+                        </TableHead>
+                        <TableHead
+                            className={
+                                showStatus
+                                    ? 'text-center'
+                                    : 'w-[15%] text-center'
+                            }
+                        >
+                            Units
+                        </TableHead>
+                        {showStatus && <TableHead>Status</TableHead>}
+                        <TableHead
+                            className={
+                                showStatus
+                                    ? 'pr-2 text-right sm:pr-4'
+                                    : 'w-[25%] pr-2 text-right sm:pr-4'
+                            }
+                        >
+                            Action
+                        </TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {registrations.length > 0 ? (
+                        registrations.map((registration) => (
+                            <TableRow
+                                key={registration.id}
+                                className="odd:bg-muted/25"
+                            >
+                                <TableCell className="px-2 sm:px-4">
+                                    <PersonCell
+                                        className="gap-2 sm:gap-3"
+                                        name={registration.student.name}
+                                        avatar={registration.student.avatar}
+                                        secondary={`Reg No. ${registration.student.registrationNumber}`}
+                                        href={registration.student.profileUrl}
                                     />
-                                </div>
-                                <div className="text-xs text-muted-foreground">
-                                    {registration.semester.session} Session
-                                </div>
-                            </TableCell>
-                            <TableCell className="text-center font-semibold tabular-nums">
-                                {registration.totalUnits}
-                            </TableCell>
-                            <TableCell>
-                                <CourseRegistrationStatusBadge
-                                    status={registration.status}
-                                />
-                            </TableCell>
-                            <TableCell className="pr-4 text-right">
-                                <ActionLink href={registration.reviewUrl}>
-                                    Review
-                                </ActionLink>
+                                </TableCell>
+                                <TableCell className="text-center font-semibold tabular-nums">
+                                    {registration.totalUnits}
+                                </TableCell>
+                                {showStatus && (
+                                    <TableCell>
+                                        <CourseRegistrationStatusBadge
+                                            status={registration.status}
+                                        />
+                                    </TableCell>
+                                )}
+                                <TableCell className="pr-2 text-right sm:pr-4">
+                                    <ActionLink href={registration.reviewUrl}>
+                                        {registration.status === 'In review'
+                                            ? 'Review'
+                                            : 'View'}
+                                    </ActionLink>
+                                </TableCell>
+                            </TableRow>
+                        ))
+                    ) : (
+                        <TableRow>
+                            <TableCell
+                                colSpan={showStatus ? 4 : 3}
+                                className="px-4 py-8 text-muted-foreground"
+                            >
+                                No submitted registrations match this view.
                             </TableCell>
                         </TableRow>
-                    ))
-                ) : (
-                    <TableRow>
-                        <TableCell
-                            colSpan={5}
-                            className="px-4 py-8 text-muted-foreground"
-                        >
-                            No submitted registrations match this view.
-                        </TableCell>
-                    </TableRow>
-                )}
-            </TableBody>
-        </Table>
+                    )}
+                </TableBody>
+            </Table>
+            <ScrollBar orientation="horizontal" />
+        </ScrollArea>
     );
 }
 
@@ -208,268 +166,178 @@ function RegistrationReview({
 
     function approve() {
         approveForm.patch(
-            approveCourseRegistration.url({ courseRegistration: review.id }),
+            approveCourseRegistration.url(review.routeParameters),
             { preserveScroll: true },
         );
     }
 
     function returnForCorrection() {
-        returnForm.patch(
-            returnCourseRegistration.url({ courseRegistration: review.id }),
-            {
-                preserveScroll: true,
-                onSuccess: () => setIsReturnOpen(false),
-            },
-        );
+        returnForm.patch(returnCourseRegistration.url(review.routeParameters), {
+            preserveScroll: true,
+            onSuccess: () => setIsReturnOpen(false),
+        });
     }
 
     return (
-        <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
-            <CardHeader className="border-b border-border">
-                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+        <section className="min-w-0">
+            <header className="border-b pb-5">
+                {review.set ? (
+                    <ActionLink
+                        href={showStudentSetRegistrations(
+                            studentSetRouteParameters(review.set),
+                            {
+                                query: {
+                                    session:
+                                        review.routeParameters.sessionYears,
+                                    semester: review.routeParameters.semester,
+                                },
+                            },
+                        )}
+                        icon={<RiArrowLeftLine className="size-4" />}
+                    >
+                        Back to Registrations
+                    </ActionLink>
+                ) : null}
+                <div className="mt-5 grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-4 sm:gap-x-6 lg:grid-cols-[auto_minmax(0,1fr)_minmax(12rem,auto)]">
+                    <StudentPortrait
+                        name={review.student.name}
+                        image={review.student.avatar}
+                    />
                     <div className="min-w-0">
-                        <PersonCell
-                            name={review.student.name}
-                            avatar={review.student.avatar}
-                            secondary={review.programme.abbreviation}
-                        />
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <h1 className="text-lg font-semibold break-words sm:text-xl">
+                            {review.student.name}
+                        </h1>
+                        {review.set ? (
+                            <p className="mt-1 text-sm break-words text-muted-foreground">
+                                {review.set.name}
+                            </p>
+                        ) : null}
+                        <div className="mt-3">
                             <CopyableValue
                                 value={review.student.registrationNumber}
-                                className="h-8"
-                                valueClassName="text-xs"
                             />
-                            {review.set ? (
-                                <div className="max-w-full min-w-64">
-                                    <StudentSetChoiceLabel
-                                        entrySession={review.set.entrySession}
-                                        currentLevel={review.set.currentLevel}
-                                        minimumYearsToDegree={
-                                            review.set.minimumYearsToDegree
-                                        }
-                                    />
-                                </div>
-                            ) : null}
+                        </div>
+                        <div className="mt-2">
+                            <ActionLink href={review.student.profileUrl}>
+                                View Profile
+                            </ActionLink>
                         </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                        <CourseRegistrationStatusBadge status={review.status} />
-                        <Badge
-                            variant="outline"
-                            className="border-border bg-muted/60 text-foreground"
-                        >
-                            {review.totalUnits} units
-                        </Badge>
-                        <Link
-                            href={review.student.profileUrl}
-                            className="text-sm font-semibold text-link underline-offset-4 hover:underline"
-                        >
-                            View Profile
-                        </Link>
+                    <div className="col-span-2 border-t pt-4 lg:col-span-1 lg:border-t-0 lg:border-l lg:py-2 lg:pl-6">
+                        <h2 className="text-base font-semibold">
+                            <QualifiedSemester
+                                level={review.semester.level}
+                                semester={review.semester.name}
+                            />
+                        </h2>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                            {review.semester.session} Session
+                        </p>
+                        {review.status !== 'In review' ? (
+                            <p className="mt-2 text-sm text-muted-foreground">
+                                {review.status}
+                            </p>
+                        ) : null}
                     </div>
                 </div>
-            </CardHeader>
+            </header>
 
             {review.feedbackNote ? (
-                <div className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-100">
+                <div className="border-b border-amber-200 bg-amber-50 py-4 text-sm text-amber-900 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-100">
                     <div className="font-semibold">Returned feedback</div>
                     <div className="mt-1">{review.feedbackNote}</div>
                 </div>
             ) : null}
 
-            <CardContent className="p-0">
-                <div className="flex flex-col gap-1 border-b border-border bg-muted/20 px-4 py-3">
-                    <CardTitle>
-                        <QualifiedSemester
-                            level={review.semester.level}
-                            semester={review.semester.name}
-                        />{' '}
-                        Registration Review
-                    </CardTitle>
-                    <div className="text-xs text-muted-foreground">
-                        {review.semester.session} Session
-                    </div>
-                </div>
-                <ReviewCourseGroups courses={review.courses} />
-            </CardContent>
-
-            <CardFooter className="grid gap-3 border-t border-border sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                <div className="text-xs text-muted-foreground">
-                    <span className="font-semibold text-foreground tabular-nums">
-                        {review.totalUnits}
-                    </span>{' '}
-                    total units
-                </div>
-                <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-                    <Button
-                        type="button"
-                        variant="outline"
-                        disabled={!review.canReview || returnForm.processing}
-                        onClick={() => setIsReturnOpen((open) => !open)}
-                    >
-                        <RiFileWarningLine />
-                        Return for Correction
-                    </Button>
-                    <Button
-                        type="button"
-                        disabled={!review.canReview || approveForm.processing}
-                        onClick={approve}
-                    >
-                        <RiCheckLine />
-                        {approveForm.processing
-                            ? 'Approving...'
-                            : 'Approve Registration'}
-                    </Button>
-                </div>
-            </CardFooter>
+            <div className="min-w-0 py-5">
+                <CourseRegistrationCourseTable
+                    courses={review.courses}
+                    totalUnits={review.totalUnits}
+                />
+            </div>
 
             {isReturnOpen ? (
-                <div className="border-t border-border bg-muted/20 p-4">
-                    <CardForm
-                        className="gap-3"
-                        onSubmit={(event) => {
-                            event.preventDefault();
-                            returnForCorrection();
-                        }}
-                    >
-                        <Field
-                            data-invalid={Boolean(
-                                returnForm.errors.feedback_note,
-                            )}
-                        >
-                            <FieldLabel htmlFor="feedback-note">
-                                Feedback for student
-                            </FieldLabel>
-                            <Textarea
-                                id="feedback-note"
-                                value={returnForm.data.feedback_note}
-                                onChange={(event) =>
-                                    returnForm.setData(
-                                        'feedback_note',
-                                        event.target.value,
-                                    )
-                                }
-                                placeholder="Tell the student what to correct."
-                                disabled={!review.canReview}
-                            />
-                            <FieldError>
-                                {returnForm.errors.feedback_note}
-                            </FieldError>
-                        </Field>
-                        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                disabled={returnForm.processing}
-                                onClick={() => setIsReturnOpen(false)}
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                type="submit"
-                                variant="destructive"
-                                disabled={
-                                    !review.canReview || returnForm.processing
-                                }
-                            >
-                                <RiFileWarningLine />
-                                {returnForm.processing
-                                    ? 'Returning...'
-                                    : 'Return for Correction'}
-                            </Button>
-                        </div>
-                    </CardForm>
-                </div>
-            ) : null}
-        </Card>
-    );
-}
-
-function ReviewCourseGroups({
-    courses,
-}: {
-    courses: DashboardCourseRegistrationCourse[];
-}) {
-    const groups = groupCoursesByCategory(courses);
-
-    return (
-        <div className="grid gap-4 p-4">
-            {groups.map((group) => (
-                <div
-                    key={group.category}
-                    className="border border-border bg-background"
+                <form
+                    className="border-t border-border pt-5"
+                    onSubmit={(event) => {
+                        event.preventDefault();
+                        returnForCorrection();
+                    }}
                 >
-                    <div className="border-b border-border px-4 py-3">
-                        <div className="font-semibold">{group.label}</div>
-                    </div>
-                    <ReviewCoursesTable courses={group.courses} />
-                </div>
-            ))}
-        </div>
-    );
-}
-
-function ReviewCoursesTable({
-    courses,
-}: {
-    courses: DashboardCourseRegistrationCourse[];
-}) {
-    return (
-        <Table className="text-sm">
-            <TableHeader>
-                <TableRow>
-                    <TableHead className="w-[16%] px-4">Course</TableHead>
-                    <TableHead>Title</TableHead>
-                    <TableHead className="w-[10%] text-center">Units</TableHead>
-                    <TableHead className="hidden w-[18%] md:table-cell">
-                        Category
-                    </TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                {courses.map((course) => (
-                    <TableRow
-                        key={course.courseOfferingId}
-                        className="odd:bg-muted/25"
+                    <Field
+                        data-invalid={Boolean(returnForm.errors.feedback_note)}
                     >
-                        <TableCell className="px-4 font-semibold">
-                            {course.code}
-                        </TableCell>
-                        <TableCell>
-                            <div className="font-medium">{course.title}</div>
-                            <div className="text-xs text-muted-foreground md:hidden">
-                                {course.category}
-                            </div>
-                        </TableCell>
-                        <TableCell className="text-center font-semibold tabular-nums">
-                            {course.units}
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell">
-                            <CourseCategoryBadge
-                                category={course.categoryValue}
-                            />
-                        </TableCell>
-                    </TableRow>
-                ))}
-            </TableBody>
-        </Table>
+                        <FieldLabel htmlFor="feedback-note">
+                            Feedback for student
+                        </FieldLabel>
+                        <Textarea
+                            id="feedback-note"
+                            value={returnForm.data.feedback_note}
+                            onChange={(event) =>
+                                returnForm.setData(
+                                    'feedback_note',
+                                    event.target.value,
+                                )
+                            }
+                            placeholder="Tell the student what to correct."
+                            disabled={!review.canReview}
+                        />
+                        <FieldError>
+                            {returnForm.errors.feedback_note}
+                        </FieldError>
+                    </Field>
+                    <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            disabled={returnForm.processing}
+                            onClick={() => setIsReturnOpen(false)}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="destructive"
+                            disabled={
+                                !review.canReview || returnForm.processing
+                            }
+                        >
+                            <RiFileWarningLine />
+                            {returnForm.processing
+                                ? 'Returning...'
+                                : 'Return for Correction'}
+                        </Button>
+                    </div>
+                </form>
+            ) : (
+                <footer className="flex justify-end border-t border-border pt-5">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            disabled={
+                                !review.canReview || returnForm.processing
+                            }
+                            onClick={() => setIsReturnOpen(true)}
+                        >
+                            <RiFileWarningLine />
+                            Return for Correction
+                        </Button>
+                        <Button
+                            type="button"
+                            disabled={
+                                !review.canReview || approveForm.processing
+                            }
+                            onClick={approve}
+                        >
+                            <RiCheckLine />
+                            {approveForm.processing
+                                ? 'Approving...'
+                                : 'Approve Registration'}
+                        </Button>
+                    </div>
+                </footer>
+            )}
+        </section>
     );
-}
-
-function groupCoursesByCategory(courses: DashboardCourseRegistrationCourse[]) {
-    const labels: Record<string, string> = {
-        normal: 'Normal Courses',
-        elective: 'Elective Courses',
-    };
-    const order = ['normal', 'elective'];
-
-    return order
-        .map((category) => ({
-            category,
-            label: labels[category] ?? 'Courses',
-            courses: courses.filter(
-                (course) => course.categoryValue === category,
-            ),
-        }))
-        .filter((group) => group.courses.length > 0);
 }

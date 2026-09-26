@@ -17,12 +17,12 @@ class SemesterFactory extends Factory
      */
     public function definition(): array
     {
-        $name = fake()->unique()->randomElement(['Harmattan', 'Rain']);
+        $name = fake()->unique()->randomElement(['1st Semester', '2nd Semester']);
 
         return [
             'name' => $name,
-            'slug' => str($name)->slug()->toString(),
-            'sort_order' => $name === 'Harmattan' ? 1 : 2,
+            'slug' => $name === '1st Semester' ? 'first' : 'second',
+            'sort_order' => $name === '1st Semester' ? 1 : 2,
         ];
     }
 }

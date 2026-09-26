@@ -4,10 +4,9 @@ import { cn } from '@/lib/utils';
 import type { DashboardAcademicSession, DashboardLevel } from '@/types';
 
 export type StudentSetTextContext = {
+    name?: string;
     entrySession: DashboardAcademicSession | null;
     currentLevel: DashboardLevel | null;
-    minimumYearsToDegree?: number | null;
-    isGraduated?: boolean;
 };
 
 type StudentSetLabelProps = StudentSetTextContext & {
@@ -15,10 +14,9 @@ type StudentSetLabelProps = StudentSetTextContext & {
 };
 
 export function StudentSetLabel({
+    name,
     entrySession,
     currentLevel,
-    minimumYearsToDegree,
-    isGraduated,
     className,
 }: StudentSetLabelProps) {
     return (
@@ -26,27 +24,22 @@ export function StudentSetLabel({
             <div className="font-medium text-foreground">
                 {entrySession === null
                     ? 'No entry set'
-                    : `${entrySession.name} Set`}
+                    : studentSetName(entrySession, name)}
             </div>
             <Badge
                 variant="outline"
                 className="mt-1 border-border bg-muted/60 text-muted-foreground"
             >
-                {studentSetLevelText(
-                    currentLevel,
-                    minimumYearsToDegree,
-                    isGraduated,
-                )}
+                {studentSetLevelText(currentLevel)}
             </Badge>
         </div>
     );
 }
 
 export function StudentSetChoiceLabel({
+    name,
     entrySession,
     currentLevel,
-    minimumYearsToDegree,
-    isGraduated,
     meta,
     className,
 }: StudentSetLabelProps & {
@@ -60,7 +53,7 @@ export function StudentSetChoiceLabel({
             )}
         >
             <span className="min-w-0 truncate font-medium text-foreground">
-                {studentSetName(entrySession)}
+                {studentSetName(entrySession, name)}
             </span>
             <span className="ml-auto flex shrink-0 items-center gap-2 text-xs">
                 {meta ? (
@@ -69,11 +62,7 @@ export function StudentSetChoiceLabel({
                     </span>
                 ) : null}
                 <span className="font-semibold text-muted-foreground">
-                    {studentSetLevelText(
-                        currentLevel,
-                        minimumYearsToDegree,
-                        isGraduated,
-                    )}
+                    {studentSetLevelText(currentLevel)}
                 </span>
             </span>
         </span>
@@ -82,17 +71,21 @@ export function StudentSetChoiceLabel({
 
 export function studentSetName(
     entrySession: DashboardAcademicSession | null,
+    name?: string,
 ): string {
-    return entrySession === null ? 'No entry set' : `${entrySession.name} Set`;
+    if (name) {
+        return name;
+    }
+
+    return entrySession === null ? 'No entry set' : entrySession.name;
 }
 
 export function studentSetText({
+    name,
     entrySession,
     currentLevel,
-    minimumYearsToDegree,
-    isGraduated,
 }: StudentSetTextContext): string {
-    return `${studentSetName(entrySession)} · ${studentSetLevelText(currentLevel, minimumYearsToDegree, isGraduated)}`;
+    return `${studentSetName(entrySession, name)} · ${studentSetLevelText(currentLevel)}`;
 }
 
 export function studentSetListText(
@@ -106,22 +99,9 @@ export function studentSetListText(
 
 export function studentSetLevelText(
     currentLevel: DashboardLevel | null,
-    minimumYearsToDegree?: number | null,
-    isGraduated = false,
 ): string {
-    if (isGraduated) {
-        return 'Graduated';
-    }
-
     if (currentLevel === null) {
         return 'Level not set';
-    }
-
-    if (
-        typeof minimumYearsToDegree === 'number' &&
-        currentLevel.yearNumber > minimumYearsToDegree
-    ) {
-        return 'Graduated';
     }
 
     return shortLevelLabel(currentLevel.title);

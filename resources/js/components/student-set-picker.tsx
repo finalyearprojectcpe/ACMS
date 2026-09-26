@@ -25,10 +25,9 @@ import type { DashboardAcademicSession, DashboardLevel } from '@/types';
 
 export type StudentSetPickerOption = {
     value: string;
+    name?: string;
     entrySession: DashboardAcademicSession | null;
     currentLevel: DashboardLevel | null;
-    minimumYearsToDegree?: number | null;
-    isGraduated?: boolean;
     meta?: string;
     searchText?: string;
 };
@@ -97,12 +96,9 @@ export function StudentSetPicker({
                 >
                     {selectedOption ? (
                         <StudentSetChoiceLabel
+                            name={selectedOption.name}
                             entrySession={selectedOption.entrySession}
                             currentLevel={selectedOption.currentLevel}
-                            minimumYearsToDegree={
-                                selectedOption.minimumYearsToDegree
-                            }
-                            isGraduated={selectedOption.isGraduated}
                             meta={selectedOption.meta}
                         />
                     ) : selectedAllOption ? (
@@ -155,12 +151,9 @@ export function StudentSetPicker({
                                     className="px-3 py-2.5"
                                 >
                                     <StudentSetChoiceLabel
+                                        name={option.name}
                                         entrySession={option.entrySession}
                                         currentLevel={option.currentLevel}
-                                        minimumYearsToDegree={
-                                            option.minimumYearsToDegree
-                                        }
-                                        isGraduated={option.isGraduated}
                                         meta={option.meta}
                                     />
                                 </CommandItem>
@@ -194,7 +187,7 @@ function searchTextForSet(option: StudentSetPickerOption): string {
     }
 
     return [
-        studentSetName(option.entrySession),
+        studentSetName(option.entrySession, option.name),
         studentSetText(option),
         option.meta,
     ]

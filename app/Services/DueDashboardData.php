@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\AcademicSession;
+use App\Models\AcademicSessionSemester;
 use App\Models\AdvisorProfile;
 use App\Models\Due;
 use App\Models\DuePayment;
@@ -19,48 +21,97 @@ class DueDashboardData
         private readonly DashboardPresenter $presenter,
     ) {}
 
-    public function adviserDues(AdvisorProfile $advisor, Collection $sets): array
+    public function adviserDues(AdvisorProfile $advisor, ?StudentSet $set, ?AcademicSession $selectedSession = null, ?AcademicSessionSemester $selectedSemester = null): array
     {
-        $dues = $advisor->dues()
-            ->with(['studentSet.entryAcademicSession', 'assignments.latestPayment', 'paymentAccount'])
+        $sessions = $set?->academicSessions()
+            ->with(['academicYear', 'semesterInstances.semester'])
+            ->orderBy('start_year')
+            ->get() ?? collect();
+        $dues = $set?->dues()
+            ->with(['studentSet', 'academicSession', 'academicSessionSemester.semester', 'assignments', 'paymentAccount'])
+            ->when($selectedSemester instanceof AcademicSessionSemester, fn ($query) => $query->where('academic_session_semester_id', $selectedSemester->id))
+            ->when($selectedSession instanceof AcademicSession && ! $selectedSemester instanceof AcademicSessionSemester, fn ($query) => $query->where('academic_session_id', $selectedSession->id)->whereNull('academic_session_semester_id'))
             ->latest()
-            ->get();
-        $assignments = $dues
-            ->where('status', Due::StatusPublished)
+            ->get() ?? collect();
+        $assignments = $dues->where('status', Due::StatusPublished)
             ->flatMap(fn (Due $due): Collection => $due->assignments);
         $pending = $assignments->where('status', StudentDueAssignment::StatusPending);
         $paid = $assignments->where('status', StudentDueAssignment::StatusPaid);
 
         return [
-            'assignedSets' => $sets->map(fn (StudentSet $set): array => $this->presenter->studentSet($set))->all(),
-            'metrics' => [
-                'expectedAmount' => $this->presenter->amount((int) $assignments->sum('amount_kobo')),
-                'collectedAmount' => $this->presenter->amount((int) $paid->sum('amount_kobo')),
-                'outstandingAmount' => $this->presenter->amount((int) $pending->sum('amount_kobo')),
-                'studentsOwing' => $pending->pluck('student_profile_id')->unique()->count(),
-            ],
+            'selectedSet' => $set instanceof StudentSet ? $this->presenter->studentSet($set) : null,
+            'sessions' => $sessions->map(fn (AcademicSession $session): array => [
+                'id' => (int) $session->id,
+                'routeYears' => $session->routeYears(),
+                'name' => $session->label(),
+                'level' => $session->academicYear->name,
+                'semesters' => $session->semesterInstances->sortBy('semester.sort_order')->map(fn (AcademicSessionSemester $semester): array => [
+                    'id' => (int) $semester->id,
+                    'slug' => $semester->semester->slug,
+                    'name' => $semester->semester->name,
+                ])->values()->all(),
+            ])->all(),
+            'selectedPeriod' => $selectedSemester instanceof AcademicSessionSemester
+                ? ['kind' => 'semester', 'id' => (int) $selectedSemester->id]
+                : ($selectedSession instanceof AcademicSession
+                    ? ['kind' => 'session', 'id' => (int) $selectedSession->id]
+                    : ['kind' => 'all']),
+            'periodLabel' => $selectedSemester instanceof AcademicSessionSemester
+                ? $selectedSemester->academicSession->academicYear->name.' · '.$selectedSemester->academicSession->label().' Session · '.$selectedSemester->semester->name
+                : ($selectedSession instanceof AcademicSession
+                    ? $selectedSession->academicYear->name.' · '.$selectedSession->label().' Session · Whole Session'
+                    : 'All Dues'),
+            'collectedAmount' => $this->presenter->amount((int) $paid->sum('amount_kobo')),
+            'outstandingAmount' => $this->presenter->amount((int) $pending->sum('amount_kobo')),
             'dues' => $dues->map(fn (Due $due): array => $this->dueSummary($due))->all(),
-            'createUrl' => route('dashboard.dues.create'),
-            'paymentSettingsUrl' => route('dashboard.section', ['section' => 'payment-settings']),
+            'paymentSettingsUrl' => route('dashboard.section', ['section' => 'settings']),
             'hasActivePaymentAccount' => PaymentAccount::currentFor($advisor) instanceof PaymentAccount,
         ];
     }
 
-    public function dueForm(AdvisorProfile $advisor, ?Due $due = null): array
+    public function dueForm(AdvisorProfile $advisor, ?Due $due = null, ?string $setPublicId = null, ?string $sessionPublicId = null, ?string $semesterPublicId = null): array
     {
-        $sets = $advisor->studentSets()
-            ->with('entryAcademicSession')
-            ->orderByDesc('entry_academic_session_id')
-            ->get();
+        $selectedSet = $advisor->studentSets()
+            ->with(['academicSessions.academicYear', 'academicSessions.semesterInstances.semester'])
+            ->when($due?->student_set_id ?? $setPublicId, fn ($query) => $due instanceof Due
+                ? $query->whereKey($due->student_set_id)
+                : $query->where('public_id', $setPublicId))
+            ->first() ?? $advisor->studentSets()
+            ->with(['academicSessions.academicYear', 'academicSessions.semesterInstances.semester'])
+            ->orderByDesc('entry_start_year')
+            ->first();
         $account = PaymentAccount::currentFor($advisor) ?? PaymentAccount::latestFor($advisor);
+        $selectedSession = ($due instanceof Due
+            ? $selectedSet?->academicSessions->firstWhere('id', $due->academic_session_id)
+            : $selectedSet?->academicSessions->firstWhere('public_id', $sessionPublicId))
+            ?? $selectedSet?->academicSessions->firstWhere('academic_year_id', $selectedSet->current_academic_year_id)
+            ?? $selectedSet?->academicSessions->sortByDesc('start_year')->first();
+        $selectedSemester = $due instanceof Due
+            ? $selectedSession?->semesterInstances->firstWhere('id', $due->academic_session_semester_id)
+            : $selectedSession?->semesterInstances->firstWhere('public_id', $semesterPublicId);
 
         return [
             'mode' => $due instanceof Due ? 'edit' : 'create',
-            'assignedSets' => $sets->map(fn (StudentSet $set): array => $this->presenter->studentSet($set))->all(),
+            'selectedSetName' => $selectedSet?->label(),
+            'sessions' => $selectedSet?->academicSessions->map(fn (AcademicSession $session): array => [
+                'id' => (int) $session->id,
+                'publicId' => $session->public_id,
+                'label' => $session->academicYear->name.' · '.$session->label().' Session',
+                'semesters' => $session->semesterInstances->sortBy('semester.sort_order')->map(fn (AcademicSessionSemester $semester): array => [
+                    'id' => (int) $semester->id,
+                    'publicId' => $semester->public_id,
+                    'name' => $semester->semester->name,
+                ])->values()->all(),
+            ])->values()->all() ?? [],
             'paymentAccounts' => $account instanceof PaymentAccount ? [$this->paymentAccount($account)] : [],
-            'paymentSettingsUrl' => route('dashboard.section', ['section' => 'payment-settings']),
+            'paymentSettingsUrl' => route('dashboard.section', ['section' => 'settings']),
+            'returnUrl' => $selectedSet instanceof StudentSet
+                ? $this->dueListUrl($selectedSet, $due instanceof Due || $sessionPublicId !== null ? $selectedSession : null, $selectedSemester)
+                : route('dashboard.section', ['section' => 'student-dues']),
             'defaults' => [
-                'studentSetId' => $due?->student_set_id ?? $sets->first()?->id,
+                'studentSetId' => $selectedSet?->id,
+                'academicSessionId' => $selectedSession?->id,
+                'academicSessionSemesterId' => $selectedSemester?->id,
                 'title' => $due?->title ?? '',
                 'description' => $due?->description ?? '',
                 'amountNaira' => $due instanceof Due ? (string) ((int) $due->amount_kobo / 100) : '',
@@ -68,8 +119,9 @@ class DueDashboardData
             ],
             'due' => $due instanceof Due ? [
                 'id' => (int) $due->id,
+                'publicId' => $due->public_id,
                 'status' => $this->dueStatusLabel($due->status),
-                'canChangeSet' => $due->status === Due::StatusDraft,
+                'canChangePeriod' => $due->status === Due::StatusDraft,
                 'canChangeAmount' => $due->status !== Due::StatusArchived,
             ] : null,
         ];
@@ -78,7 +130,7 @@ class DueDashboardData
     public function dueDetail(Due $due): array
     {
         $due->loadMissing([
-            'studentSet.entryAcademicSession',
+            'studentSet',
             'paymentAccount',
             'assignments.studentProfile.user',
             'assignments.latestPayment.receiptEmailDelivery',
@@ -101,11 +153,13 @@ class DueDashboardData
         return [
             'due' => [
                 'id' => (int) $due->id,
+                'publicId' => $due->public_id,
                 'title' => $due->title,
                 'amount' => $this->presenter->amount((int) $assignment->amount_kobo),
             ],
             'assignment' => [
                 'id' => (int) $assignment->id,
+                'publicId' => $assignment->public_id,
                 'studentName' => $assignment->studentProfile->user->name,
                 'studentAvatar' => $assignment->studentProfile->user->profilePhotoUrl(),
                 'registrationNumber' => $assignment->studentProfile->registration_number,
@@ -141,14 +195,47 @@ class DueDashboardData
         ];
     }
 
+    public function studentRecordDues(StudentProfile $student): array
+    {
+        $assignments = $student->dueAssignments()
+            ->with(['due.academicSession', 'due.academicSessionSemester.semester', 'latestPayment.receiptEmailDelivery'])
+            ->whereHas('due', fn ($query) => $query->whereIn('status', [Due::StatusPublished, Due::StatusArchived]))
+            ->latest()
+            ->get();
+
+        $rows = $assignments->map(function (StudentDueAssignment $assignment): array {
+            $due = $assignment->due;
+            $payment = $assignment->status === StudentDueAssignment::StatusPaid
+                ? $this->queueReceiptWhenNeeded($assignment->latestPayment)
+                : null;
+
+            return [
+                'status' => $assignment->status,
+                'name' => $due->title,
+                'period' => $due->academicSession?->label().' Session'.($due->academicSessionSemester ? ' · '.$due->academicSessionSemester->semester->name : ''),
+                'amount' => $this->presenter->amount((int) ($payment?->amount_kobo ?? $assignment->amount_kobo)),
+                'assignedAt' => $assignment->created_at?->toFormattedDateString(),
+                'paidAt' => $assignment->paid_at?->toFormattedDateString(),
+                'waivedAt' => $assignment->waived_at?->toFormattedDateString(),
+                'waiverReason' => $assignment->waiver_reason,
+                'receiptStatus' => $payment?->receipt_status,
+                'receiptUrl' => $this->receipt($payment)['receiptUrl'],
+            ];
+        });
+
+        return [
+            'unpaid' => $rows->where('status', StudentDueAssignment::StatusPending)->values()->all(),
+            'paid' => $rows->where('status', StudentDueAssignment::StatusPaid)->values()->all(),
+            'waived' => $rows->where('status', StudentDueAssignment::StatusWaived)->values()->all(),
+        ];
+    }
+
     public function paymentSettings(AdvisorProfile $advisor): array
     {
         $account = PaymentAccount::currentFor($advisor) ?? PaymentAccount::latestFor($advisor);
 
         return [
             'accounts' => $account instanceof PaymentAccount ? [$this->paymentAccount($account)] : [],
-            'dashboardUrl' => $this->paystackDashboardUrl(),
-            'createUrl' => route('dashboard.payment-settings.create'),
         ];
     }
 
@@ -161,25 +248,33 @@ class DueDashboardData
             'accounts' => $account instanceof PaymentAccount ? [$this->paymentAccount($account)] : [],
             'bankOptions' => $banks['options'],
             'bankOptionsError' => $banks['error'],
-            'dashboardUrl' => $this->paystackDashboardUrl(),
-            'returnUrl' => route('dashboard.section', ['section' => 'payment-settings']),
         ];
     }
 
     private function dueSummary(Due $due): array
     {
-        $due->loadMissing(['studentSet.entryAcademicSession', 'assignments', 'paymentAccount']);
+        $due->loadMissing(['studentSet', 'academicSession.academicYear', 'academicSessionSemester.semester', 'assignments', 'paymentAccount']);
         $paid = $due->assignments->where('status', StudentDueAssignment::StatusPaid);
         $pending = $due->assignments->where('status', StudentDueAssignment::StatusPending);
         $waived = $due->assignments->where('status', StudentDueAssignment::StatusWaived);
 
         return [
             'id' => (int) $due->id,
+            'publicId' => $due->public_id,
             'title' => $due->title,
             'description' => $due->description,
             'amount' => $this->presenter->amount((int) $due->amount_kobo),
             'status' => $this->dueStatusLabel($due->status),
-            'set' => $due->studentSet->name,
+            'set' => $due->studentSet->label(),
+            'period' => $due->academicSession->academicYear->name.' · '.$due->academicSession->label().' Session'.($due->academicSessionSemester ? ' · '.$due->academicSessionSemester->semester->name : ' · Whole Session'),
+            'periodParts' => [
+                'level' => $due->academicSession->academicYear->name,
+                'levelNumber' => (int) $due->academicSession->academicYear->year_number,
+                'session' => $due->academicSession->label().' Session',
+                'sessionStartYear' => (int) $due->academicSession->start_year,
+                'semester' => $due->academicSessionSemester?->semester->name ?? 'Whole Session',
+                'semesterOrder' => (int) ($due->academicSessionSemester?->semester->sort_order ?? 0),
+            ],
             'dueDate' => $due->due_on?->toFormattedDateString(),
             'paidCount' => $paid->count(),
             'pendingCount' => $pending->count(),
@@ -190,7 +285,28 @@ class DueDashboardData
                 ? $this->paymentAccount($due->paymentAccount)
                 : null,
             'detailUrl' => route('dashboard.dues.show', ['due' => $due]),
+            'listUrl' => $this->dueListUrl($due->studentSet, $due->academicSession, $due->academicSessionSemester),
         ];
+    }
+
+    private function dueListUrl(StudentSet $set, ?AcademicSession $session, ?AcademicSessionSemester $semester): string
+    {
+        if ($semester instanceof AcademicSessionSemester && $session instanceof AcademicSession) {
+            return route('student-sets.dues.semester', [
+                ...$set->routeParameters(),
+                'sessionYears' => $session->routeYears(),
+                'semester' => $semester->semester->slug,
+            ]);
+        }
+
+        if ($session instanceof AcademicSession) {
+            return route('student-sets.dues.session', [
+                ...$set->routeParameters(),
+                'sessionYears' => $session->routeYears(),
+            ]);
+        }
+
+        return route('student-sets.dues.show', $set->routeParameters());
     }
 
     private function dueStudent(StudentDueAssignment $assignment): array
@@ -199,14 +315,15 @@ class DueDashboardData
 
         return [
             'id' => (int) $assignment->id,
+            'publicId' => $assignment->public_id,
             'studentName' => $assignment->studentProfile->user->name,
             'studentAvatar' => $assignment->studentProfile->user->profilePhotoUrl(),
             'registrationNumber' => $assignment->studentProfile->registration_number,
-            'amount' => $this->presenter->amount((int) $assignment->amount_kobo),
+            'amount' => $this->presenter->amount((int) ($payment?->amount_kobo ?? $assignment->amount_kobo)),
             'status' => match ($assignment->status) {
                 StudentDueAssignment::StatusPaid => 'Paid',
                 StudentDueAssignment::StatusWaived => 'Waived',
-                default => 'Pending',
+                default => 'Unpaid',
             },
             'paidAt' => $assignment->paid_at?->toFormattedDateString(),
             'waiverReason' => $assignment->waiver_reason,
@@ -317,8 +434,6 @@ class DueDashboardData
                 PaymentAccount::StatusDisabled => 'Disabled',
                 default => 'Draft',
             },
-            'set' => 'All student dues',
-            'entryAcademicSessionId' => null,
             'verifiedAt' => $account->verified_at?->toFormattedDateString(),
         ];
     }
@@ -340,22 +455,15 @@ class DueDashboardData
         } catch (\Throwable) {
             return [
                 'options' => [],
-                'error' => 'Paystack banks could not be loaded. Check the Paystack keys or try again shortly.',
+                'error' => 'Banks are unavailable right now. Try again in a moment.',
             ];
         }
 
         return $options === []
             ? [
                 'options' => [],
-                'error' => 'Paystack did not return any Nigerian banks. Try again shortly.',
+                'error' => 'Banks are unavailable right now. Try again in a moment.',
             ]
             : ['options' => $options, 'error' => null];
-    }
-
-    private function paystackDashboardUrl(): string
-    {
-        $url = config('services.paystack.dashboard_url');
-
-        return is_string($url) && $url !== '' ? $url : 'https://dashboard.paystack.com';
     }
 }

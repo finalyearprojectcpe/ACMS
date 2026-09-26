@@ -1,42 +1,117 @@
-import { RiCheckboxCircleLine, RiErrorWarningLine } from '@remixicon/react';
+import { Link } from '@inertiajs/react';
+import {
+    RiBankCardLine,
+    RiCheckboxCircleLine,
+    RiErrorWarningLine,
+    RiFileCopyLine,
+} from '@remixicon/react';
+import { toast } from 'sonner';
 
-import { CopyableValue } from '@/components/copyable-value';
+import { ActionLink } from '@/components/action-link';
+import { writeClipboard } from '@/components/copyable-value';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import type { DashboardPaymentAccount } from '@/types';
 
 export function PaymentAccountSummary({
     accounts,
+    actionUrl,
     compact = false,
+    embedded = false,
     title = 'Connected Payout Account',
+    className,
 }: {
     accounts: DashboardPaymentAccount[];
+    actionUrl?: string;
     compact?: boolean;
+    embedded?: boolean;
     title?: string;
+    className?: string;
 }) {
+    const Container = embedded ? 'section' : Card;
+
     return (
-        <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
-            <CardHeader className="border-b border-border">
+        <Container
+            className={cn(
+                embedded
+                    ? 'min-w-0 border-t border-border'
+                    : 'gap-0 border border-border bg-background py-0 shadow-sm',
+                className,
+            )}
+        >
+            <CardHeader
+                className={cn(
+                    'border-b border-border p-5',
+                    embedded && 'border-b-0 px-0 pt-6 pb-2',
+                )}
+            >
                 <CardTitle>{title}</CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-3">
+            <CardContent
+                className={cn('grid gap-4 p-5', embedded && 'px-0 pt-2 pb-4')}
+            >
                 {accounts.length > 0 ? (
-                    accounts.map((account) => (
-                        <PaymentAccountCard
-                            key={account.id}
-                            account={account}
-                            compact={compact}
-                        />
-                    ))
+                    <>
+                        {accounts.map((account) => (
+                            <PaymentAccountCard
+                                key={account.id}
+                                account={account}
+                                compact={compact}
+                            />
+                        ))}
+                        <div className="flex flex-wrap items-center justify-end gap-x-8 gap-y-3 pt-2">
+                            <Button
+                                type="button"
+                                variant="link"
+                                className="h-auto gap-1 px-0 py-0"
+                                onClick={() =>
+                                    void copyAccountDetails(accounts[0])
+                                }
+                            >
+                                <RiFileCopyLine />
+                                Copy Account Details
+                            </Button>
+                            {actionUrl ? (
+                                <ActionLink href={actionUrl}>
+                                    Change Account
+                                </ActionLink>
+                            ) : null}
+                        </div>
+                    </>
                 ) : (
-                    <div className="border border-dashed border-border p-4 text-sm text-muted-foreground">
-                        No payout account has been connected yet.
+                    <div className="grid justify-items-start gap-4">
+                        <p className="text-sm text-muted-foreground">
+                            Connect the bank account that will receive student
+                            dues payments.
+                        </p>
+                        {actionUrl ? (
+                            <Button asChild>
+                                <Link href={actionUrl}>
+                                    <RiBankCardLine />
+                                    Connect Payout Account
+                                </Link>
+                            </Button>
+                        ) : null}
                     </div>
                 )}
             </CardContent>
-        </Card>
+        </Container>
     );
+}
+
+async function copyAccountDetails(account: DashboardPaymentAccount) {
+    try {
+        await writeClipboard(
+            [account.accountNumber, account.bankName, account.accountName].join(
+                '\n',
+            ),
+        );
+        toast.success('Account details copied.');
+    } catch {
+        toast.error('Could not copy the account details.');
+    }
 }
 
 function PaymentAccountCard({
@@ -47,12 +122,7 @@ function PaymentAccountCard({
     compact: boolean;
 }) {
     return (
-        <div
-            className={cn(
-                'grid gap-4 border border-border bg-muted/20 p-4',
-                compact ? '' : 'sm:p-5',
-            )}
-        >
+        <div className={cn('grid gap-4', compact ? '' : 'py-1')}>
             <div
                 className={cn(
                     'grid min-w-0 gap-3',
@@ -65,13 +135,12 @@ function PaymentAccountCard({
                     <div className="truncate text-base font-semibold text-foreground">
                         {account.label}
                     </div>
-                    <div className="mt-1 truncate text-sm text-muted-foreground">
-                        {account.set}
-                    </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                    <PaymentAccountStatusBadge status={account.status} />
+                    {account.status !== 'Active' ? (
+                        <PaymentAccountStatusBadge status={account.status} />
+                    ) : null}
                     <VerificationBadge verifiedAt={account.verifiedAt} />
                 </div>
             </div>
@@ -90,25 +159,6 @@ function PaymentAccountCard({
                 <AccountDetail
                     label="Account Number"
                     value={account.accountNumber}
-                />
-            </div>
-
-            <div
-                className={cn(
-                    'grid gap-2 border-t border-border pt-3',
-                    compact
-                        ? ''
-                        : 'sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-center',
-                )}
-            >
-                <span className="text-xs font-medium text-muted-foreground">
-                    Copy Bank Info
-                </span>
-                <CopyableValue
-                    value={`${account.bankName} · ${account.accountName} · ${account.accountNumber}`}
-                    className="h-9 w-full max-w-full bg-background"
-                    valueClassName="font-sans text-xs sm:text-sm"
-                    fullWidth
                 />
             </div>
         </div>

@@ -13,7 +13,6 @@ class PasswordResetMail extends GradeManagerMail
             with: [
                 'resetUrl' => (string) data_get($this->delivery->metadata, 'reset_url'),
                 'expiresAfterMinutes' => (int) config('auth.passwords.users.expire', 60),
-                'institutionName' => $this->delivery->advisorProfile?->institution_name ?? 'your institution',
             ],
         );
     }

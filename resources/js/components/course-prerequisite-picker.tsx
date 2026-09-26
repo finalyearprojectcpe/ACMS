@@ -1,14 +1,25 @@
 import { RiCloseLine } from '@remixicon/react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
+import {
+    LevelSemesterRail,
+    LevelSemesterRailGroup,
+    levelSemesterRailTabItemClassName,
+} from '@/components/level-semester-rail';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
     academicLevelNumber,
     academicSemesterOrder,
-    semesterName,
-    shortLevelLabel,
+    semesterLabel,
 } from '@/lib/academic';
 
 export type CoursePrerequisiteOption = {
@@ -29,14 +40,15 @@ export function CoursePrerequisitePicker({
     selectedIds: number[];
     onChange: (courseId: number, checked: boolean) => void;
 }) {
-    const groups = useMemo(
+    const periods = useMemo(
         () => groupPrerequisitesByPeriod(options),
         [options],
     );
+    const levels = useMemo(() => groupPeriodsByLevel(periods), [periods]);
     const selectedOptions = options.filter((option) =>
         selectedIds.includes(option.id),
     );
-    const defaultGroup = groups[0]?.id;
+    const [activePeriod, setActivePeriod] = useState(periods[0]?.id ?? '');
 
     if (options.length === 0) {
         return (
@@ -47,43 +59,76 @@ export function CoursePrerequisitePicker({
     }
 
     return (
-        <div className="rounded-none border border-border bg-background p-3">
+        <div className="border border-border bg-background">
+            <SelectedPrerequisites
+                options={selectedOptions}
+                onRemove={(courseId) => onChange(courseId, false)}
+            />
             <Tabs
-                defaultValue={defaultGroup}
+                value={activePeriod}
+                onValueChange={setActivePeriod}
                 orientation="vertical"
-                className="grid min-w-0 gap-0 md:grid-cols-[11rem_minmax(0,1fr)]"
+                className="grid min-w-0 gap-0 md:grid-cols-[14rem_minmax(0,1fr)]"
             >
-                <div className="border-b border-border pb-3 md:border-r md:border-b-0 md:pr-3 md:pb-0">
-                    <TabsList
-                        variant="line"
-                        className="grid! h-auto w-full grid-cols-2 gap-1 bg-transparent p-0 sm:grid-cols-3 md:flex! md:flex-col md:items-stretch"
-                    >
-                        {groups.map((group) => (
-                            <TabsTrigger
-                                key={group.id}
-                                value={group.id}
-                                className="h-8 justify-center! px-2 md:justify-start! data-active:bg-primary! data-active:text-primary-foreground! data-active:after:opacity-0! data-active:hover:text-primary-foreground!"
-                            >
-                                {group.label}
-                            </TabsTrigger>
-                        ))}
-                    </TabsList>
+                <div className="border-b border-border md:border-r md:border-b-0">
+                    <div className="p-3 md:hidden">
+                        <Select
+                            value={activePeriod}
+                            onValueChange={setActivePeriod}
+                        >
+                            <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Choose an earlier semester" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {periods.map((period) => (
+                                    <SelectItem
+                                        key={period.id}
+                                        value={period.id}
+                                    >
+                                        {period.level} · {period.semester}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <ScrollArea className="hidden h-72 md:block">
+                        <TabsList
+                            variant="line"
+                            className="grid! h-auto w-full items-stretch justify-stretch bg-transparent p-0"
+                        >
+                            <LevelSemesterRail>
+                                {levels.map((level) => (
+                                    <LevelSemesterRailGroup
+                                        key={level.id}
+                                        label={level.label}
+                                    >
+                                        {level.periods.map((period) => (
+                                            <TabsTrigger
+                                                key={period.id}
+                                                value={period.id}
+                                                className={
+                                                    levelSemesterRailTabItemClassName
+                                                }
+                                            >
+                                                {period.semester}
+                                            </TabsTrigger>
+                                        ))}
+                                    </LevelSemesterRailGroup>
+                                ))}
+                            </LevelSemesterRail>
+                        </TabsList>
+                    </ScrollArea>
                 </div>
 
-                <div className="min-w-0 md:pl-3">
-                    <SelectedPrerequisites
-                        options={selectedOptions}
-                        onRemove={(courseId) => onChange(courseId, false)}
-                    />
-
-                    {groups.map((group) => (
+                <div className="min-w-0 p-3 sm:p-4">
+                    {periods.map((period) => (
                         <TabsContent
-                            key={group.id}
-                            value={group.id}
-                            className="m-0 mt-3"
+                            key={period.id}
+                            value={period.id}
+                            className="m-0"
                         >
                             <PrerequisiteCourseList
-                                options={group.options}
+                                options={period.options}
                                 selectedIds={selectedIds}
                                 onChange={onChange}
                             />
@@ -105,22 +150,24 @@ function PrerequisiteCourseList({
     onChange: (courseId: number, checked: boolean) => void;
 }) {
     return (
-        <div className="grid gap-2 border border-border bg-muted/10 p-2">
-            {options.length > 0 ? (
-                options.map((option) => (
-                    <PrerequisiteOption
-                        key={option.id}
-                        option={option}
-                        checked={selectedIds.includes(option.id)}
-                        onChange={onChange}
-                    />
-                ))
-            ) : (
-                <div className="px-2 py-4 text-xs text-muted-foreground">
-                    No courses.
-                </div>
-            )}
-        </div>
+        <ScrollArea className="h-72">
+            <div className="grid gap-2 pr-3">
+                {options.length > 0 ? (
+                    options.map((option) => (
+                        <PrerequisiteOption
+                            key={option.id}
+                            option={option}
+                            checked={selectedIds.includes(option.id)}
+                            onChange={onChange}
+                        />
+                    ))
+                ) : (
+                    <div className="px-2 py-4 text-xs text-muted-foreground lg:col-span-2">
+                        No courses.
+                    </div>
+                )}
+            </div>
+        </ScrollArea>
     );
 }
 
@@ -138,22 +185,22 @@ function PrerequisiteOption({
     return (
         <label
             htmlFor={id}
-            className="flex items-start gap-3 border border-border bg-background p-3"
+            className="flex min-h-20 items-start gap-3 border border-border bg-background p-3 hover:bg-muted/30"
         >
             <Checkbox
                 id={id}
                 checked={checked}
                 onCheckedChange={(value) => onChange(option.id, value === true)}
             />
-            <span className="min-w-0">
-                <span className="block text-sm font-semibold">
-                    {option.code}
-                </span>
-                <span className="block truncate text-xs text-muted-foreground">
-                    {option.title}
+            <span className="min-w-0 flex-1">
+                <span className="flex items-start justify-between gap-3">
+                    <span className="text-sm font-semibold">{option.code}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                        {option.units} units
+                    </span>
                 </span>
                 <span className="mt-1 block text-xs text-muted-foreground">
-                    {option.units} units
+                    {option.title}
                 </span>
             </span>
         </label>
@@ -168,7 +215,7 @@ function SelectedPrerequisites({
     onRemove: (courseId: number) => void;
 }) {
     return (
-        <div className="h-24 border border-border bg-muted/10 p-3">
+        <div className="h-24 border-b border-border bg-muted/10 p-3">
             <div className="mb-2 flex items-center justify-between gap-3">
                 <div className="text-xs font-medium text-muted-foreground">
                     Selected Prerequisites
@@ -205,10 +252,15 @@ function SelectedPrerequisites({
 
 type PrerequisitePeriodGroup = {
     id: string;
-    label: string;
     level: string;
     semester: string;
     options: CoursePrerequisiteOption[];
+};
+
+type PrerequisiteLevelGroup = {
+    id: string;
+    label: string;
+    periods: PrerequisitePeriodGroup[];
 };
 
 function groupPrerequisitesByPeriod(
@@ -217,13 +269,12 @@ function groupPrerequisitesByPeriod(
     const groups = new Map<string, PrerequisitePeriodGroup>();
 
     for (const option of options) {
-        const semester = semesterName(option.semester);
+        const semester = semesterLabel(option.semester);
         const id = `${option.level}-${semester}`;
 
         if (!groups.has(id)) {
             groups.set(id, {
                 id,
-                label: `${shortLevelLabel(option.level)} ${semester}`,
                 level: option.level,
                 semester,
                 options: [],
@@ -245,5 +296,29 @@ function groupPrerequisitesByPeriod(
                 academicLevelNumber(second.level) ||
             academicSemesterOrder(first.semester) -
                 academicSemesterOrder(second.semester),
+    );
+}
+
+function groupPeriodsByLevel(
+    periods: PrerequisitePeriodGroup[],
+): PrerequisiteLevelGroup[] {
+    const groups = new Map<string, PrerequisiteLevelGroup>();
+
+    for (const period of periods) {
+        if (!groups.has(period.level)) {
+            groups.set(period.level, {
+                id: period.level,
+                label: period.level,
+                periods: [],
+            });
+        }
+
+        groups.get(period.level)?.periods.push(period);
+    }
+
+    return [...groups.values()].sort(
+        (first, second) =>
+            academicLevelNumber(first.label) -
+            academicLevelNumber(second.label),
     );
 }

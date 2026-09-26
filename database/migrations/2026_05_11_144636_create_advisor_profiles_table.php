@@ -11,16 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Stores each course adviser's programme identity and the academic limits used across their student sets.
+        // Stores the operational profile attached to each course adviser account.
         Schema::create('advisor_profiles', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->unique()->constrained()->cascadeOnDelete();
-            $table->string('institution_name')->nullable();
-            $table->string('programme_name');
-            $table->string('programme_abbreviation', 20);
-            $table->unsignedTinyInteger('minimum_years_to_degree')->default(4);
-            $table->unsignedTinyInteger('maximum_course_units')->default(24);
-            $table->string('timezone')->default('Africa/Lagos');
             $table->timestamps();
         });
     }

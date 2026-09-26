@@ -2,81 +2,47 @@
 
 namespace App\Services;
 
+use App\Honorific;
 use App\Models\AcademicSession;
 use App\Models\AcademicYear;
 use App\Models\AdvisorProfile;
-use App\Models\DuePayment;
 use App\Models\StudentProfile;
 use App\Models\StudentSet;
-use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 class DashboardPresenter
 {
     public function __construct(
         private readonly AcademicContextService $academicContext,
-        private readonly AccessCodeGenerator $accessCodes,
         private readonly CurrencyFormatter $currency,
     ) {}
 
-    public function adviserHome(AdvisorProfile $advisor, Collection $sets, Collection $levels): array
-    {
+    public function adviserStudents(
+        AdvisorProfile $advisor,
+        Collection $sets,
+        ?int $selectedSetId = null,
+    ): array {
+        $selectedSet = $sets->firstWhere('id', $selectedSetId) ?? $sets->first();
         $students = $advisor->students()
-            ->with(['user', 'currentLevel', 'studentSet.entryAcademicSession'])
-            ->get();
-        $payments = DuePayment::query()
-            ->with(['studentProfile.user', 'assignment.due'])
-            ->where('advisor_profile_id', $advisor->id)
-            ->where('status', DuePayment::StatusSuccess)
-            ->latest('paid_at')
-            ->limit(8)
-            ->get();
-
-        return [
-            'assignedSets' => $sets->map(fn (StudentSet $set): array => $this->studentSet($set))->values()->all(),
-            'levels' => $levels->map(fn (AcademicYear $level): array => $this->level($level))->all(),
-            'students' => $students->map(fn (StudentProfile $student): array => $this->adviserStudent($student))->all(),
-            'totalStudents' => $students->count(),
-            'maximumCourseUnits' => (int) $advisor->maximum_course_units,
-            'pendingDuesByStudent' => [],
-            'recentPayments' => $payments->map(fn (DuePayment $payment): array => [
-                'studentName' => $payment->studentProfile->user->name,
-                'studentAvatar' => $payment->studentProfile->user->profilePhotoUrl(),
-                'dueName' => $payment->assignment->due->title,
-                'amount' => $this->amount((int) $payment->amount_kobo),
-                'paidAt' => $payment->paid_at?->toFormattedDateString() ?? 'Paid',
-            ])->all(),
-        ];
-    }
-
-    public function adviserStudents(AdvisorProfile $advisor, Collection $sets): array
-    {
-        $students = $advisor->students()
-            ->with(['user', 'currentLevel', 'studentSet.entryAcademicSession'])
+            ->with(['user', 'studentSet.currentAcademicYear'])
+            ->when(
+                $selectedSet instanceof StudentSet,
+                fn ($query) => $query->where('student_set_id', $selectedSet->id),
+                fn ($query) => $query->whereRaw('1 = 0'),
+            )
             ->get()
-            ->sortBy(fn (StudentProfile $student): string => $student->user->name)
+            ->sortBy(
+                fn (StudentProfile $student): string => Str::lower($student->user->name),
+                SORT_NATURAL,
+            )
             ->values();
 
         return [
-            'programme' => $this->programme($advisor),
             'assignedSets' => $sets->map(fn (StudentSet $set): array => $this->studentSet($set))->values()->all(),
+            'selectedSetId' => $selectedSet instanceof StudentSet ? (int) $selectedSet->id : null,
             'totalStudents' => $students->count(),
             'students' => $students->map(fn (StudentProfile $student): array => $this->adviserStudent($student))->all(),
-        ];
-    }
-
-    public function studentForm(AdvisorProfile $advisor, string $mode): array
-    {
-        $sets = $advisor->studentSets()
-            ->with('entryAcademicSession')
-            ->orderByDesc('entry_academic_session_id')
-            ->get();
-
-        return [
-            'mode' => $mode,
-            'programme' => $this->programme($advisor),
-            'assignedSets' => $sets->map(fn (StudentSet $set): array => $this->studentSet($set))->values()->all(),
-            'suggestedAccessCode' => $this->accessCodes->generate(),
         ];
     }
 
@@ -84,8 +50,7 @@ class DashboardPresenter
     {
         $student->loadMissing([
             'user',
-            'currentLevel',
-            'studentSet.entryAcademicSession',
+            'studentSet.currentAcademicYear',
             'advisorProfile.user',
         ]);
 
@@ -95,67 +60,36 @@ class DashboardPresenter
             'email' => $student->user->email,
             'registrationNumber' => $student->registration_number,
             'avatar' => $student->user->profilePhotoUrl(),
-            'currentLevel' => $student->currentLevel instanceof AcademicYear
-                ? $this->level($student->currentLevel)
+            'currentLevel' => $student->studentSet->currentAcademicYear instanceof AcademicYear
+                ? $this->level($student->studentSet->currentAcademicYear)
                 : null,
             'studentSet' => $this->studentSet($student->studentSet),
-            'entrySession' => $this->academicSession($student->studentSet->entryAcademicSession),
-            'advisorName' => $student->advisorProfile->user->name,
+            'entrySession' => $this->entrySession($student->studentSet),
+            'advisorName' => $student->advisorProfile->user->displayName(),
             'profileUrl' => route('dashboard.students.show', [
                 'registrationNumber' => $student->registration_number,
             ]),
-            'accountStatus' => $student->user->activated_at === null ? 'Pending signup' : 'Active',
-            'accessCode' => $student->user->activated_at === null ? $student->user->access_code : null,
         ];
     }
 
-    public function adviserSettings(
-        Request $request,
-        AdvisorProfile $advisor,
-        Collection $sets,
-    ): array {
-        $sessions = $advisor->academicSessions()->orderByDesc('starts_on')->get();
-        $setup = $request->string('setup')->toString();
-        $editId = $request->integer('edit');
-        $setupForm = null;
+    public function adviserStudentSets(bool $isCreating = false): array
+    {
+        return [
+            'isCreating' => $isCreating,
+        ];
+    }
 
-        if ($setup === 'academic-session') {
-            $session = $editId > 0 ? $advisor->academicSessions()->findOrFail($editId) : null;
-            $setupForm = [
-                'kind' => 'academic-session',
-                'mode' => $session instanceof AcademicSession ? 'edit' : 'create',
-                'id' => $session?->id,
-                'name' => $session?->name ?? '',
-                'startsOn' => $session?->starts_on->toDateString() ?? '',
-                'endsOn' => $session?->ends_on->toDateString() ?? '',
-            ];
-        }
-
-        if ($setup === 'student-set') {
-            $studentSet = $editId > 0
-                ? $advisor->studentSets()->with('entryAcademicSession')->findOrFail($editId)
-                : null;
-            $setupForm = [
-                'kind' => 'student-set',
-                'mode' => $studentSet instanceof StudentSet ? 'edit' : 'create',
-                'id' => $studentSet?->id,
-                'entryAcademicSessionId' => $studentSet?->entry_academic_session_id,
-                'minimumYearsToDegree' => $studentSet?->minimum_years_to_degree ?? $advisor->minimum_years_to_degree,
-                'maximumCourseUnits' => $studentSet?->maximum_course_units ?? $advisor->maximum_course_units,
-            ];
-        }
-
+    public function adviserProfile(AdvisorProfile $advisor): array
+    {
         return [
             'adviser' => [
+                'title' => $advisor->user->title?->value,
                 'name' => $advisor->user->name,
+                'displayName' => $advisor->user->displayName(),
                 'email' => $advisor->user->email,
                 'avatar' => $advisor->user->profilePhotoUrl(),
             ],
-            'institution' => $advisor->institution_name,
-            'programme' => $this->programme($advisor),
-            'assignedSets' => $sets->map(fn (StudentSet $set): array => $this->studentSet($set))->all(),
-            'academicSessions' => $sessions->map(fn (AcademicSession $session): array => $this->academicSession($session))->all(),
-            'setupForm' => $setupForm,
+            'honorifics' => Honorific::options(),
         ];
     }
 
@@ -169,15 +103,7 @@ class DashboardPresenter
                 'surname' => $surname,
                 'otherNames' => $otherNames,
             ],
-            'email' => (string) $student->user->email,
             'avatar' => $student->user->profilePhotoUrl(),
-            'registrationNumber' => $student->registration_number,
-            'institution' => $student->advisorProfile->institution_name,
-            'programme' => $this->programme($student->advisorProfile),
-            'currentLevel' => $student->currentLevel instanceof AcademicYear
-                ? $this->level($student->currentLevel)
-                : null,
-            'courseAdvisor' => $student->advisorProfile->user->name,
         ];
     }
 
@@ -185,10 +111,8 @@ class DashboardPresenter
     {
         return [
             'student' => $this->adviserStudent($student),
-            'institution' => $student->advisorProfile->institution_name,
-            'programme' => $this->programme($student->advisorProfile),
-            'entrySession' => $this->academicSession($student->studentSet->entryAcademicSession),
-            'courseAdvisor' => $student->advisorProfile->user->name,
+            'entrySession' => $this->entrySession($student->studentSet),
+            'courseAdvisor' => $student->advisorProfile->user->displayName(),
         ];
     }
 
@@ -196,26 +120,31 @@ class DashboardPresenter
     {
         return [
             'registrationNumber' => $student->registration_number,
-            'currentLevel' => $student->currentLevel instanceof AcademicYear
-                ? $this->level($student->currentLevel)
+            'currentLevel' => $student->studentSet->currentAcademicYear instanceof AcademicYear
+                ? $this->level($student->studentSet->currentAcademicYear)
                 : null,
         ];
     }
 
     public function studentSet(StudentSet $set): array
     {
-        $set->loadMissing(['entryAcademicSession', 'advisorProfile.user']);
+        $set->loadMissing('advisorProfile.user');
+        if (! isset($set->students_count)) {
+            $set->loadCount('students');
+        }
         $currentLevel = $this->academicContext->academicYearForSet($set);
 
         return [
             'id' => (int) $set->id,
-            'name' => $set->name,
-            'entrySession' => $this->academicSession($set->entryAcademicSession),
+            'publicId' => $set->public_id,
+            'name' => $set->label(),
+            'entrySession' => $this->entrySession($set),
             'currentLevel' => $currentLevel instanceof AcademicYear ? $this->level($currentLevel) : null,
-            'advisorName' => $set->advisorProfile->user->name,
-            'minimumYearsToDegree' => (int) $set->minimum_years_to_degree,
-            'maximumCourseUnits' => (int) $set->maximum_course_units,
-            'isGraduated' => $this->academicContext->setHasGraduated($set),
+            'advisorName' => $set->advisorProfile->user->displayName(),
+            'studentCount' => (int) $set->students_count,
+            'signupUrl' => $set->signupUrl(),
+            'signupEnabled' => (bool) $set->student_signup_enabled,
+            'url' => route('student-sets.show', $set->routeParameters()),
         ];
     }
 
@@ -223,12 +152,25 @@ class DashboardPresenter
     {
         return [
             'id' => (int) $session->id,
-            'name' => $session->name,
-            'startsOn' => $session->starts_on->toDateString(),
-            'endsOn' => $session->ends_on->toDateString(),
-            'status' => today()->betweenIncluded($session->starts_on, $session->ends_on)
-                ? 'Current'
-                : ($session->starts_on->isFuture() ? 'Upcoming' : 'Past'),
+            'publicId' => $session->public_id,
+            'name' => $session->label(),
+            'departmentName' => $session->studentSet->department_name,
+            'departmentSlug' => $session->studentSet->department_slug,
+            'startYear' => (int) $session->start_year,
+            'endYear' => (int) $session->end_year,
+        ];
+    }
+
+    public function entrySession(StudentSet $set): array
+    {
+        return [
+            'id' => $set->id,
+            'publicId' => $set->public_id,
+            'name' => "{$set->entry_start_year}/{$set->entry_end_year}",
+            'departmentName' => $set->department_name,
+            'departmentSlug' => $set->department_slug,
+            'startYear' => (int) $set->entry_start_year,
+            'endYear' => (int) $set->entry_end_year,
         ];
     }
 
@@ -240,24 +182,6 @@ class DashboardPresenter
             'slug' => $level->slug,
             'yearNumber' => (int) $level->year_number,
         ];
-    }
-
-    public function programme(AdvisorProfile $advisor): array
-    {
-        return [
-            'id' => (int) $advisor->id,
-            'name' => $advisor->programme_name,
-            'abbreviation' => $advisor->programme_abbreviation,
-            'minimumYearsToDegree' => (int) $advisor->minimum_years_to_degree,
-        ];
-    }
-
-    public function levelsFor(AdvisorProfile $advisor): Collection
-    {
-        return AcademicYear::query()
-            ->where('year_number', '<=', $advisor->minimum_years_to_degree)
-            ->orderBy('year_number')
-            ->get();
     }
 
     public function amount(int $amountKobo): string

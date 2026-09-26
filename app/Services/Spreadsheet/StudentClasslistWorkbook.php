@@ -23,20 +23,20 @@ class StudentClasslistWorkbook
         $includeContextColumns = $context['includeContextColumns'];
         $endColumn = $includeContextColumns ? 'F' : 'D';
         $spreadsheet = $this->styles->workbook(
-            $advisor->programme_abbreviation.' Student Classlist',
-            'Filtered student classlist for '.$advisor->programme_name,
+            'Student Classlist',
+            'Filtered student classlist for '.$advisor->user->displayName(),
         );
         $sheet = $spreadsheet->getActiveSheet();
 
         $this->styles->prepareSheet($sheet, 'Classlist', PageSetup::ORIENTATION_LANDSCAPE);
         $sheet->mergeCells("A1:{$endColumn}1");
-        $this->styles->text($sheet, 'A1', $advisor->institution_name ?: config('app.name'));
+        $this->styles->text($sheet, 'A1', (string) config('app.name'));
         $this->styles->documentSubtitle($sheet, "A1:{$endColumn}1");
         $sheet->mergeCells("A2:{$endColumn}2");
-        $this->styles->text($sheet, 'A2', $advisor->programme_abbreviation.' Student Classlist');
+        $this->styles->text($sheet, 'A2', 'Student Classlist');
         $this->styles->documentTitle($sheet, "A2:{$endColumn}2");
         $sheet->mergeCells("A3:{$endColumn}3");
-        $this->styles->text($sheet, 'A3', $advisor->programme_name.' · Course Adviser '.$advisor->user->name);
+        $this->styles->text($sheet, 'A3', 'Course Adviser · '.$advisor->user->displayName());
         $sheet->getStyle("A3:{$endColumn}3")->getFont()->setSize(10)->getColor()->setARGB(WorkbookStyler::Muted);
         $sheet->mergeCells("A4:{$endColumn}4");
         $sheet->setCellValue('A4', 'Generated '.now()->format('d M Y, H:i'));

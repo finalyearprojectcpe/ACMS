@@ -92,6 +92,8 @@
     --sidebar-accent-foreground: oklch(0.205 0 0);
     --sidebar-border: oklch(0.922 0 0);
     --sidebar-ring: oklch(0.708 0 0);
+    --toast-surface: var(--foreground);
+    --toast-surface-foreground: var(--background);
 }
 
 .dark {
@@ -127,6 +129,8 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
+    --toast-surface: var(--card);
+    --toast-surface-foreground: var(--card-foreground);
 }
 
 @layer base {
@@ -157,4 +161,87 @@
     .text-link:hover {
         text-decoration-line: underline;
     }
+}
+
+.toaster[data-sonner-toaster] [data-sonner-toast][data-styled='true'] {
+    padding-right: 40px;
+    border-left-width: 3px;
+    box-shadow: 0 10px 28px oklch(0 0 0 / 22%);
+}
+
+@keyframes prompt-roll {
+    0% {
+        transform: translateY(100%);
+        opacity: 0;
+    }
+
+    12%,
+    88% {
+        transform: translateY(0);
+        opacity: 1;
+    }
+
+    100% {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+}
+
+.toaster[data-sonner-toaster]
+    [data-sonner-toast][data-styled='true']
+    [data-description] {
+    color: color-mix(
+        in oklch,
+        var(--toast-surface-foreground) 80%,
+        transparent
+    );
+}
+
+.toaster[data-sonner-toaster]
+    [data-sonner-toast][data-styled='true']
+    [data-close-button] {
+    top: 8px;
+    right: 8px;
+    left: auto;
+    width: 24px;
+    height: 24px;
+    transform: none;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--toast-surface-foreground);
+}
+
+.toaster[data-sonner-toaster]
+    [data-sonner-toast][data-styled='true']
+    [data-close-button]:hover {
+    background: color-mix(
+        in oklch,
+        var(--toast-surface-foreground) 12%,
+        var(--toast-surface)
+    );
+}
+
+.toaster[data-sonner-toaster] [data-sonner-toast][data-type='success'] {
+    --toast-accent: var(--chart-1);
+}
+
+.toaster[data-sonner-toaster] [data-sonner-toast][data-type='info'] {
+    --toast-accent: var(--link);
+}
+
+.toaster[data-sonner-toaster] [data-sonner-toast][data-type='warning'] {
+    --toast-accent: var(--chart-3);
+}
+
+.toaster[data-sonner-toaster] [data-sonner-toast][data-type='error'] {
+    --toast-accent: var(--destructive);
+}
+
+.toaster[data-sonner-toaster] [data-sonner-toast][data-type] {
+    border-left-color: var(--toast-accent);
+}
+
+.toaster[data-sonner-toaster] [data-sonner-toast][data-type] [data-icon] {
+    color: var(--toast-accent);
 }

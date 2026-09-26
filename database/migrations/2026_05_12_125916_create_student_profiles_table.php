@@ -11,18 +11,17 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Stores each student's adviser-owned academic identity and current year of study.
+        // Stores each student's identity and membership of an adviser-owned set.
         Schema::create('student_profiles', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->unique()->constrained()->cascadeOnDelete();
             $table->foreignId('advisor_profile_id')->constrained()->cascadeOnDelete();
             $table->foreignId('student_set_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('current_academic_year_id')->nullable()->constrained('academic_years')->nullOnDelete();
             $table->string('registration_number');
             $table->string('status')->default('active');
             $table->timestamps();
 
-            $table->index(['student_set_id', 'current_academic_year_id']);
+            $table->index('student_set_id');
             $table->unique(['advisor_profile_id', 'registration_number']);
         });
     }

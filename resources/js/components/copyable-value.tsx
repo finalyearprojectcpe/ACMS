@@ -1,5 +1,6 @@
 import { RiCheckLine, RiFileCopyLine } from '@remixicon/react';
 import { useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -34,8 +35,14 @@ export function CopyableValue({
             return;
         }
 
-        await writeClipboard(copyValue);
-        setCopied(true);
+        try {
+            await writeClipboard(copyValue);
+            setCopied(true);
+        } catch {
+            toast.error('Could not copy this value.');
+
+            return;
+        }
 
         if (resetTimer.current !== null) {
             clearTimeout(resetTimer.current);
@@ -93,7 +100,7 @@ export function CopyableValue({
     );
 }
 
-async function writeClipboard(value: string): Promise<void> {
+export async function writeClipboard(value: string): Promise<void> {
     if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(value);
 
@@ -108,6 +115,10 @@ async function writeClipboard(value: string): Promise<void> {
     textArea.style.left = '-9999px';
     document.body.appendChild(textArea);
     textArea.select();
-    document.execCommand('copy');
+    const copied = document.execCommand('copy');
     document.body.removeChild(textArea);
+
+    if (!copied) {
+        throw new Error('Clipboard is unavailable.');
+    }
 }

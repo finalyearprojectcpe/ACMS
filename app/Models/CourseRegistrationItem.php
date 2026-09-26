@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['course_registration_id', 'course_offering_id', 'category', 'course_code', 'course_title', 'credit_units'])]
+#[Fillable(['course_registration_id', 'course_offering_id', 'is_elective', 'course_code', 'course_title', 'credit_units', 'grade', 'graded_at'])]
 class CourseRegistrationItem extends Model
 {
     /** @use HasFactory<CourseRegistrationItemFactory> */
@@ -28,5 +28,14 @@ class CourseRegistrationItem extends Model
     public function courseOffering(): BelongsTo
     {
         return $this->belongsTo(CourseOffering::class);
+    }
+
+    /** @return array<string, string> */
+    protected function casts(): array
+    {
+        return [
+            'is_elective' => 'boolean',
+            'graded_at' => 'datetime',
+        ];
     }
 }

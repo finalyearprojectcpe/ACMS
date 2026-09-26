@@ -28,8 +28,8 @@ export function AdviserDueWaiverFormDashboard({
         event.preventDefault();
         waiverForm.submit(
             waiveStudentDue({
-                due: form.due.id,
-                studentDueAssignment: form.assignment.id,
+                due: form.due.publicId,
+                studentDueAssignment: form.assignment.publicId,
             }),
         );
     }

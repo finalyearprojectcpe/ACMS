@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use Carbon\CarbonImmutable;
+use App\Models\Concerns\HasPublicId;
 use Database\Factories\AcademicSessionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -10,28 +10,29 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['advisor_profile_id', 'name', 'starts_on', 'ends_on'])]
+#[Fillable([
+    'student_set_id',
+    'academic_year_id',
+    'start_year',
+    'end_year',
+])]
 class AcademicSession extends Model
 {
     /** @use HasFactory<AcademicSessionFactory> */
     use HasFactory;
 
-    protected static function booted(): void
+    use HasPublicId;
+
+    /** @return BelongsTo<StudentSet, $this> */
+    public function studentSet(): BelongsTo
     {
-        static::created(fn (AcademicSession $academicSession) => $academicSession->syncDefaultSemesterInstances());
-        static::updated(function (AcademicSession $academicSession): void {
-            if ($academicSession->wasChanged(['starts_on', 'ends_on'])) {
-                $academicSession->syncDefaultSemesterInstances();
-            }
-        });
+        return $this->belongsTo(StudentSet::class);
     }
 
-    /**
-     * @return BelongsTo<AdvisorProfile, $this>
-     */
-    public function advisorProfile(): BelongsTo
+    /** @return BelongsTo<AcademicYear, $this> */
+    public function academicYear(): BelongsTo
     {
-        return $this->belongsTo(AdvisorProfile::class);
+        return $this->belongsTo(AcademicYear::class);
     }
 
     /**
@@ -42,36 +43,23 @@ class AcademicSession extends Model
         return $this->hasMany(AcademicSessionSemester::class);
     }
 
-    public function syncDefaultSemesterInstances(): void
+    public function label(): string
     {
-        $semesters = Semester::query()
-            ->whereIn('slug', ['harmattan', 'rain'])
-            ->get()
-            ->keyBy('slug');
+        return "{$this->start_year}/{$this->end_year}";
+    }
 
-        if ($semesters->count() !== 2 || $this->starts_on === null || $this->ends_on === null) {
-            return;
-        }
+    public function routeYears(): string
+    {
+        return "{$this->start_year}{$this->end_year}";
+    }
 
-        $startsOn = CarbonImmutable::parse($this->starts_on);
-        $endsOn = CarbonImmutable::parse($this->ends_on);
-        $rainStartsOn = $startsOn->addDays((int) ceil($startsOn->diffInDays($endsOn) / 2));
-        $periods = [
-            'harmattan' => [$startsOn, $rainStartsOn->subDay()],
-            'rain' => [$rainStartsOn, $endsOn],
-        ];
-
-        foreach ($periods as $semesterSlug => [$semesterStartsOn, $semesterEndsOn]) {
-            $this->semesterInstances()->updateOrCreate(
-                ['semester_id' => $semesters->get($semesterSlug)->id],
-                [
-                    'starts_on' => $semesterStartsOn->toDateString(),
-                    'ends_on' => $semesterEndsOn->toDateString(),
-                    'registration_opens_at' => $semesterStartsOn->subWeeks(2),
-                    'registration_closes_at' => $semesterStartsOn->addWeeks(4)->endOfDay(),
-                ],
-            );
-        }
+    public function hasAcademicRecords(): bool
+    {
+        return $this->semesterInstances()
+            ->where(fn ($query) => $query
+                ->whereHas('courseOfferings')
+                ->orWhereHas('courseRegistrations'))
+            ->exists();
     }
 
     /**
@@ -80,8 +68,8 @@ class AcademicSession extends Model
     protected function casts(): array
     {
         return [
-            'starts_on' => 'date',
-            'ends_on' => 'date',
+            'start_year' => 'integer',
+            'end_year' => 'integer',
         ];
     }
 }
