@@ -27,7 +27,7 @@ class GenerateDuePaymentReceipt implements ShouldBeUnique, ShouldQueue
     public function handle(ReceiptPdfService $receiptPdf, DueReceiptService $receipts): void
     {
         $payment = DuePayment::query()
-            ->with(['school', 'assignment.due.department', 'studentProfile.user'])
+            ->with(['advisorProfile', 'assignment.due', 'studentProfile.user'])
             ->findOrFail($this->duePaymentId);
 
         if (! in_array($payment->status, [DuePayment::StatusSuccess, DuePayment::StatusReversed], true)) {
@@ -43,7 +43,7 @@ class GenerateDuePaymentReceipt implements ShouldBeUnique, ShouldQueue
         $disk = (string) config('filesystems.due_receipt_disk', 'local');
         $path = sprintf(
             'receipts/%d/%s/%s.pdf',
-            $payment->school_id,
+            $payment->advisor_profile_id,
             ($payment->paid_at ?? now())->format('Y'),
             Str::slug((string) $payment->receipt_number),
         );

@@ -24,9 +24,8 @@ class StudentDueAssignmentFactory extends Factory
         return [
             'due_id' => $due->id,
             'student_profile_id' => StudentProfile::factory()->create([
-                'school_id' => $due->school_id,
-                'department_id' => $due->department_id,
-                'entry_academic_session_id' => $due->entry_academic_session_id,
+                'advisor_profile_id' => $due->advisor_profile_id,
+                'student_set_id' => $due->student_set_id,
             ])->id,
             'amount_kobo' => $due->amount_kobo,
             'status' => StudentDueAssignment::StatusPending,

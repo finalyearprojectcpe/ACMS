@@ -2,9 +2,7 @@
 
 namespace Database\Seeders;
 
-use App\Models\AcademicSession;
 use App\Models\AcademicYear;
-use App\Models\AcademicYearSemester;
 use App\Models\Semester;
 use Illuminate\Database\Seeder;
 
@@ -15,7 +13,7 @@ class AcademicStructureSeeder extends Seeder
      */
     public function run(): void
     {
-        foreach (range(1, 7) as $level) {
+        foreach (range(1, 9) as $level) {
             AcademicYear::query()->updateOrCreate(
                 ['id' => $level],
                 [
@@ -33,22 +31,6 @@ class AcademicStructureSeeder extends Seeder
             );
         }
 
-        AcademicYear::query()
-            ->orderBy('year_number')
-            ->each(function (AcademicYear $academicYear): void {
-                Semester::query()
-                    ->orderBy('sort_order')
-                    ->each(function (Semester $semester) use ($academicYear): void {
-                        AcademicYearSemester::query()->updateOrCreate([
-                            'academic_year_id' => $academicYear->id,
-                            'semester_id' => $semester->id,
-                        ]);
-                    });
-            });
-
-        AcademicSession::query()
-            ->with('semesterInstances')
-            ->each(fn (AcademicSession $academicSession) => $academicSession->syncDefaultSemesterInstances());
     }
 
     /**
@@ -58,13 +40,13 @@ class AcademicStructureSeeder extends Seeder
     {
         return [
             [
-                'name' => 'Harmattan',
-                'slug' => 'harmattan',
+                'name' => '1st Semester',
+                'slug' => 'first',
                 'sort_order' => 1,
             ],
             [
-                'name' => 'Rain',
-                'slug' => 'rain',
+                'name' => '2nd Semester',
+                'slug' => 'second',
                 'sort_order' => 2,
             ],
         ];

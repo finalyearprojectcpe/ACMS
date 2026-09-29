@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['school_id', 'department_id', 'student_profile_id', 'academic_session_id', 'academic_year_semester_id', 'reviewer_staff_profile_id', 'status', 'feedback_note', 'submitted_at', 'reviewed_at'])]
+#[Fillable(['student_profile_id', 'academic_session_semester_id', 'status', 'feedback_note', 'submitted_at', 'reviewed_at'])]
 class CourseRegistration extends Model
 {
     public const string StatusDraft = 'draft';
@@ -28,22 +28,6 @@ class CourseRegistration extends Model
     ];
 
     /**
-     * @return BelongsTo<School, $this>
-     */
-    public function school(): BelongsTo
-    {
-        return $this->belongsTo(School::class);
-    }
-
-    /**
-     * @return BelongsTo<Department, $this>
-     */
-    public function department(): BelongsTo
-    {
-        return $this->belongsTo(Department::class);
-    }
-
-    /**
      * @return BelongsTo<StudentProfile, $this>
      */
     public function studentProfile(): BelongsTo
@@ -52,27 +36,11 @@ class CourseRegistration extends Model
     }
 
     /**
-     * @return BelongsTo<AcademicSession, $this>
+     * @return BelongsTo<AcademicSessionSemester, $this>
      */
-    public function academicSession(): BelongsTo
+    public function academicSessionSemester(): BelongsTo
     {
-        return $this->belongsTo(AcademicSession::class);
-    }
-
-    /**
-     * @return BelongsTo<AcademicYearSemester, $this>
-     */
-    public function academicYearSemester(): BelongsTo
-    {
-        return $this->belongsTo(AcademicYearSemester::class);
-    }
-
-    /**
-     * @return BelongsTo<StaffProfile, $this>
-     */
-    public function reviewerStaffProfile(): BelongsTo
-    {
-        return $this->belongsTo(StaffProfile::class, 'reviewer_staff_profile_id');
+        return $this->belongsTo(AcademicSessionSemester::class);
     }
 
     /**
@@ -86,6 +54,19 @@ class CourseRegistration extends Model
     public function isEditableByStudent(): bool
     {
         return in_array($this->status, [self::StatusDraft, self::StatusReturned], true);
+    }
+
+    /** @return array{registrationNumber: string, sessionYears: string, semester: string} */
+    public function reviewRouteParameters(): array
+    {
+        $this->loadMissing(['studentProfile', 'academicSessionSemester.academicSession', 'academicSessionSemester.semester']);
+        $session = $this->academicSessionSemester->academicSession;
+
+        return [
+            'registrationNumber' => $this->studentProfile->routeRegistrationNumber(),
+            'sessionYears' => $session->start_year.$session->end_year,
+            'semester' => $this->academicSessionSemester->semester->slug,
+        ];
     }
 
     /**

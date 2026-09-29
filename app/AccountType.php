@@ -4,16 +4,14 @@ namespace App;
 
 enum AccountType: string
 {
-    case SchoolAdmin = 'school_admin';
+    case Adviser = 'adviser';
     case Student = 'student';
-    case Staff = 'staff';
 
     public function label(): string
     {
         return match ($this) {
-            self::SchoolAdmin => 'School Admin',
+            self::Adviser => 'Course Adviser',
             self::Student => 'Student',
-            self::Staff => 'Staff',
         };
     }
 }

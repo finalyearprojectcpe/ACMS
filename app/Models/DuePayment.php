@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasPublicId;
 use Database\Factories\DuePaymentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -11,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[Fillable([
     'student_due_assignment_id',
     'student_profile_id',
-    'school_id',
+    'advisor_profile_id',
     'payment_account_id',
     'provider',
     'reference',
@@ -42,6 +43,8 @@ class DuePayment extends Model
 {
     /** @use HasFactory<DuePaymentFactory> */
     use HasFactory;
+
+    use HasPublicId;
 
     /** @var list<string> */
     protected $hidden = ['access_code', 'authorization_url', 'provider_payload'];
@@ -90,11 +93,11 @@ class DuePayment extends Model
     }
 
     /**
-     * @return BelongsTo<School, $this>
+     * @return BelongsTo<AdvisorProfile, $this>
      */
-    public function school(): BelongsTo
+    public function advisorProfile(): BelongsTo
     {
-        return $this->belongsTo(School::class);
+        return $this->belongsTo(AdvisorProfile::class);
     }
 
     /**

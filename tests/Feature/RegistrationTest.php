@@ -1,338 +1,260 @@
 <?php
 
-use App\AccountStatus;
 use App\AccountType;
-use App\Models\Department;
-use App\Models\Faculty;
-use App\Models\School;
-use App\Models\StaffProfile;
+use App\Honorific;
+use App\Models\AcademicSession;
+use App\Models\AdvisorProfile;
+use App\Models\EmailDelivery;
+use App\Models\StudentJoinRequest;
 use App\Models\StudentProfile;
+use App\Models\StudentSet;
 use App\Models\User;
-use Illuminate\Database\QueryException;
+use App\Services\StudentJoinService;
 use Illuminate\Support\Facades\Hash;
+use Inertia\Testing\AssertableInertia as Assert;
 
-function provisionRegistrationDepartment(string $abbreviation = 'FUTO'): Department
-{
-    config(['app.default_school_abbreviation' => $abbreviation]);
-
-    $school = School::factory()->create([
-        'abbreviation' => $abbreviation,
-    ]);
-    $faculty = Faculty::factory()->create([
-        'school_id' => $school->id,
-    ]);
-
-    return Department::factory()->create([
-        'faculty_id' => $faculty->id,
-    ]);
-}
-
-function provisionPendingStaff(Department $department, string $email = 'staff@example.com', string $accessCode = 'STAFF-CODE'): User
-{
-    $user = User::factory()
-        ->staff()
-        ->pendingActivation($accessCode)
-        ->create([
-            'school_id' => $department->faculty->school_id,
-            'name' => 'Staff User',
-            'email' => $email,
-        ]);
-
-    StaffProfile::factory()->create([
-        'user_id' => $user->id,
-        'department_id' => $department->id,
+test('course advisers create an empty workspace', function () {
+    $response = $this->post(route('signup.advisor.store'), [
+        'title' => Honorific::Dr->value,
+        'name' => 'Okoro Chinedu',
+        'email' => 'adviser@futo.edu',
+        'password' => 'new-password',
+        'password_confirmation' => 'new-password',
     ]);
 
-    return $user;
-}
+    $response->assertRedirect(route('dashboard'));
 
-function provisionPendingStudent(Department $department, string $registrationNumber = '2021001234', string $accessCode = 'STUDENT-CODE'): User
-{
-    $user = User::factory()
-        ->student()
-        ->pendingActivation($accessCode)
-        ->create([
-            'school_id' => $department->faculty->school_id,
-            'name' => 'Student User',
-            'email' => null,
-        ]);
+    $user = User::query()->where('email', 'adviser@futo.edu')->firstOrFail();
 
+    $this->assertAuthenticatedAs($user);
+    expect($user->account_type)->toBe(AccountType::Adviser)
+        ->and($user->title)->toBe(Honorific::Dr)
+        ->and($user->displayName())->toBe('Dr Okoro Chinedu')
+        ->and(AcademicSession::query()->count())->toBe(0)
+        ->and($user->advisorProfile->studentSets()->count())->toBe(0);
+});
+
+test('a student requests access through the set link and an adviser approves it', function () {
+    $set = StudentSet::factory()->create();
+
+    $this->get(route('student-invitations.show', ['studentSet' => $set->invite_token]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('student-invitation')
+            ->where('invitation.available', true)
+            ->where('invitation.studentSet', $set->label())
+            ->where('invitation.courseAdviser', $set->advisorProfile->user->displayName()));
+
+    $response = $this->post(
+        route('student-invitations.store', ['studentSet' => $set->invite_token]),
+        [
+            'surname' => 'Nwosu',
+            'other_names' => 'Adaeze Chioma',
+            'registration_number' => 'CPE/24~007',
+            'email' => 'adaeze@futo.edu',
+            'password' => 'new-password',
+            'password_confirmation' => 'new-password',
+        ],
+    );
+
+    $response->assertRedirect(route('student-joins.status'));
+
+    $user = User::query()->where('email', 'adaeze@futo.edu')->firstOrFail();
+    $join = $user->studentJoinRequest;
+
+    $this->assertAuthenticatedAs($user);
+    expect($user->name)->toBe('Nwosu Adaeze Chioma')
+        ->and(Hash::check('new-password', $user->password))->toBeTrue()
+        ->and($user->studentProfile)->toBeNull()
+        ->and($join->status)->toBe(StudentJoinRequest::StatusPending);
+
+    $this->get(route('dashboard'))->assertRedirect(route('student-joins.status'));
+    $this->actingAs($set->advisorProfile->user)
+        ->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('dashboard.adviserHome.requestCount', 1)
+            ->where('dashboard.adviserHome.recentRequests.0.emailVerified', false));
+    $this->patch(route('student-joins.adviser.approve', ['studentJoinRequest' => $join]))
+        ->assertSessionHasErrors('request');
+
+    $this->actingAs($user);
+    $verification = EmailDelivery::query()->where('purpose_key', 'like', 'join-verification-%')->firstOrFail();
+    $this->get($verification->metadata['url'])->assertRedirect(route('student-joins.status'));
+
+    $this->actingAs($set->advisorProfile->user)
+        ->patch(route('student-joins.adviser.approve', ['studentJoinRequest' => $join]))
+        ->assertRedirect(route('dashboard.students.show', ['registrationNumber' => 'CPE~24~~007']));
+
+    $student = $user->fresh()->studentProfile;
+    expect($student)->toBeInstanceOf(StudentProfile::class)
+        ->and($student->advisor_profile_id)->toBe($set->advisor_profile_id)
+        ->and($student->student_set_id)->toBe($set->id)
+        ->and($student->registration_number)->toBe('CPE/24~007');
+
+    $this->get(route('dashboard.students.show', ['registrationNumber' => $student->routeRegistrationNumber()]))
+        ->assertOk();
+    $this->get(route('dashboard.students.statement.preview', ['registrationNumber' => $student->routeRegistrationNumber()]))
+        ->assertOk();
+
+    $this->actingAs($user->fresh())->get(route('dashboard'))->assertOk();
+});
+
+test('closed signup links do not create student accounts', function () {
+    $set = StudentSet::factory()->create(['student_signup_enabled' => false]);
+
+    $this->get(route('student-invitations.show', ['studentSet' => $set->invite_token]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('invitation.available', false));
+
+    $this->post(
+        route('student-invitations.store', ['studentSet' => $set->invite_token]),
+        [
+            'surname' => 'Obi',
+            'other_names' => 'Ikenna',
+            'registration_number' => '2024005678',
+            'email' => 'ikenna@futo.edu',
+            'password' => 'new-password',
+            'password_confirmation' => 'new-password',
+        ],
+    )->assertSessionHasErrors('invitation');
+
+    expect(User::query()->where('email', 'ikenna@futo.edu')->exists())->toBeFalse();
+    $this->assertGuest();
+});
+
+test('a claimed registration number is checked by the adviser at approval, not at signup', function () {
+    $set = StudentSet::factory()->create();
+    $existingUser = User::factory()->student()->create();
     StudentProfile::factory()->create([
-        'school_id' => $department->faculty->school_id,
+        'user_id' => $existingUser->id,
+        'advisor_profile_id' => $set->advisor_profile_id,
+        'student_set_id' => $set->id,
+        'registration_number' => '2024001234',
+    ]);
+
+    $this->post(
+        route('student-invitations.store', ['studentSet' => $set->invite_token]),
+        [
+            'surname' => 'Eze',
+            'other_names' => 'Chiamaka',
+            'registration_number' => '2024001234',
+            'email' => 'chiamaka@futo.edu',
+            'password' => 'new-password',
+            'password_confirmation' => 'new-password',
+        ],
+    )->assertRedirect(route('student-joins.status'));
+
+    $applicant = User::query()->where('email', 'chiamaka@futo.edu')->firstOrFail();
+    $join = $applicant->studentJoinRequest;
+    $verification = EmailDelivery::query()->where('purpose_key', 'like', 'join-verification-%')->firstOrFail();
+    $this->get($verification->metadata['url'])->assertRedirect(route('student-joins.status'));
+
+    $this->actingAs($set->advisorProfile->user)
+        ->get(route('student-joins.adviser.show', ['studentJoinRequest' => $join]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('dashboard.adviserJoinRequest.conflict', true)
+            ->where('dashboard.adviserJoinRequest.canApprove', false));
+    $this->patch(route('student-joins.adviser.approve', ['studentJoinRequest' => $join]))
+        ->assertSessionHasErrors('request');
+
+    expect($applicant->fresh()->studentProfile)->toBeNull();
+});
+
+test('only the owning adviser can review a student request', function () {
+    $set = StudentSet::factory()->create();
+    $join = StudentJoinRequest::factory()->create(['student_set_id' => $set->id]);
+    $other = AdvisorProfile::factory()->create();
+
+    $this->actingAs($other->user)
+        ->get(route('student-joins.adviser.show', ['studentJoinRequest' => $join]))->assertNotFound();
+    $this->patch(route('student-joins.adviser.approve', ['studentJoinRequest' => $join]))->assertNotFound();
+
+    $join->refresh();
+    expect($join->status)->toBe(StudentJoinRequest::StatusPending)
+        ->and($join->user->studentProfile)->toBeNull();
+});
+
+test('a returned request can be corrected without reserving a student registration number', function () {
+    $set = StudentSet::factory()->create();
+    $user = User::factory()->student()->create(['email_verified_at' => now()]);
+    $join = StudentJoinRequest::factory()->create([
         'user_id' => $user->id,
-        'department_id' => $department->id,
-        'registration_number' => $registrationNumber,
+        'student_set_id' => $set->id,
+        'registration_number' => '2024001234',
     ]);
 
-    return $user;
-}
+    $this->actingAs($set->advisorProfile->user)
+        ->patch(route('student-joins.adviser.reject', ['studentJoinRequest' => $join]), [
+            'reason' => 'The registration number does not match the class list.',
+        ])->assertRedirect(route('student-joins.adviser.index'));
 
-test('students verify access before activating with an email and password', function () {
-    $department = provisionRegistrationDepartment();
-    $user = provisionPendingStudent($department);
+    expect($user->fresh()->studentProfile)->toBeNull()
+        ->and($join->fresh()->status)->toBe(StudentJoinRequest::StatusRejected);
 
-    $this->post(route('signup.student.verify'), [
-        'registration_number' => '2021001234',
-        'access_code' => 'STUDENT-CODE',
-    ])->assertRedirect(route('signup.student'));
+    $this->actingAs($user)->patch(route('student-joins.update'), [
+        'surname' => 'Nwosu',
+        'other_names' => 'Adaeze',
+        'email' => $user->email,
+        'registration_number' => '2024005678',
+    ])->assertRedirect(route('student-joins.status'));
 
-    $this->get(route('signup.student'))
-        ->assertInertia(fn ($page) => $page
-            ->where('activation.step', 'complete')
-            ->where('activation.identifier', '2021001234')
-            ->etc());
+    $join->refresh();
+    expect($join->status)->toBe(StudentJoinRequest::StatusPending)
+        ->and($join->registration_number)->toBe('2024005678')
+        ->and($join->review_note)->toBeNull();
+});
 
-    $response = $this->post(route('signup.student.store'), [
-        'email' => 'student@example.com',
+test('an unverified applicant can correct an email address without joining the set', function () {
+    $set = StudentSet::factory()->create();
+    $user = User::factory()->student()->create([
+        'email' => 'mistyped@futo.edu',
+        'email_verified_at' => null,
+    ]);
+    $join = StudentJoinRequest::factory()->create([
+        'user_id' => $user->id,
+        'student_set_id' => $set->id,
+    ]);
+    app(StudentJoinService::class)->sendVerification($join);
+    $oldLink = EmailDelivery::query()->where('recipient_email', 'mistyped@futo.edu')->firstOrFail()->metadata['url'];
+
+    $this->actingAs($user)->patch(route('student-joins.update'), [
+        'surname' => 'Nwosu',
+        'other_names' => 'Adaeze',
+        'email' => 'correct@futo.edu',
+        'registration_number' => '2024005678',
+    ])->assertRedirect(route('student-joins.status'));
+
+    expect($user->fresh()->email)->toBe('correct@futo.edu')
+        ->and($user->studentProfile)->toBeNull()
+        ->and($join->fresh()->status)->toBe(StudentJoinRequest::StatusPending)
+        ->and(EmailDelivery::query()->where('recipient_email', 'correct@futo.edu')->exists())->toBeTrue();
+
+    $this->get($oldLink)->assertForbidden();
+    $newLink = EmailDelivery::query()->where('recipient_email', 'correct@futo.edu')->firstOrFail()->metadata['url'];
+    $this->get($newLink)->assertRedirect(route('student-joins.status'));
+    expect($user->fresh()->email_verified_at)->not->toBeNull();
+});
+
+test('legacy signup redirects to course adviser signup', function () {
+    $this->get(route('signup'))->assertRedirect(route('signup.advisor'));
+});
+
+test('adviser signup rejects duplicate emails and unsupported titles', function () {
+    $adviser = AdvisorProfile::factory()->create();
+
+    $this->from(route('signup.advisor'))->post(route('signup.advisor.store'), [
+        'title' => Honorific::Prof->value,
+        'name' => 'Second Adviser',
+        'email' => $adviser->user->email,
         'password' => 'new-password',
         'password_confirmation' => 'new-password',
-    ]);
+    ])->assertSessionHasErrors('email');
 
-    $response->assertRedirect(route('dashboard'));
-
-    $user->refresh();
-
-    $this->assertAuthenticatedAs($user);
-    expect($user->account_type)->toBe(AccountType::Student)
-        ->and($user->email)->toBe('student@example.com')
-        ->and($user->activated_at)->not->toBeNull()
-        ->and($user->access_code)->toBe('STUDENT-CODE')
-        ->and($user->access_code_used_at)->not->toBeNull()
-        ->and(Hash::check('new-password', $user->password))->toBeTrue()
-        ->and($user->studentProfile->registration_number)->toBe('2021001234');
-});
-
-test('staff verify access before activating with a password', function () {
-    $department = provisionRegistrationDepartment();
-    $user = provisionPendingStaff($department);
-
-    $this->post(route('signup.staff.verify'), [
-        'email' => 'staff@example.com',
-        'access_code' => 'STAFF-CODE',
-    ])->assertRedirect(route('signup.staff'));
-
-    $this->get(route('signup.staff'))
-        ->assertInertia(fn ($page) => $page
-            ->where('activation.step', 'complete')
-            ->where('activation.identifier', 'staff@example.com')
-            ->etc());
-
-    $response = $this->post(route('signup.staff.store'), [
+    $this->from(route('signup.advisor'))->post(route('signup.advisor.store'), [
+        'title' => 'Sir',
+        'name' => 'Third Adviser',
+        'email' => 'third@futo.edu',
         'password' => 'new-password',
         'password_confirmation' => 'new-password',
-    ]);
-
-    $response->assertRedirect(route('dashboard'));
-
-    $user->refresh();
-
-    $this->assertAuthenticatedAs($user);
-    expect($user->account_type)->toBe(AccountType::Staff)
-        ->and($user->email)->toBe('staff@example.com')
-        ->and($user->activated_at)->not->toBeNull()
-        ->and($user->access_code)->toBe('STAFF-CODE')
-        ->and($user->access_code_used_at)->not->toBeNull()
-        ->and(Hash::check('new-password', $user->password))->toBeTrue()
-        ->and($user->staffProfile)->not->toBeNull();
-});
-
-test('legacy signup route redirects to the student signup page', function () {
-    $response = $this->get(route('signup'));
-
-    $response->assertRedirect(route('signup.student'));
-});
-
-test('student verification requires a registration number', function () {
-    provisionRegistrationDepartment();
-
-    $response = $this->from(route('signup.student'))->post(route('signup.student.verify'), [
-        'access_code' => 'STUDENT-CODE',
-    ]);
-
-    $response->assertRedirect(route('signup.student'));
-    $response->assertSessionHasErrors('registration_number');
-});
-
-test('student verification rejects unknown registration numbers', function () {
-    provisionRegistrationDepartment();
-
-    $response = $this->from(route('signup.student'))->post(route('signup.student.verify'), [
-        'registration_number' => '2021999999',
-        'access_code' => 'STUDENT-CODE',
-    ]);
-
-    $response->assertRedirect(route('signup.student'));
-    $response->assertSessionHasErrors('registration_number');
-});
-
-test('student verification rejects invalid access codes', function () {
-    $department = provisionRegistrationDepartment();
-    provisionPendingStudent($department);
-
-    $response = $this->from(route('signup.student'))->post(route('signup.student.verify'), [
-        'registration_number' => '2021001234',
-        'access_code' => 'WRONG-CODE',
-    ]);
-
-    $response->assertRedirect(route('signup.student'));
-    $response->assertSessionHasErrors('access_code');
-});
-
-test('student activation requires verified access first', function () {
-    provisionRegistrationDepartment();
-
-    $response = $this->from(route('signup.student'))->post(route('signup.student.store'), [
-        'email' => 'student@example.com',
-        'password' => 'new-password',
-        'password_confirmation' => 'new-password',
-    ]);
-
-    $response->assertRedirect(route('signup.student'));
-    $response->assertSessionHasErrors('password');
-    $this->assertGuest();
-});
-
-test('activation rejects already activated accounts', function () {
-    $department = provisionRegistrationDepartment();
-    $user = provisionPendingStaff($department);
-
-    $user->forceFill([
-        'activated_at' => now(),
-    ])->save();
-
-    $response = $this->from(route('signup.staff'))->post(route('signup.staff.verify'), [
-        'email' => 'staff@example.com',
-        'access_code' => 'STAFF-CODE',
-    ]);
-
-    $response->assertRedirect(route('signup.staff'));
-    $response->assertSessionHasErrors('email');
-});
-
-test('staff verification rejects unknown emails', function () {
-    provisionRegistrationDepartment();
-
-    $response = $this->from(route('signup.staff'))->post(route('signup.staff.verify'), [
-        'email' => 'unknown@example.com',
-        'access_code' => 'STAFF-CODE',
-    ]);
-
-    $response->assertRedirect(route('signup.staff'));
-    $response->assertSessionHasErrors('email');
-});
-
-test('emails and registration numbers can repeat across different schools', function () {
-    $firstDepartment = provisionRegistrationDepartment('FUTO');
-    $secondDepartment = provisionRegistrationDepartment('MIT');
-
-    $firstStaff = provisionPendingStaff($firstDepartment, 'shared@example.com', 'FUTO-CODE');
-    $secondStaff = provisionPendingStaff($secondDepartment, 'shared@example.com', 'MIT-CODE');
-    $firstStudent = provisionPendingStudent($firstDepartment, '2021001234', 'FUTO-STUDENT');
-    $secondStudent = provisionPendingStudent($secondDepartment, '2021001234', 'MIT-STUDENT');
-
-    User::factory()->student()->create([
-        'school_id' => $firstDepartment->faculty->school_id,
-        'email' => 'student-shared@example.com',
-    ]);
-    User::factory()->student()->create([
-        'school_id' => $secondDepartment->faculty->school_id,
-        'email' => 'student-shared@example.com',
-    ]);
-
-    expect($firstStaff->email)->toBe($secondStaff->email)
-        ->and($firstStaff->school_id)->not->toBe($secondStaff->school_id)
-        ->and($firstStudent->studentProfile->registration_number)->toBe($secondStudent->studentProfile->registration_number)
-        ->and($firstStudent->studentProfile->school_id)->not->toBe($secondStudent->studentProfile->school_id);
-});
-
-test('emails and registration numbers remain unique within the same school', function () {
-    $department = provisionRegistrationDepartment();
-    $schoolId = $department->faculty->school_id;
-
-    provisionPendingStaff($department, 'shared@example.com');
-    expect(fn () => User::factory()
-        ->staff()
-        ->pendingActivation()
-        ->create([
-            'school_id' => $schoolId,
-            'email' => 'shared@example.com',
-        ]))->toThrow(QueryException::class);
-
-    provisionPendingStudent($department, '2021001234');
-    $secondUser = User::factory()
-        ->student()
-        ->pendingActivation()
-        ->create([
-            'school_id' => $schoolId,
-            'email' => null,
-        ]);
-
-    expect(fn () => StudentProfile::factory()->create([
-        'school_id' => $schoolId,
-        'user_id' => $secondUser->id,
-        'department_id' => $department->id,
-        'registration_number' => '2021001234',
-    ]))->toThrow(QueryException::class);
-});
-
-test('student activation rejects emails already used in the same school', function () {
-    $department = provisionRegistrationDepartment();
-    provisionPendingStudent($department);
-    User::factory()->student()->create([
-        'school_id' => $department->faculty->school_id,
-        'email' => 'taken@example.com',
-    ]);
-
-    $this->post(route('signup.student.verify'), [
-        'registration_number' => '2021001234',
-        'access_code' => 'STUDENT-CODE',
-    ])->assertRedirect(route('signup.student'));
-
-    $response = $this->from(route('signup.student'))->post(route('signup.student.store'), [
-        'email' => 'taken@example.com',
-        'password' => 'new-password',
-        'password_confirmation' => 'new-password',
-    ]);
-
-    $response->assertRedirect(route('signup.student'));
-    $response->assertSessionHasErrors('email');
-    $this->assertGuest();
-});
-
-test('staff login is scoped to the current school', function () {
-    $firstDepartment = provisionRegistrationDepartment('FUTO');
-    $secondDepartment = provisionRegistrationDepartment('MIT');
-    $firstStaff = provisionPendingStaff($firstDepartment, 'shared@example.com', 'FUTO-CODE');
-    provisionPendingStaff($secondDepartment, 'shared@example.com', 'MIT-CODE');
-    config(['app.default_school_abbreviation' => 'FUTO']);
-
-    $firstStaff->forceFill([
-        'password' => 'futo-password',
-        'access_code' => 'FUTO-CODE',
-        'access_code_used_at' => now(),
-        'activated_at' => now(),
-        'status' => AccountStatus::Active,
-    ])->save();
-
-    $response = $this->post(route('login.store'), [
-        'email' => 'shared@example.com',
-        'password' => 'futo-password',
-    ]);
-
-    $response->assertRedirect(route('dashboard'));
-    $this->assertAuthenticatedAs($firstStaff);
-});
-
-test('unactivated users cannot login before signup activation', function () {
-    $department = provisionRegistrationDepartment();
-    provisionPendingStaff($department, 'pending@example.com', 'PENDING-CODE');
-
-    $response = $this->from(route('home'))->post(route('login.store'), [
-        'email' => 'pending@example.com',
-        'password' => 'password',
-    ]);
-
-    $response->assertRedirect(route('home'));
-    $response->assertSessionHasErrors('email');
-    $this->assertGuest();
+    ])->assertSessionHasErrors('title');
 });

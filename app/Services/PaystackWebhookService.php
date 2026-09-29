@@ -72,7 +72,7 @@ class PaystackWebhookService
 
         $payment = DuePayment::query()->where('reference', $reference)->first();
 
-        if (! $payment instanceof DuePayment) {
+        if (! ($payment instanceof DuePayment)) {
             return;
         }
 

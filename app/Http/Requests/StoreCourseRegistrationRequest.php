@@ -2,9 +2,6 @@
 
 namespace App\Http\Requests;
 
-use App\AccountType;
-use App\Models\CourseRegistrationItem;
-use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -16,11 +13,7 @@ class StoreCourseRegistrationRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        $user = $this->user();
-
-        return $user instanceof User
-            && $user->account_type === AccountType::Student
-            && $user->studentProfile !== null;
+        return $this->user()?->isStudent() === true;
     }
 
     /**
@@ -32,17 +25,10 @@ class StoreCourseRegistrationRequest extends FormRequest
     {
         return [
             'action' => ['required', Rule::in(['save', 'submit'])],
-            'items' => ['required', 'array', 'min:1', 'max:24'],
+            'session' => ['required', 'string', 'regex:/^\d{8}$/'],
+            'semester' => ['required', Rule::in(['first', 'second'])],
+            'items' => [$this->input('action') === 'submit' ? 'required' : 'present', 'array', $this->input('action') === 'submit' ? 'min:1' : 'min:0', 'max:24'],
             'items.*.course_offering_id' => ['required', 'integer', 'distinct', 'exists:course_offerings,id'],
-            'items.*.source' => [
-                'required',
-                Rule::in([
-                    CourseRegistrationItem::SourceCurrentSet,
-                    CourseRegistrationItem::SourceCarryover,
-                    CourseRegistrationItem::SourceOutstandingRequirement,
-                    CourseRegistrationItem::SourceElective,
-                ]),
-            ],
         ];
     }
 

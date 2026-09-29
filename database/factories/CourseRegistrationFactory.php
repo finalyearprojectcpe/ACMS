@@ -3,11 +3,10 @@
 namespace Database\Factories;
 
 use App\Models\AcademicSession;
-use App\Models\AcademicYearSemester;
+use App\Models\AcademicSessionSemester;
 use App\Models\CourseRegistration;
-use App\Models\Department;
-use App\Models\School;
 use App\Models\StudentProfile;
+use App\Models\StudentSet;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -22,20 +21,19 @@ class CourseRegistrationFactory extends Factory
      */
     public function definition(): array
     {
-        $school = School::factory()->create();
-        $department = Department::factory()->create();
+        $set = StudentSet::factory()->create();
+        $studentProfile = StudentProfile::factory()->create([
+            'advisor_profile_id' => $set->advisor_profile_id,
+            'student_set_id' => $set->id,
+        ]);
 
         return [
-            'school_id' => $school->id,
-            'department_id' => $department->id,
-            'student_profile_id' => StudentProfile::factory()->create([
-                'school_id' => $school->id,
-                'department_id' => $department->id,
+            'student_profile_id' => $studentProfile->id,
+            'academic_session_semester_id' => AcademicSessionSemester::factory()->create([
+                'academic_session_id' => AcademicSession::factory()->create([
+                    'student_set_id' => $set->id,
+                ])->id,
             ])->id,
-            'academic_session_id' => AcademicSession::factory()->create([
-                'school_id' => $school->id,
-            ])->id,
-            'academic_year_semester_id' => AcademicYearSemester::factory(),
             'status' => CourseRegistration::StatusDraft,
             'feedback_note' => null,
             'submitted_at' => null,

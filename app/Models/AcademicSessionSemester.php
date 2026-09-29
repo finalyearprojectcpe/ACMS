@@ -2,20 +2,27 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasPublicId;
+use Database\Factories\AcademicSessionSemesterFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'academic_session_id',
     'semester_id',
-    'starts_on',
-    'ends_on',
-    'registration_opens_at',
-    'registration_closes_at',
+    'maximum_course_units',
+    'registration_enabled',
 ])]
 class AcademicSessionSemester extends Model
 {
+    /** @use HasFactory<AcademicSessionSemesterFactory> */
+    use HasFactory;
+
+    use HasPublicId;
+
     /**
      * @return BelongsTo<AcademicSession, $this>
      */
@@ -32,16 +39,24 @@ class AcademicSessionSemester extends Model
         return $this->belongsTo(Semester::class);
     }
 
-    /**
-     * @return array<string, string>
-     */
+    /** @return HasMany<CourseOffering, $this> */
+    public function courseOfferings(): HasMany
+    {
+        return $this->hasMany(CourseOffering::class);
+    }
+
+    /** @return HasMany<CourseRegistration, $this> */
+    public function courseRegistrations(): HasMany
+    {
+        return $this->hasMany(CourseRegistration::class);
+    }
+
+    /** @return array<string, string> */
     protected function casts(): array
     {
         return [
-            'starts_on' => 'date',
-            'ends_on' => 'date',
-            'registration_opens_at' => 'datetime',
-            'registration_closes_at' => 'datetime',
+            'maximum_course_units' => 'integer',
+            'registration_enabled' => 'boolean',
         ];
     }
 }

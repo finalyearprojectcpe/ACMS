@@ -35,7 +35,7 @@ class PaystackService
             throw new RuntimeException('This student needs an email address before payment can start.');
         }
 
-        if (! $paymentAccount instanceof PaymentAccount || ! $paymentAccount->isActive()) {
+        if (! ($paymentAccount instanceof PaymentAccount) || ! $paymentAccount->isActive()) {
             throw new RuntimeException('This due does not have an active payout account.');
         }
 
@@ -49,7 +49,7 @@ class PaystackService
             'subaccount' => $paymentAccount->paystack_subaccount_code,
             'bearer' => $this->splitFeeBearer(),
             'metadata' => [
-                'school_id' => $payment->school_id,
+                'advisor_profile_id' => $payment->advisor_profile_id,
                 'due_id' => $due->id,
                 'payment_account_id' => $paymentAccount->id,
                 'student_due_assignment_id' => $payment->student_due_assignment_id,

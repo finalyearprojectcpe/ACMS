@@ -11,10 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Tracks transactional email attempts and provider delivery outcomes for each school.
+        // Tracks transactional email attempts and provider delivery outcomes for adviser and student accounts.
         Schema::create('email_deliveries', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('school_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('advisor_profile_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
             $table->string('recipient_email');
             $table->string('subject');
@@ -32,7 +32,7 @@ return new class extends Migration
             $table->timestamp('failed_at')->nullable();
             $table->timestamps();
 
-            $table->index(['school_id', 'status']);
+            $table->index(['advisor_profile_id', 'status']);
             $table->index(['user_id', 'status']);
             $table->index(['mailer', 'provider_message_id']);
         });

@@ -14,11 +14,9 @@ class Semester extends Model
     /** @use HasFactory<SemesterFactory> */
     use HasFactory;
 
-    /**
-     * @return HasMany<AcademicYearSemester, $this>
-     */
-    public function academicYearSemesters(): HasMany
+    /** @return HasMany<AcademicSessionSemester, $this> */
+    public function sessionSemesters(): HasMany
     {
-        return $this->hasMany(AcademicYearSemester::class);
+        return $this->hasMany(AcademicSessionSemester::class);
     }
 }

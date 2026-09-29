@@ -10,18 +10,33 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['school_id', 'user_id', 'department_id', 'current_academic_year_id', 'entry_academic_session_id', 'registration_number', 'status'])]
+#[Fillable(['user_id', 'advisor_profile_id', 'student_set_id', 'registration_number', 'status'])]
 class StudentProfile extends Model
 {
     /** @use HasFactory<StudentProfileFactory> */
     use HasFactory;
 
-    /**
-     * @return BelongsTo<School, $this>
-     */
-    public function school(): BelongsTo
+    public static function registrationNumberForRoute(string $registrationNumber): string
     {
-        return $this->belongsTo(School::class);
+        return str_replace('/', '~', str_replace('~', '~~', $registrationNumber));
+    }
+
+    public static function registrationNumberFromRoute(string $segment): string
+    {
+        return preg_replace_callback('/~~|~/', fn (array $match): string => $match[0] === '~~' ? '~' : '/', $segment);
+    }
+
+    public function routeRegistrationNumber(): string
+    {
+        return self::registrationNumberForRoute($this->registration_number);
+    }
+
+    /**
+     * @return BelongsTo<AdvisorProfile, $this>
+     */
+    public function advisorProfile(): BelongsTo
+    {
+        return $this->belongsTo(AdvisorProfile::class);
     }
 
     /**
@@ -33,43 +48,11 @@ class StudentProfile extends Model
     }
 
     /**
-     * @return BelongsTo<Department, $this>
+     * @return BelongsTo<StudentSet, $this>
      */
-    public function department(): BelongsTo
+    public function studentSet(): BelongsTo
     {
-        return $this->belongsTo(Department::class);
-    }
-
-    /**
-     * @return BelongsTo<AcademicYear, $this>
-     */
-    public function currentAcademicYear(): BelongsTo
-    {
-        return $this->belongsTo(AcademicYear::class, 'current_academic_year_id');
-    }
-
-    /**
-     * @return BelongsTo<AcademicYear, $this>
-     */
-    public function currentLevel(): BelongsTo
-    {
-        return $this->currentAcademicYear();
-    }
-
-    /**
-     * @return BelongsTo<AcademicSession, $this>
-     */
-    public function entryAcademicSession(): BelongsTo
-    {
-        return $this->belongsTo(AcademicSession::class, 'entry_academic_session_id');
-    }
-
-    /**
-     * @return HasMany<StudentSemesterResult, $this>
-     */
-    public function semesterResults(): HasMany
-    {
-        return $this->hasMany(StudentSemesterResult::class);
+        return $this->belongsTo(StudentSet::class);
     }
 
     /**
@@ -94,6 +77,11 @@ class StudentProfile extends Model
     public function courseRegistrations(): HasMany
     {
         return $this->hasMany(CourseRegistration::class);
+    }
+
+    public function assistantConversations(): HasMany
+    {
+        return $this->hasMany(AssistantConversation::class);
     }
 
     /**

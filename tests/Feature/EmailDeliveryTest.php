@@ -1,74 +1,12 @@
 <?php
 
 use App\EmailDeliveryStatus;
-use App\Jobs\SendEmailDelivery;
-use App\Mail\AccessCodeMail;
 use App\Models\EmailDelivery;
-use App\Models\School;
-use App\Models\User;
 use App\Services\EmailDeliveryService;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Queue;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
-
-test('access code email delivery is queued with a stable idempotency key', function () {
-    Queue::fake();
-    $school = School::factory()->create();
-    $user = User::factory()->create(['school_id' => $school->id]);
-    $delivery = EmailDelivery::factory()->create([
-        'school_id' => $school->id,
-        'user_id' => $user->id,
-        'status' => EmailDeliveryStatus::Failed->value,
-    ]);
-    $idempotencyKey = $delivery->idempotency_key;
-
-    app(EmailDeliveryService::class)->sendAccessCode($delivery, 'CPE-STAFF-123456');
-
-    expect($delivery->refresh()->status)->toBe(EmailDeliveryStatus::Queued->value)
-        ->and($delivery->mailer)->toBe('resend')
-        ->and($delivery->idempotency_key)->toBe($idempotencyKey)
-        ->and($delivery->metadata['template'])->toBe('access_code')
-        ->and($delivery->metadata['access_code'])->toBe('CPE-STAFF-123456');
-
-    Queue::assertPushed(
-        SendEmailDelivery::class,
-        fn (SendEmailDelivery $job): bool => $job->emailDeliveryId === $delivery->id,
-    );
-});
-
-test('configured email delivery sends a Laravel mailable', function () {
-    Mail::fake();
-    Config::set('services.resend.key', 're_test_key');
-    $school = School::factory()->create();
-    $user = User::factory()->create(['school_id' => $school->id]);
-    $delivery = EmailDelivery::factory()->create([
-        'school_id' => $school->id,
-        'user_id' => $user->id,
-        'recipient_email' => 'lecturer@example.test',
-        'subject' => 'GradeManager staff access code',
-        'metadata' => [
-            'template' => 'access_code',
-            'access_code' => 'CPE-STAFF-123456',
-            'login_url' => 'https://futo.example.test',
-        ],
-    ]);
-
-    app(EmailDeliveryService::class)->deliver($delivery);
-
-    expect($delivery->refresh()->status)->toBe(EmailDeliveryStatus::Sent->value)
-        ->and($delivery->attempts)->toBe(1)
-        ->and($delivery->sent_at)->not->toBeNull();
-
-    Mail::assertSent(AccessCodeMail::class, function (AccessCodeMail $mail): bool {
-        return $mail->hasTo('lecturer@example.test')
-            && $mail->hasSubject('GradeManager staff access code')
-            && $mail->hasMetadata('delivery_id', $mail->delivery->id)
-            && $mail->headers()->text['Resend-Idempotency-Key'] === $mail->delivery->idempotency_key
-            && str_contains($mail->render(), 'CPE-STAFF-123456');
-    });
-});
 
 test('an explicit resend starts a new idempotent send cycle', function () {
     Queue::fake();
@@ -82,7 +20,7 @@ test('an explicit resend starts a new idempotent send cycle', function () {
 
     app(EmailDeliveryService::class)->sendDuePaymentReceipt(
         $delivery,
-        dueName: 'Departmental Dues 300L',
+        dueName: 'Programme Dues 300L',
         amount: 'NGN 15,000.00',
         receiptNumber: 'GM-20260806-000001',
         downloadUrl: 'https://futo.example.test/receipt',

@@ -4,7 +4,7 @@ namespace Database\Factories;
 
 use App\AccountStatus;
 use App\AccountType;
-use App\Models\School;
+use App\Honorific;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
@@ -20,19 +20,6 @@ class UserFactory extends Factory
      */
     protected static ?string $password;
 
-    public function configure(): static
-    {
-        return $this->afterCreating(function (User $user): void {
-            if ($user->account_type !== AccountType::SchoolAdmin) {
-                return;
-            }
-
-            $user->school()
-                ->whereNull('administrator_user_id')
-                ->update(['administrator_user_id' => $user->id]);
-        });
-    }
-
     /**
      * Define the model's default state.
      *
@@ -42,14 +29,11 @@ class UserFactory extends Factory
     {
         return [
             'account_type' => AccountType::Student,
-            'school_id' => School::factory(),
+            'title' => null,
             'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
-            'access_code' => null,
-            'access_code_used_at' => null,
-            'activated_at' => now(),
             'disabled_at' => null,
             'status' => AccountStatus::Active,
             'remember_token' => Str::random(10),
@@ -77,33 +61,13 @@ class UserFactory extends Factory
     }
 
     /**
-     * Indicate that the user manages school-level setup.
+     * Indicate that the user is a course adviser.
      */
-    public function schoolAdmin(): static
+    public function adviser(): static
     {
         return $this->state(fn (array $attributes) => [
-            'account_type' => AccountType::SchoolAdmin,
-        ]);
-    }
-
-    /**
-     * Indicate that the user is a staff member.
-     */
-    public function staff(): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'account_type' => AccountType::Staff,
-        ]);
-    }
-
-    public function pendingActivation(string $accessCode = 'ACCESS123'): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'access_code' => $accessCode,
-            'access_code_used_at' => null,
-            'activated_at' => null,
-            'status' => AccountStatus::Pending,
-            'password' => Hash::make(Str::random(32)),
+            'account_type' => AccountType::Adviser,
+            'title' => Honorific::Dr,
         ]);
     }
 }

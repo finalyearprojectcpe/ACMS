@@ -1,7 +1,7 @@
 <x-mail::message>
 # Reset your GradeManager password
 
-You requested a password reset for your {{ $schoolName }} GradeManager account.
+You requested a password reset for your GradeManager account.
 
 <x-mail::button :url="$resetUrl">
 Reset password

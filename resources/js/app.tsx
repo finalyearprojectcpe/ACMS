@@ -10,7 +10,7 @@ createInertiaApp({
     withApp: (app) => (
         <TooltipProvider>
             {app}
-            <Toaster closeButton richColors />
+            <Toaster closeButton />
         </TooltipProvider>
     ),
     progress: {

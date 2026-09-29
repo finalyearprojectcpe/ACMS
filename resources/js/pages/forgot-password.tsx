@@ -17,11 +17,9 @@ import {
     FieldLabel,
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { schoolEmailPlaceholder, useCurrentSchool } from '@/lib/school';
 import { home } from '@/routes';
 
 export default function ForgotPasswordPage() {
-    const school = useCurrentSchool();
     const form = useForm({ email: '' });
 
     function submit(event: FormEvent<HTMLFormElement>) {
@@ -53,9 +51,7 @@ export default function ForgotPasswordPage() {
                                         name="email"
                                         type="email"
                                         value={form.data.email}
-                                        placeholder={schoolEmailPlaceholder(
-                                            school,
-                                        )}
+                                        placeholder="name@example.com"
                                         autoComplete="email"
                                         aria-invalid={Boolean(
                                             form.errors.email,

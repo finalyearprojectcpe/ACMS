@@ -3,7 +3,6 @@
 namespace App\Http\Requests\Auth;
 
 use App\AccountStatus;
-use App\Models\School;
 use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -40,12 +39,6 @@ class LoginRequest extends FormRequest
     public function authenticate(): void
     {
         $credentials = $this->only('email', 'password');
-        $school = $this->attributes->get('school');
-
-        if ($school instanceof School) {
-            $credentials['school_id'] = $school->id;
-        }
-
         if (Auth::attempt($credentials)) {
             $this->ensureUserCanLogin();
 
@@ -57,16 +50,14 @@ class LoginRequest extends FormRequest
 
     private function ensureUserCanLogin(): void
     {
-        $school = $this->attributes->get('school');
         $user = $this->user();
 
-        if (! $user instanceof User) {
+        if (! ($user instanceof User)) {
             return;
         }
 
         if (
-            $user->activated_at === null
-            || $user->disabled_at !== null
+            $user->disabled_at !== null
             || $user->status !== AccountStatus::Active
         ) {
             Auth::guard('web')->logout();
@@ -74,17 +65,6 @@ class LoginRequest extends FormRequest
             $this->throwFailedAuthenticationException();
         }
 
-        if (! $school instanceof School) {
-            return;
-        }
-
-        if ((int) $user->school_id === (int) $school->id) {
-            return;
-        }
-
-        Auth::guard('web')->logout();
-
-        $this->throwFailedAuthenticationException();
     }
 
     private function throwFailedAuthenticationException(): never

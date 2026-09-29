@@ -51,8 +51,8 @@
             <tr>
                 <td style="width: 48px"><img class="logo" src="{{ $data['logo'] }}" alt=""></td>
                 <td class="school">
-                    <p class="school-name">{{ $payment->school->name }}</p>
-                    <p class="department">{{ $due->department->name }}</p>
+                    <p class="school-name">{{ $payment->advisorProfile->user->displayName() }}</p>
+                    <p class="department">Course Adviser</p>
                 </td>
                 <td class="document">
                     <p class="document-title">Payment Receipt</p>

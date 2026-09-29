@@ -13,13 +13,16 @@ use LaravelDaily\Invoices\Invoice;
 
 class ReceiptPdfService
 {
-    public function __construct(private readonly ReceiptUrlService $receiptUrls) {}
+    public function __construct(
+        private readonly ReceiptUrlService $receiptUrls,
+        private readonly CurrencyFormatter $currency,
+    ) {}
 
     public function generate(DuePayment $payment): string
     {
         $payment->loadMissing([
-            'assignment.due.department',
-            'school',
+            'assignment.due',
+            'advisorProfile.user',
             'studentProfile.user',
         ]);
 
@@ -35,7 +38,10 @@ class ReceiptPdfService
             margin: 8,
         ))->build()->getDataUri();
         $seller = new Party([
-            'name' => $payment->school->name,
+            'name' => $payment->advisorProfile->user->displayName(),
+            'custom_fields' => [
+                'Role' => 'Course Adviser',
+            ],
         ]);
         $buyer = new Party([
             'name' => $student->user->name,
@@ -52,13 +58,13 @@ class ReceiptPdfService
             ->date($payment->paid_at ?? now())
             ->dateFormat('F j, Y')
             ->currencyCode($payment->currency)
-            ->currencySymbol('NGN')
+            ->currencySymbol('₦')
             ->currencyFormat('{SYMBOL} {VALUE}')
             ->currencyThousandsSeparator(',')
             ->filename('receipt-'.$payment->receipt_number)
             ->setCustomData([
                 'payment' => $payment,
-                'amount' => sprintf('NGN %s', number_format($payment->amount_kobo / 100, 2)),
+                'amount' => $this->currency->nairaFromKobo((int) $payment->amount_kobo),
                 'logo' => 'data:image/png;base64,'.base64_encode((string) file_get_contents(public_path('logo.png'))),
                 'qrCode' => $qrCode,
                 'verificationUrl' => $verificationUrl,

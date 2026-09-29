@@ -14,7 +14,7 @@ type ReceiptVerification =
           status: 'valid' | 'reversed';
           receiptNumber: string;
           transactionId: string;
-          school: string;
+          courseAdviser: string;
           due: string;
           amount: string;
           paidAt: string | null;
@@ -89,8 +89,8 @@ export default function ReceiptVerificationPage({
                         {!isInvalid ? (
                             <dl className="grid gap-4 text-sm sm:grid-cols-2">
                                 <ReceiptDetail
-                                    label="School"
-                                    value={receipt.school}
+                                    label="Course Adviser"
+                                    value={receipt.courseAdviser}
                                 />
                                 <ReceiptDetail
                                     label="Amount Paid"

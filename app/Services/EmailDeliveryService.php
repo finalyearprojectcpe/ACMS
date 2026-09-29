@@ -4,12 +4,10 @@ namespace App\Services;
 
 use App\EmailDeliveryStatus;
 use App\Jobs\SendEmailDelivery;
-use App\Mail\AccessCodeMail;
 use App\Mail\DuePaymentReceiptMail;
-use App\Mail\FacultyHeadTransferInvitationMail;
 use App\Mail\GradeManagerMail;
 use App\Mail\PasswordResetMail;
-use App\Mail\SchoolAdminTransferInvitationMail;
+use App\Mail\StudentJoinMail;
 use App\Models\EmailDelivery;
 use Illuminate\Mail\SentMessage;
 use Illuminate\Support\Facades\Mail;
@@ -19,31 +17,10 @@ use Throwable;
 
 class EmailDeliveryService
 {
-    public function sendAccessCode(EmailDelivery $delivery, string $accessCode): EmailDelivery
+    /** @param array<string, string> $metadata */
+    public function sendStudentJoin(EmailDelivery $delivery, array $metadata): EmailDelivery
     {
-        return $this->queue($delivery, [
-            'template' => 'access_code',
-            'access_code' => $accessCode,
-            'login_url' => route('home'),
-        ]);
-    }
-
-    public function sendOwnershipTransferInvitation(EmailDelivery $delivery, string $accessCode, string $inviteUrl): EmailDelivery
-    {
-        return $this->queue($delivery, [
-            'template' => 'ownership_transfer',
-            'access_code' => $accessCode,
-            'invite_url' => $inviteUrl,
-        ]);
-    }
-
-    public function sendFacultyHeadTransferInvitation(EmailDelivery $delivery, string $accessCode, string $inviteUrl): EmailDelivery
-    {
-        return $this->queue($delivery, [
-            'template' => 'faculty_head_transfer',
-            'access_code' => $accessCode,
-            'invite_url' => $inviteUrl,
-        ]);
+        return $this->queue($delivery, $metadata);
     }
 
     public function sendPasswordResetInvitation(EmailDelivery $delivery, string $resetUrl): EmailDelivery
@@ -81,7 +58,7 @@ class EmailDeliveryService
 
     public function deliver(EmailDelivery $delivery): EmailDelivery
     {
-        $delivery->refresh()->loadMissing('school');
+        $delivery->refresh();
 
         if (in_array($delivery->status, [
             EmailDeliveryStatus::Sent->value,
@@ -182,11 +159,9 @@ class EmailDeliveryService
     private function mailableFor(EmailDelivery $delivery): GradeManagerMail
     {
         return match (data_get($delivery->metadata, 'template')) {
-            'access_code' => new AccessCodeMail($delivery),
-            'ownership_transfer' => new SchoolAdminTransferInvitationMail($delivery),
-            'faculty_head_transfer' => new FacultyHeadTransferInvitationMail($delivery),
             'password_reset' => new PasswordResetMail($delivery),
             'due_payment_receipt' => new DuePaymentReceiptMail($delivery),
+            'student_join' => new StudentJoinMail($delivery),
             default => throw new RuntimeException('The email type is not supported.'),
         };
     }

@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Stores canonical academic years of study such as 100 Level through 700 Level.
+        // Stores canonical academic years of study from 100 Level through 900 Level.
         Schema::create('academic_years', function (Blueprint $table) {
             $table->id();
             $table->string('name')->unique();

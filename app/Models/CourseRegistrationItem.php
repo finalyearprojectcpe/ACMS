@@ -8,17 +8,9 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['course_registration_id', 'course_offering_id', 'source', 'category', 'course_code', 'course_title', 'credit_units'])]
+#[Fillable(['course_registration_id', 'course_offering_id', 'is_elective', 'course_code', 'course_title', 'credit_units', 'grade', 'missing_script', 'graded_at'])]
 class CourseRegistrationItem extends Model
 {
-    public const string SourceCurrentSet = 'current_set';
-
-    public const string SourceCarryover = 'carryover';
-
-    public const string SourceOutstandingRequirement = 'outstanding_requirement';
-
-    public const string SourceElective = 'elective';
-
     /** @use HasFactory<CourseRegistrationItemFactory> */
     use HasFactory;
 
@@ -36,5 +28,15 @@ class CourseRegistrationItem extends Model
     public function courseOffering(): BelongsTo
     {
         return $this->belongsTo(CourseOffering::class);
+    }
+
+    /** @return array<string, string> */
+    protected function casts(): array
+    {
+        return [
+            'is_elective' => 'boolean',
+            'missing_script' => 'boolean',
+            'graded_at' => 'datetime',
+        ];
     }
 }

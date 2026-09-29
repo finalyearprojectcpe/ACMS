@@ -17,8 +17,6 @@ return [
 
     'profile_photo_disk' => env('PROFILE_PHOTO_DISK', 'public'),
 
-    'result_import_disk' => env('RESULT_IMPORT_DISK', 'local'),
-
     'due_receipt_disk' => env('DUE_RECEIPT_DISK', 'local'),
 
     /*

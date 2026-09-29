@@ -19,8 +19,7 @@ class DueAssignmentService
         }
 
         StudentProfile::query()
-            ->where('department_id', $due->department_id)
-            ->where('entry_academic_session_id', $due->entry_academic_session_id)
+            ->where('student_set_id', $due->student_set_id)
             ->where('status', StudentStatus::Active->value)
             ->pluck('id')
             ->each(fn (int $studentProfileId) => $this->createAssignment($due, $studentProfileId));
@@ -33,8 +32,7 @@ class DueAssignmentService
         }
 
         Due::query()
-            ->where('department_id', $studentProfile->department_id)
-            ->where('entry_academic_session_id', $studentProfile->entry_academic_session_id)
+            ->where('student_set_id', $studentProfile->student_set_id)
             ->where('status', Due::StatusPublished)
             ->get()
             ->each(fn (Due $due) => $this->createAssignment($due, (int) $studentProfile->id));

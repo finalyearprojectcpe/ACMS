@@ -16,7 +16,7 @@ class DuePaymentReceiptMail extends GradeManagerMail
                 'amount' => (string) data_get($this->delivery->metadata, 'amount'),
                 'receiptNumber' => (string) data_get($this->delivery->metadata, 'receipt_number'),
                 'downloadUrl' => (string) data_get($this->delivery->metadata, 'download_url'),
-                'schoolName' => $this->delivery->school?->name ?? 'your school',
+                'courseAdviserName' => $this->delivery->advisorProfile?->user?->displayName() ?? 'Your course adviser',
             ],
         );
     }
