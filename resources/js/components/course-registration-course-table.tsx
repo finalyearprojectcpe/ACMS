@@ -16,6 +16,7 @@ export function CourseRegistrationCourseTable({
     courses,
     emptyLabel = 'No courses in this registration.',
     onToggleCourse,
+    selectionIssue,
     selectedKeys = new Set<string>(),
     selectable = false,
     totalUnits,
@@ -23,6 +24,10 @@ export function CourseRegistrationCourseTable({
     courses: DashboardCourseRegistrationCourse[];
     emptyLabel?: string;
     onToggleCourse?: (course: DashboardCourseRegistrationCourse) => void;
+    selectionIssue?: (
+        course: DashboardCourseRegistrationCourse,
+        selected: boolean,
+    ) => string | null;
     selectedKeys?: Set<string>;
     selectable?: boolean;
     totalUnits?: number;
@@ -78,6 +83,10 @@ export function CourseRegistrationCourseTable({
                                     selectable={selectable}
                                     alternate={index % 2 === 1}
                                     onToggleCourse={onToggleCourse}
+                                    issue={selectionIssue?.(
+                                        course,
+                                        selectedKeys.has(courseKey(course)),
+                                    )}
                                 />
                             ))}
                             {electiveCourses.length > 0 ? (
@@ -97,6 +106,10 @@ export function CourseRegistrationCourseTable({
                                     selectable={selectable}
                                     elective
                                     onToggleCourse={onToggleCourse}
+                                    issue={selectionIssue?.(
+                                        course,
+                                        selectedKeys.has(courseKey(course)),
+                                    )}
                                 />
                             ))}
                         </>
@@ -162,6 +175,7 @@ function CourseRow({
     alternate = false,
     course,
     elective = false,
+    issue,
     onToggleCourse,
     selectable,
     selected,
@@ -169,6 +183,7 @@ function CourseRow({
     alternate?: boolean;
     course: DashboardCourseRegistrationCourse;
     elective?: boolean;
+    issue?: string | null;
     onToggleCourse?: (course: DashboardCourseRegistrationCourse) => void;
     selectable: boolean;
     selected: boolean;
@@ -185,7 +200,13 @@ function CourseRow({
                 <TableCell className="px-2 sm:px-4">
                     <Checkbox
                         checked={selected}
-                        aria-label={`Select ${course.code}`}
+                        disabled={!selected && Boolean(issue)}
+                        aria-label={
+                            issue
+                                ? `${course.code}: ${issue}`
+                                : `Select ${course.code}`
+                        }
+                        title={issue ?? undefined}
                         onCheckedChange={() => onToggleCourse?.(course)}
                     />
                 </TableCell>
@@ -195,10 +216,14 @@ function CourseRow({
             </TableCell>
             <TableCell className="break-words">
                 <div className="font-medium">{course.title}</div>
-                {course.prerequisites.length > 0 ? (
+                {course.prerequisites.length > 0 &&
+                course.missingPrerequisites.length === 0 ? (
                     <div className="text-xs text-muted-foreground">
                         Requires {course.prerequisites.join(', ')}
                     </div>
+                ) : null}
+                {issue ? (
+                    <div className="text-xs text-destructive">{issue}</div>
                 ) : null}
             </TableCell>
             <TableCell className="pr-2 text-center font-semibold tabular-nums sm:pr-4">

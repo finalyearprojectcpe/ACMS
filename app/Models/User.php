@@ -49,6 +49,12 @@ class User extends Authenticatable
         return $this->hasOne(StudentProfile::class);
     }
 
+    /** @return HasOne<StudentJoinRequest, $this> */
+    public function studentJoinRequest(): HasOne
+    {
+        return $this->hasOne(StudentJoinRequest::class);
+    }
+
     /**
      * @return HasOne<AdvisorProfile, $this>
      */

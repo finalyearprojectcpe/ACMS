@@ -6,6 +6,7 @@ use App\Honorific;
 use App\Models\AcademicSession;
 use App\Models\AcademicYear;
 use App\Models\AdvisorProfile;
+use App\Models\CourseRegistration;
 use App\Models\StudentProfile;
 use App\Models\StudentSet;
 use Illuminate\Support\Collection;
@@ -16,6 +17,7 @@ class DashboardPresenter
     public function __construct(
         private readonly AcademicContextService $academicContext,
         private readonly CurrencyFormatter $currency,
+        private readonly ResultService $results,
     ) {}
 
     public function adviserStudents(
@@ -38,15 +40,23 @@ class DashboardPresenter
             )
             ->values();
 
+        $cgpas = CourseRegistration::query()
+            ->whereIn('student_profile_id', $students->pluck('id'))
+            ->where('status', CourseRegistration::StatusApproved)
+            ->with(['items.courseOffering', 'academicSessionSemester.academicSession', 'academicSessionSemester.semester'])
+            ->get()
+            ->groupBy('student_profile_id')
+            ->map(fn (Collection $registrations): ?float => $this->results->studentPeriods($registrations)->last()['cgpa'] ?? null);
+
         return [
             'assignedSets' => $sets->map(fn (StudentSet $set): array => $this->studentSet($set))->values()->all(),
             'selectedSetId' => $selectedSet instanceof StudentSet ? (int) $selectedSet->id : null,
             'totalStudents' => $students->count(),
-            'students' => $students->map(fn (StudentProfile $student): array => $this->adviserStudent($student))->all(),
+            'students' => $students->map(fn (StudentProfile $student): array => $this->adviserStudent($student, $cgpas->get($student->id)))->all(),
         ];
     }
 
-    public function adviserStudent(StudentProfile $student): array
+    public function adviserStudent(StudentProfile $student, ?float $cgpa = null): array
     {
         $student->loadMissing([
             'user',
@@ -59,6 +69,8 @@ class DashboardPresenter
             'fullName' => $student->user->name,
             'email' => $student->user->email,
             'registrationNumber' => $student->registration_number,
+            'registrationRouteValue' => $student->routeRegistrationNumber(),
+            'cgpa' => $cgpa,
             'avatar' => $student->user->profilePhotoUrl(),
             'currentLevel' => $student->studentSet->currentAcademicYear instanceof AcademicYear
                 ? $this->level($student->studentSet->currentAcademicYear)
@@ -67,7 +79,7 @@ class DashboardPresenter
             'entrySession' => $this->entrySession($student->studentSet),
             'advisorName' => $student->advisorProfile->user->displayName(),
             'profileUrl' => route('dashboard.students.show', [
-                'registrationNumber' => $student->registration_number,
+                'registrationNumber' => $student->routeRegistrationNumber(),
             ]),
         ];
     }

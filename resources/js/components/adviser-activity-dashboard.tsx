@@ -1,7 +1,7 @@
 import { router } from '@inertiajs/react';
 import { RiSearchLine } from '@remixicon/react';
-import { useState  } from 'react';
-import type {FormEvent} from 'react';
+import { useState } from 'react';
+import type { FormEvent } from 'react';
 
 import {
     paymentHistory,
@@ -43,8 +43,8 @@ const registrationStatuses = [
 
 function PageFooter({ page }: { page: DashboardPageRows<unknown> }) {
     if (page.last_page <= 1) {
-return null;
-}
+        return null;
+    }
 
     const previous = page.links[0]?.url;
     const next = page.links[page.links.length - 1]?.url;

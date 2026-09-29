@@ -15,6 +15,7 @@ return new class extends Migration
         // Stores course adviser and student login accounts.
         Schema::create('users', function (Blueprint $table) {
             $table->id();
+            $table->ulid('public_id')->nullable()->unique();
             $table->string('title', 10)->nullable();
             $table->string('name');
             $table->string('email')->unique();
@@ -29,7 +30,6 @@ return new class extends Migration
 
             $table->index('account_type');
         });
-
         // Stores password reset tokens for globally unique account email addresses.
         Schema::create('password_reset_tokens', function (Blueprint $table) {
             $table->string('email')->primary();

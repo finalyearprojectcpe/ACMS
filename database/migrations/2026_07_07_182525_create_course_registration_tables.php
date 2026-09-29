@@ -36,6 +36,7 @@ return new class extends Migration
             $table->string('course_title');
             $table->unsignedTinyInteger('credit_units');
             $table->string('grade', 1)->nullable();
+            $table->boolean('missing_script')->default(false);
             $table->timestamp('graded_at')->nullable();
             $table->timestamps();
 
@@ -47,8 +48,11 @@ return new class extends Migration
             $table->id();
             $table->foreignId('course_registration_item_id')->constrained()->cascadeOnDelete();
             $table->foreignId('changed_by_user_id')->constrained('users')->restrictOnDelete();
-            $table->string('old_grade', 1);
-            $table->string('new_grade', 1);
+            $table->string('old_grade', 1)->nullable();
+            $table->boolean('old_missing_script')->default(false);
+            $table->string('new_grade', 1)->nullable();
+            $table->boolean('new_missing_script')->default(false);
+            $table->text('reason');
             $table->timestamp('created_at');
 
             $table->index(['course_registration_item_id', 'created_at']);

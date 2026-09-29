@@ -208,7 +208,6 @@ function adviserNavigation(): NavItem[] {
 function studentNavigation(): NavItem[] {
     return [
         nav('Home', 'home', dashboardHome(), RiHome5Line),
-        nav('Dues', 'dues', dashboardSection({ section: 'dues' }), RiCashLine),
         nav(
             'Course Registration',
             'course-registration',
@@ -221,11 +220,18 @@ function studentNavigation(): NavItem[] {
             dashboardSection({ section: 'results' }),
             RiFileChartLine,
         ),
+        nav('Dues', 'dues', dashboardSection({ section: 'dues' }), RiCashLine),
         nav(
             'Profile',
             'profile-settings',
             dashboardSection({ section: 'profile-settings' }),
             RiUser3Line,
+        ),
+        nav(
+            'Ask AI',
+            'assistant',
+            dashboardSection({ section: 'assistant' }),
+            RiMagicLine,
         ),
     ];
 }

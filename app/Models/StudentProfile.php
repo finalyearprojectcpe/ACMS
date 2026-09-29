@@ -16,6 +16,21 @@ class StudentProfile extends Model
     /** @use HasFactory<StudentProfileFactory> */
     use HasFactory;
 
+    public static function registrationNumberForRoute(string $registrationNumber): string
+    {
+        return str_replace('/', '~', str_replace('~', '~~', $registrationNumber));
+    }
+
+    public static function registrationNumberFromRoute(string $segment): string
+    {
+        return preg_replace_callback('/~~|~/', fn (array $match): string => $match[0] === '~~' ? '~' : '/', $segment);
+    }
+
+    public function routeRegistrationNumber(): string
+    {
+        return self::registrationNumberForRoute($this->registration_number);
+    }
+
     /**
      * @return BelongsTo<AdvisorProfile, $this>
      */
@@ -62,6 +77,11 @@ class StudentProfile extends Model
     public function courseRegistrations(): HasMany
     {
         return $this->hasMany(CourseRegistration::class);
+    }
+
+    public function assistantConversations(): HasMany
+    {
+        return $this->hasMany(AssistantConversation::class);
     }
 
     /**

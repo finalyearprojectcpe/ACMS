@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\AssistantConversation;
-use App\Services\AdviserAssistantService;
+use App\Services\AssistantService;
 use App\Services\DashboardAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,7 +15,7 @@ class AssistantController extends Controller
 {
     public function __construct(
         private readonly DashboardAccess $access,
-        private readonly AdviserAssistantService $assistant,
+        private readonly AssistantService $assistant,
     ) {}
 
     public function store(Request $request): RedirectResponse
@@ -30,8 +30,10 @@ class AssistantController extends Controller
 
     private function ask(Request $request, ?AssistantConversation $conversation = null): RedirectResponse
     {
-        $advisor = $this->access->advisor($request);
-        abort_if($conversation !== null && (int) $conversation->advisor_profile_id !== (int) $advisor->id, 404);
+        $user = $this->access->user($request);
+        $owner = $user->isAdviser() ? $this->access->advisor($request) : $this->access->student($request);
+        $ownerColumn = $user->isAdviser() ? 'advisor_profile_id' : 'student_profile_id';
+        abort_if($conversation !== null && (int) $conversation->{$ownerColumn} !== (int) $owner->id, 404);
         $data = $request->validate(['question' => 'required|string|min:3|max:1500']);
 
         if (! $this->assistant->available()) {
@@ -39,12 +41,12 @@ class AssistantController extends Controller
         }
 
         $created = $conversation === null;
-        $conversation ??= $advisor->assistantConversations()->create([
+        $conversation ??= $owner->assistantConversations()->create([
             'title' => mb_substr(trim($data['question']), 0, 90),
         ]);
 
         try {
-            $answer = $this->assistant->answer($advisor, $conversation, $data['question']);
+            $answer = $this->assistant->answer($owner, $conversation, $data['question']);
             DB::transaction(function () use ($conversation, $data, $answer): void {
                 $conversation->messages()->create(['role' => 'user', 'content' => $data['question']]);
                 $conversation->messages()->create([
@@ -57,8 +59,9 @@ class AssistantController extends Controller
 
             return to_route('dashboard.assistant.show', ['assistantConversation' => $conversation]);
         } catch (Throwable $exception) {
-            Log::warning('Adviser assistant request failed', [
-                'advisor_profile_id' => $advisor->id,
+            Log::warning('Assistant request failed', [
+                'owner_type' => $user->isAdviser() ? 'adviser' : 'student',
+                'owner_id' => $owner->id,
                 'exception' => $exception::class,
                 'message' => $exception->getMessage(),
             ]);

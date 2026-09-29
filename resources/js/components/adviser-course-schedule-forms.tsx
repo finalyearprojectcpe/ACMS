@@ -7,7 +7,6 @@ import {
     update as updateCourseOffering,
 } from '@/actions/App/Http/Controllers/CourseOfferingController';
 import { showCourseSchedule } from '@/actions/App/Http/Controllers/DashboardController';
-import { ActionLink } from '@/components/action-link';
 import { CoursePrerequisitePicker } from '@/components/course-prerequisite-picker';
 import { Button } from '@/components/ui/button';
 import { Field, FieldError, FieldLabel } from '@/components/ui/field';
@@ -61,7 +60,7 @@ export function AdviserCourseOfferingForm({
         );
     }
 
-    const backRoute = showCourseSchedule(routeParameters, {
+    const cancelRoute = showCourseSchedule(routeParameters, {
         query: {
             session: sessionRouteYears(form.academicSession),
             semester: form.semester.slug,
@@ -72,8 +71,7 @@ export function AdviserCourseOfferingForm({
         <div className="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col">
             <form className="flex min-h-0 flex-1 flex-col" onSubmit={submit}>
                 <header className="shrink-0 border-b border-border pb-5">
-                    <ActionLink href={backRoute}>Course Schedule</ActionLink>
-                    <h1 className="mt-4 text-lg font-semibold">
+                    <h1 className="text-lg font-semibold">
                         {form.mode === 'edit' ? 'Edit Course' : 'Add Course'}
                     </h1>
                     <p className="mt-1 text-sm text-muted-foreground">
@@ -207,7 +205,7 @@ export function AdviserCourseOfferingForm({
                 </ScrollArea>
                 <footer className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-border pt-4">
                     <Button asChild type="button" variant="outline">
-                        <Link href={backRoute}>Cancel</Link>
+                        <Link href={cancelRoute}>Cancel</Link>
                     </Button>
                     <Button type="submit" disabled={courseForm.processing}>
                         <RiSave3Line />

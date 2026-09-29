@@ -17,11 +17,9 @@ return new class extends Migration
             $table->foreignId('student_set_id')->constrained()->cascadeOnDelete();
             $table->string('code');
             $table->string('title');
-            $table->string('slug');
             $table->timestamps();
 
             $table->unique(['student_set_id', 'code']);
-            $table->unique(['student_set_id', 'slug']);
             $table->index(['student_set_id', 'title']);
         });
     }

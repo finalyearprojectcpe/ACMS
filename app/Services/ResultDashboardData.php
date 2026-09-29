@@ -33,7 +33,7 @@ class ResultDashboardData
         if ($selected instanceof AcademicSessionSemester) {
             $selected->loadMissing(['academicSession.academicYear', 'semester', 'courseOfferings.course']);
             $counts = CourseRegistrationItem::query()
-                ->selectRaw('course_offering_id, count(*) as registered_count, sum(case when grade is not null then 1 else 0 end) as graded_count')
+                ->selectRaw('course_offering_id, count(*) as registered_count, sum(case when grade is not null or missing_script = 1 then 1 else 0 end) as entered_count')
                 ->whereHas('courseRegistration', fn (Builder $query) => $query
                     ->where('academic_session_semester_id', $selected->id)
                     ->where('status', CourseRegistration::StatusApproved)
@@ -51,7 +51,8 @@ class ResultDashboardData
                     'units' => (int) $offering->credit_units,
                     'isElective' => (bool) $offering->is_elective,
                     'registeredCount' => (int) ($count?->registered_count ?? 0),
-                    'gradedCount' => (int) ($count?->graded_count ?? 0),
+                    'enteredCount' => (int) ($count?->entered_count ?? 0),
+                    'publishedAt' => $offering->results_published_at?->toIso8601String(),
                     'url' => route('student-sets.results.course', [
                         ...$set->routeParameters(),
                         'sessionYears' => $selected->academicSession->routeYears(),
@@ -62,7 +63,6 @@ class ResultDashboardData
             })->values()->all();
             $period = $this->period($selected) + [
                 'registrationEnabled' => (bool) $selected->registration_enabled,
-                'publication' => $this->results->publicationState($selected),
                 'scheduleUrl' => route('student-sets.courses.show', [
                     ...$set->routeParameters(),
                     'session' => $selected->academicSession->routeYears(),
@@ -73,11 +73,6 @@ class ResultDashboardData
                     'session' => $selected->academicSession->routeYears(),
                     'semester' => $selected->semester->slug,
                     'status' => 'submitted',
-                ]),
-                'publishUrl' => route('student-sets.results.publish', [
-                    ...$set->routeParameters(),
-                    'sessionYears' => $selected->academicSession->routeYears(),
-                    'semester' => $selected->semester->slug,
                 ]),
             ];
         }
@@ -105,6 +100,8 @@ class ResultDashboardData
         return [
             'set' => $this->presenter->studentSet($set),
             'period' => $this->period($semester),
+            'publication' => $this->results->publicationState($semester, $offering),
+            'publishedAt' => $offering->results_published_at?->toIso8601String(),
             'course' => [
                 'code' => $offering->course->code,
                 'title' => $offering->course_title,
@@ -117,12 +114,14 @@ class ResultDashboardData
                 'avatar' => $item->courseRegistration->studentProfile->user->profilePhotoUrl(),
                 'registrationNumber' => $item->courseRegistration->studentProfile->registration_number,
                 'profileUrl' => route('dashboard.students.show', [
-                    'registrationNumber' => $item->courseRegistration->studentProfile->registration_number,
+                    'registrationNumber' => $item->courseRegistration->studentProfile->routeRegistrationNumber(),
                 ]),
                 'grade' => $item->grade,
+                'missingScript' => $item->missing_script,
                 'corrections' => $corrections->get($item->id, collect())->map(fn ($change): array => [
-                    'from' => $change->old_grade,
-                    'to' => $change->new_grade,
+                    'from' => $change->old_missing_script ? 'Missing script' : ($change->old_grade ?? 'No result'),
+                    'to' => $change->new_missing_script ? 'Missing script' : $change->new_grade,
+                    'reason' => $change->reason,
                     'at' => $change->created_at,
                 ])->all(),
             ])->all(),
@@ -132,7 +131,13 @@ class ResultDashboardData
                 'semester' => $semester->semester->slug,
                 'courseCode' => $offering->course->urlCode(),
             ]),
-            'backUrl' => route('student-sets.results.semester', [
+            'publishUrl' => route('student-sets.results.publish', [
+                ...$set->routeParameters(),
+                'sessionYears' => $semester->academicSession->routeYears(),
+                'semester' => $semester->semester->slug,
+                'courseCode' => $offering->course->urlCode(),
+            ]),
+            'semesterResultsUrl' => route('student-sets.results.semester', [
                 ...$set->routeParameters(),
                 'sessionYears' => $semester->academicSession->routeYears(),
                 'semester' => $semester->semester->slug,
@@ -143,24 +148,16 @@ class ResultDashboardData
     public function studentResults(StudentProfile $student, ?string $requestedSession, ?string $requestedSemester, bool $forAdviser): array
     {
         abort_unless(($requestedSession === null) === ($requestedSemester === null), 404);
-        $registrations = $student->courseRegistrations()
-            ->where('status', CourseRegistration::StatusApproved)
-            ->whereHas('academicSessionSemester', fn (Builder $query) => $query->whereNotNull('results_published_at'))
-            ->with(['items', 'academicSessionSemester.academicSession.academicYear', 'academicSessionSemester.semester'])
-            ->get()
-            ->sortBy(fn (CourseRegistration $registration): string => sprintf(
-                '%04d-%02d',
-                $registration->academicSessionSemester->academicSession->start_year,
-                $registration->academicSessionSemester->semester->sort_order,
-            ))
-            ->values();
-        $periods = $registrations->map(function (CourseRegistration $registration) use ($student, $forAdviser): array {
+        $summaries = $this->results->studentPeriods($this->results->studentRegistrations($student))
+            ->filter(fn (array $summary): bool => $summary['visibleItems']->isNotEmpty());
+        $periods = $summaries->map(function (array $summary) use ($student, $forAdviser): array {
+            $registration = $summary['registration'];
             $semester = $registration->academicSessionSemester;
             $session = $semester->academicSession;
             $route = $forAdviser ? 'dashboard.students.results.semester' : 'dashboard.section';
             $parameters = $forAdviser
                 ? [
-                    'registrationNumber' => $student->registration_number,
+                    'registrationNumber' => $student->routeRegistrationNumber(),
                     'sessionYears' => $session->routeYears(),
                     'semester' => $semester->semester->slug,
                 ]
@@ -171,21 +168,37 @@ class ResultDashboardData
                 'semester' => $semester->semester->slug,
                 'label' => $session->academicYear->name.' · '.$session->label().' Session · '.$semester->semester->name,
                 'shortLabel' => $session->academicYear->year_number.'00L '.($semester->semester->sort_order === 1 ? '1st' : '2nd'),
-                'gpa' => $this->results->gpa($registration->items),
+                'gpa' => $summary['gpa'],
+                'cgpa' => $summary['cgpa'],
                 'url' => route($route, $forAdviser ? $parameters : $parameters + [
                     'session' => $session->routeYears(),
                     'semester' => $semester->semester->slug,
                 ]),
                 'registration' => $registration,
             ];
+        })->values();
+        $history = $periods->map(function (array $period): array {
+            $registration = $period['registration'];
+            $semester = $registration->academicSessionSemester;
+
+            return [
+                'sessionYears' => $period['sessionYears'],
+                'session' => $semester->academicSession->label(),
+                'level' => $semester->academicSession->academicYear->name,
+                'semester' => $semester->semester->name,
+                'gpa' => $period['gpa'],
+                'cgpa' => $period['cgpa'],
+                'url' => $period['url'],
+            ];
         });
         $selected = $requestedSession === null
-            ? $periods->last()
+            ? ($forAdviser ? $periods->last() : null)
             : $periods->first(fn (array $period): bool => $period['sessionYears'] === $requestedSession && $period['semester'] === $requestedSemester);
         abort_if($requestedSession !== null && $selected === null, 404);
 
         return [
             'periods' => $periods->map(fn (array $period): array => collect($period)->except('registration')->all())->all(),
+            'history' => $history->all(),
             'selected' => $selected === null ? null : [
                 'sessionYears' => $selected['sessionYears'],
                 'semester' => $selected['semester'],
@@ -197,7 +210,9 @@ class ResultDashboardData
                         'code' => $item->course_code,
                         'title' => $item->course_title,
                         'units' => (int) $item->credit_units,
-                        'grade' => $item->grade,
+                        'grade' => $item->courseOffering?->results_published_at !== null ? $item->grade : null,
+                        'missingScript' => $item->courseOffering?->results_published_at !== null && $item->missing_script,
+                        'pending' => $item->courseOffering?->results_published_at === null,
                     ])->values()->all(),
             ],
         ];
@@ -206,27 +221,19 @@ class ResultDashboardData
     public function studentOverview(StudentProfile $student): array
     {
         $sessions = $this->sessions($student->studentSet)->sortBy('start_year')->values();
-        $registrations = $student->courseRegistrations()
-            ->where('status', CourseRegistration::StatusApproved)
-            ->whereHas('academicSessionSemester', fn (Builder $query) => $query->whereNotNull('results_published_at'))
-            ->with('items')
-            ->get()
-            ->keyBy('academic_session_semester_id');
-        $cumulativeItems = collect();
-        $columns = $sessions->map(function (AcademicSession $session) use ($student, $registrations, $cumulativeItems): array {
-            $semesters = $session->semesterInstances->sortBy('semester.sort_order')->map(function (AcademicSessionSemester $semester) use ($student, $registrations, $cumulativeItems, $session): array {
-                $registration = $registrations->get($semester->id);
-                if ($registration instanceof CourseRegistration) {
-                    foreach ($registration->items as $item) {
-                        $cumulativeItems->push($item);
-                    }
-                }
+        $summaries = $this->results->studentPeriods($this->results->studentRegistrations($student));
+        $bySemester = $summaries->keyBy(fn (array $summary): int => $summary['registration']->academic_session_semester_id);
+        $columns = $sessions->map(function (AcademicSession $session) use ($student, $bySemester): array {
+            $sessionSummaries = $bySemester->filter(fn (array $summary): bool => $summary['registration']->academicSessionSemester->academic_session_id === $session->id);
+            $semesters = $session->semesterInstances->sortBy('semester.sort_order')->map(function (AcademicSessionSemester $semester) use ($student, $bySemester, $session): array {
+                $summary = $bySemester->get($semester->id);
+                $hasResults = is_array($summary) && $summary['visibleItems']->isNotEmpty();
 
                 return [
                     'name' => $semester->semester->name,
-                    'gpa' => $registration instanceof CourseRegistration ? $this->results->gpa($registration->items) : null,
-                    'url' => $registration instanceof CourseRegistration ? route('dashboard.students.results.semester', [
-                        'registrationNumber' => $student->registration_number,
+                    'gpa' => $hasResults ? $summary['gpa'] : null,
+                    'url' => $hasResults ? route('dashboard.students.results.semester', [
+                        'registrationNumber' => $student->routeRegistrationNumber(),
                         'sessionYears' => $session->routeYears(),
                         'semester' => $semester->semester->slug,
                     ]) : null,
@@ -237,14 +244,13 @@ class ResultDashboardData
                 'level' => $session->academicYear->name,
                 'session' => $session->label(),
                 'semesters' => $semesters->all(),
-                'cgpa' => $semesters->contains(fn (array $semester): bool => $semester['gpa'] !== null)
-                    ? $this->results->gpa($cumulativeItems)
-                    : null,
+                'cgpa' => $sessionSummaries->contains(fn (array $summary): bool => $summary['counted'])
+                    ? $sessionSummaries->last()['cgpa'] : null,
             ];
         })->all();
 
         return [
-            'cgpa' => $this->results->gpa($cumulativeItems),
+            'cgpa' => $summaries->last()['cgpa'] ?? null,
             'columns' => $columns,
         ];
     }
@@ -284,7 +290,7 @@ class ResultDashboardData
                     'slug' => $semester->semester->slug,
                     'registrationEnabled' => (bool) $semester->registration_enabled,
                     'courseCount' => $semester->courseOfferings->count(),
-                    'resultsPublishedAt' => $semester->results_published_at?->toIso8601String(),
+                    'resultsPublishedAt' => $semester->courseOfferings->first(fn (CourseOffering $offering): bool => $offering->results_published_at !== null)?->results_published_at?->toIso8601String(),
                 ])->values()->all(),
         ];
     }
@@ -295,7 +301,6 @@ class ResultDashboardData
             'level' => $semester->academicSession->academicYear->name,
             'session' => $semester->academicSession->label(),
             'semester' => $semester->semester->name,
-            'publishedAt' => $semester->results_published_at?->toIso8601String(),
         ];
     }
 }

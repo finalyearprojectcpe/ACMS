@@ -8,13 +8,7 @@ import {
     ActivityPaymentsTable,
     ActivityRegistrationsTable,
 } from '@/components/adviser-activity-tables';
-import {
-    Card,
-    CardContent,
-    CardFooter,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
+import { JoinRequestsTable } from '@/components/adviser-join-requests-dashboard';
 import {
     Empty,
     EmptyContent,
@@ -22,7 +16,7 @@ import {
     EmptyHeader,
     EmptyTitle,
 } from '@/components/ui/empty';
-import { cn } from '@/lib/utils';
+import { index as joinRequests } from '@/routes/student-joins/adviser';
 import type { DashboardAdviserHome } from '@/types';
 
 export function AdviserHomeDashboard({ home }: { home: DashboardAdviserHome }) {
@@ -44,92 +38,81 @@ export function AdviserHomeDashboard({ home }: { home: DashboardAdviserHome }) {
         );
     }
 
-    const hasRegistrations = home.pendingRegistrations.length > 0;
-    const hasPayments = home.recentPayments.length > 0;
-
-    if (!hasRegistrations && !hasPayments) {
-        return (
-            <Empty className="mx-auto min-h-48 w-full max-w-6xl border border-border bg-background">
-                <EmptyHeader>
-                    <EmptyTitle>No recent activity</EmptyTitle>
-                </EmptyHeader>
-            </Empty>
-        );
-    }
-
     return (
-        <Card className="mx-auto w-full max-w-6xl gap-0 overflow-hidden border-border bg-background py-0 shadow-sm">
-            <div
-                className={cn(
-                    'grid',
-                    hasRegistrations && hasPayments && '2xl:grid-cols-2',
-                )}
-            >
-                {hasRegistrations && (
-                    <section className="min-w-0">
-                        <CardHeader className="flex flex-row items-center justify-between gap-3 border-b border-border p-4 sm:px-5">
-                            <CardTitle className="text-base">
-                                Course Registrations to Review
-                            </CardTitle>
+        <div className="mx-auto w-full max-w-6xl">
+            <div className="grid gap-8">
+                <section className="min-w-0">
+                    <header className="flex flex-row items-center justify-between gap-3 border-b border-border px-2 py-4 sm:px-3">
+                        <h2 className="text-base font-semibold">
+                            Course Registrations to Review
+                        </h2>
+                        <span className="text-sm text-muted-foreground tabular-nums">
+                            {home.pendingCount} waiting
+                        </span>
+                    </header>
+                    <div className="border-b">
+                        <ActivityRegistrationsTable
+                            registrations={home.pendingRegistrations}
+                            compact
+                        />
+                    </div>
+                    {home.pendingCount > home.pendingRegistrations.length && (
+                        <footer className="flex justify-end px-3 py-3">
+                            <ActionLink
+                                href={registrationActivity({
+                                    query: { status: 'submitted' },
+                                })}
+                            >
+                                +
+                                {home.pendingCount -
+                                    home.pendingRegistrations.length}{' '}
+                                more
+                            </ActionLink>
+                        </footer>
+                    )}
+                </section>
+                <section className="min-w-0">
+                    <header className="flex items-center justify-between gap-3 border-b border-border px-2 py-4 sm:px-3">
+                        <div>
+                            <h2 className="text-base font-semibold">
+                                Student Join Requests
+                            </h2>
                             <span className="text-sm text-muted-foreground tabular-nums">
-                                {home.pendingCount} waiting
+                                {home.requestCount} pending
                             </span>
-                        </CardHeader>
-                        <CardContent className="p-0">
-                            <ActivityRegistrationsTable
-                                registrations={home.pendingRegistrations}
-                                compact
-                            />
-                        </CardContent>
-                        {home.pendingCount >
-                            home.pendingRegistrations.length && (
-                            <CardFooter className="justify-end border-t p-3 px-5">
-                                <ActionLink
-                                    href={registrationActivity({
-                                        query: { status: 'submitted' },
-                                    })}
-                                >
-                                    +
-                                    {home.pendingCount -
-                                        home.pendingRegistrations.length}{' '}
-                                    more
-                                </ActionLink>
-                            </CardFooter>
-                        )}
-                    </section>
-                )}
-                {hasPayments && (
-                    <section
-                        className={cn(
-                            'min-w-0',
-                            hasRegistrations &&
-                                'border-t border-border 2xl:border-t-0 2xl:border-l',
-                        )}
-                    >
-                        <CardHeader className="border-b border-border p-4 sm:px-5">
-                            <CardTitle className="text-base">
-                                Recent Dues Payments
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-0">
-                            <ActivityPaymentsTable
-                                payments={home.recentPayments}
-                                compact
-                            />
-                        </CardContent>
-                        {home.paymentCount > home.recentPayments.length && (
-                            <CardFooter className="justify-end border-t p-3 px-5">
-                                <ActionLink href={paymentHistory()}>
-                                    +
-                                    {home.paymentCount -
-                                        home.recentPayments.length}{' '}
-                                    more
-                                </ActionLink>
-                            </CardFooter>
-                        )}
-                    </section>
-                )}
+                        </div>
+                        <ActionLink href={joinRequests()}>View all</ActionLink>
+                    </header>
+                    <div className="border-b">
+                        <JoinRequestsTable
+                            requests={home.recentRequests}
+                            compact
+                        />
+                    </div>
+                </section>
+                <section className="min-w-0">
+                    <header className="border-b border-border px-2 py-4 sm:px-3">
+                        <h2 className="text-base font-semibold">
+                            Recent Dues Payments
+                        </h2>
+                    </header>
+                    <div className="border-b">
+                        <ActivityPaymentsTable
+                            payments={home.recentPayments}
+                            compact
+                        />
+                    </div>
+                    {home.paymentCount > home.recentPayments.length && (
+                        <footer className="flex justify-end px-3 py-3">
+                            <ActionLink href={paymentHistory()}>
+                                +
+                                {home.paymentCount - home.recentPayments.length}{' '}
+                                more
+                            </ActionLink>
+                        </footer>
+                    )}
+                </section>
             </div>
-        </Card>
+        </div>
     );
 }

@@ -1,5 +1,4 @@
 import { Link } from '@inertiajs/react';
-import { RiArrowLeftLine } from '@remixicon/react';
 
 import { ActionLink } from '@/components/action-link';
 import { CopyableValue } from '@/components/copyable-value';
@@ -15,6 +14,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { preview as previewResultStatement } from '@/routes/dashboard/students/statement';
 import type {
     DashboardStudentRecord,
     DashboardStudentRecordDue,
@@ -40,12 +40,6 @@ export function StudentRecordDashboard({
 
     return (
         <div className="mx-auto flex w-full max-w-5xl min-w-0 flex-col gap-8">
-            <ActionLink
-                href={record.student.studentSet.url}
-                icon={<RiArrowLeftLine className="size-4" />}
-            >
-                Back to Students
-            </ActionLink>
             <header className="min-w-0 border-b pb-5">
                 <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:gap-x-6">
                     <StudentPortrait
@@ -94,7 +88,16 @@ export function StudentRecordDashboard({
                 ) : null}
             </header>
             <section className="min-w-0">
-                <h2 className="mb-3 text-base font-semibold">Results</h2>
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                    <h2 className="text-base font-semibold">Results</h2>
+                    <ActionLink
+                        href={previewResultStatement(
+                            record.student.registrationRouteValue,
+                        )}
+                    >
+                        Preview result statement
+                    </ActionLink>
+                </div>
                 {record.results.columns.length === 0 ? (
                     <p className="border-y py-8 text-sm text-muted-foreground">
                         No academic sessions have been added to this set.
@@ -163,7 +166,7 @@ export function StudentRecordDashboard({
                                                                         {result.gpa?.toFixed(
                                                                             2,
                                                                         ) ??
-                                                                            '—'}
+                                                                            'Pending'}
                                                                     </Link>
                                                                 ) : (
                                                                     <span className="text-muted-foreground">
@@ -350,11 +353,8 @@ export function StudentRecordResultsDashboard({
     return (
         <div className="flex min-h-0 w-full flex-1 flex-col">
             <div className="mb-5">
-                <ActionLink
-                    href={record.backUrl}
-                    icon={<RiArrowLeftLine className="size-4" />}
-                >
-                    Back to {record.student.fullName}
+                <ActionLink href={record.studentProfileUrl}>
+                    Student Profile
                 </ActionLink>
             </div>
             <div className="mb-5 flex min-w-0 items-center gap-4 border-b pb-5 sm:gap-6">

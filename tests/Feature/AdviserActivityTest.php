@@ -18,18 +18,25 @@ test('adviser activity only includes registrations from their own students', fun
         'submitted_at' => now(),
     ]);
     $advisor = $own->studentProfile->advisorProfile;
+    $semester = $own->academicSessionSemester;
+    $levelSemester = $semester->academicSession->academicYear->name.' '.$semester->semester->name;
+    $session = $semester->academicSession->label().' Session';
 
     $this->actingAs($advisor->user)->get(route('dashboard'))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->where('dashboard.adviserHome.pendingCount', 1)
-            ->where('dashboard.adviserHome.pendingRegistrations.0.id', $own->id));
+            ->where('dashboard.adviserHome.pendingRegistrations.0.id', $own->id)
+            ->where('dashboard.adviserHome.pendingRegistrations.0.levelSemester', $levelSemester)
+            ->where('dashboard.adviserHome.pendingRegistrations.0.session', $session));
 
     $this->get(route('dashboard.course-registration.activity'))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->where('dashboard.adviserRegistrationActivity.registrations.total', 1)
-            ->where('dashboard.adviserRegistrationActivity.registrations.data.0.id', $own->id));
+            ->where('dashboard.adviserRegistrationActivity.registrations.data.0.id', $own->id)
+            ->where('dashboard.adviserRegistrationActivity.registrations.data.0.levelSemester', $levelSemester)
+            ->where('dashboard.adviserRegistrationActivity.registrations.data.0.session', $session));
 
     $this->get(route('dashboard.course-registration.show', $other->reviewRouteParameters()))->assertNotFound();
 });

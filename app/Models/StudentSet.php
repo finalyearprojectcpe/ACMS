@@ -21,6 +21,7 @@ use Illuminate\Support\Str;
     'invite_token',
     'student_signup_enabled',
     'current_academic_year_id',
+    'current_semester_id',
 ])]
 #[Hidden(['invite_token'])]
 class StudentSet extends Model
@@ -52,6 +53,12 @@ class StudentSet extends Model
     public function currentAcademicYear(): BelongsTo
     {
         return $this->belongsTo(AcademicYear::class, 'current_academic_year_id');
+    }
+
+    /** @return BelongsTo<Semester, $this> */
+    public function currentSemester(): BelongsTo
+    {
+        return $this->belongsTo(Semester::class, 'current_semester_id');
     }
 
     /** @return HasMany<Course, $this> */

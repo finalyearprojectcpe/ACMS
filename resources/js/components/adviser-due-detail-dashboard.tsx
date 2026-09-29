@@ -95,9 +95,6 @@ export function AdviserDueDetailDashboard({
 
     return (
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">
-            <ActionLink href={detail.due.listUrl}>
-                Back to Student Dues
-            </ActionLink>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">

@@ -13,6 +13,7 @@ use App\Services\DashboardAccess;
 use App\Services\PaystackException;
 use App\Services\PaystackService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -115,40 +116,17 @@ class AdviserAccountController extends Controller
     {
         $user = $this->access->user($request);
         $validated = $request->validated();
-        $disk = User::profilePhotoDisk();
-        $previousPhoto = $user->profile_photo_path;
-        $newPhoto = $request->file('profile_photo')?->store('profile-photos', $disk);
-
-        if ($request->hasFile('profile_photo') && ! is_string($newPhoto)) {
-            throw new \RuntimeException('The profile photo could not be stored.');
-        }
 
         $changes = [
             'title' => $validated['title'],
             'name' => $validated['name'],
         ];
 
-        if (is_string($newPhoto)) {
-            $changes['profile_photo_path'] = $newPhoto;
-        }
-
         if ($request->filled('password')) {
             $changes['password'] = $validated['password'];
         }
 
-        try {
-            DB::transaction(fn () => $user->forceFill($changes)->save());
-        } catch (\Throwable $exception) {
-            if (is_string($newPhoto)) {
-                Storage::disk($disk)->delete($newPhoto);
-            }
-
-            throw $exception;
-        }
-
-        if (is_string($newPhoto) && is_string($previousPhoto) && $previousPhoto !== '') {
-            Storage::disk($disk)->delete($previousPhoto);
-        }
+        $this->saveProfile($user, $changes, $request->file('profile_photo'));
 
         return to_route('dashboard.section', ['section' => 'settings'])
             ->with('success', 'Profile saved.');
@@ -159,24 +137,34 @@ class AdviserAccountController extends Controller
         $student = $this->access->student($request);
         $user = $student->user;
         $validated = $request->validated();
-        $disk = User::profilePhotoDisk();
-        $previousPhoto = $user->profile_photo_path;
-        $newPhoto = $request->file('profile_photo')?->store('profile-photos', $disk);
-
-        if ($request->hasFile('profile_photo') && ! is_string($newPhoto)) {
-            throw new \RuntimeException('The profile photo could not be stored.');
-        }
 
         $changes = [
             'name' => Str::squish($validated['surname'].' '.$validated['other_names']),
         ];
 
-        if (is_string($newPhoto)) {
-            $changes['profile_photo_path'] = $newPhoto;
-        }
-
         if ($request->filled('password')) {
             $changes['password'] = $validated['password'];
+        }
+
+        $this->saveProfile($user, $changes, $request->file('profile_photo'));
+
+        return to_route('dashboard.section', ['section' => 'profile-settings'])
+            ->with('success', 'Profile saved.');
+    }
+
+    /** @param array<string, mixed> $changes */
+    private function saveProfile(User $user, array $changes, ?UploadedFile $photo): void
+    {
+        $disk = User::profilePhotoDisk();
+        $previousPhoto = $user->profile_photo_path;
+        $newPhoto = $photo?->store('profile-photos', $disk);
+
+        if ($photo !== null && ! is_string($newPhoto)) {
+            throw new \RuntimeException('The profile photo could not be stored.');
+        }
+
+        if (is_string($newPhoto)) {
+            $changes['profile_photo_path'] = $newPhoto;
         }
 
         try {
@@ -192,9 +180,6 @@ class AdviserAccountController extends Controller
         if (is_string($newPhoto) && is_string($previousPhoto) && $previousPhoto !== '') {
             Storage::disk($disk)->delete($previousPhoto);
         }
-
-        return to_route('dashboard.section', ['section' => 'profile-settings'])
-            ->with('success', 'Profile saved.');
     }
 
     /** @return array<string, mixed> */

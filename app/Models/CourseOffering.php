@@ -95,6 +95,7 @@ class CourseOffering extends Model
         return [
             'credit_units' => 'integer',
             'is_elective' => 'boolean',
+            'results_published_at' => 'datetime',
         ];
     }
 }

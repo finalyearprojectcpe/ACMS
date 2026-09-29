@@ -1,4 +1,4 @@
-import { studentSetListText } from '@/components/student-set-label';
+import { shortLevelLabel } from '@/lib/academic';
 import type { DashboardContext, DashboardStudentSetContext } from '@/types';
 
 export function dashboardSidebarRoleLabel(dashboard: DashboardContext): string {
@@ -16,5 +16,10 @@ function adviserSetLabel(sets: DashboardStudentSetContext[]): string | null {
         return null;
     }
 
-    return studentSetListText(sets);
+    return sets
+        .map(
+            (set) =>
+                `${set.name} · ${set.currentLevel ? shortLevelLabel(set.currentLevel.title) : 'Level not set'}`,
+        )
+        .join(', ');
 }

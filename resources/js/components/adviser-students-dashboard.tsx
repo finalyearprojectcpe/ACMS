@@ -1,4 +1,9 @@
-import { RiSearchLine } from '@remixicon/react';
+import {
+    RiArrowDownLine,
+    RiArrowUpDownLine,
+    RiArrowUpLine,
+    RiSearchLine,
+} from '@remixicon/react';
 import { useMemo, useState } from 'react';
 
 import { AdviserSetWorkspace } from '@/components/adviser-set-workspace-nav';
@@ -19,25 +24,54 @@ import type {
     DashboardAdviserStudents,
 } from '@/types';
 
+type StudentSort = 'name' | 'cgpa-asc' | 'cgpa-desc';
+
 export function AdviserStudentsDashboard({
     students,
 }: {
     students: DashboardAdviserStudents;
 }) {
     const [query, setQuery] = useState('');
+    const [sort, setSort] = useState<StudentSort>('name');
     const selectedSet = students.assignedSets.find(
         (set) => set.id === students.selectedSetId,
     );
     const visibleStudents = useMemo(() => {
         const search = query.trim().toLowerCase();
 
-        return students.students.filter((student) =>
+        const filtered = students.students.filter((student) =>
             [student.fullName, student.email, student.registrationNumber]
                 .join(' ')
                 .toLowerCase()
                 .includes(search),
         );
-    }, [students.students, query]);
+
+        if (sort === 'name') {
+            return filtered;
+        }
+
+        return filtered.sort((left, right) => {
+            const leftCgpa = left.cgpa ?? null;
+            const rightCgpa = right.cgpa ?? null;
+
+            if (leftCgpa === null) {
+                return rightCgpa === null
+                    ? left.fullName.localeCompare(right.fullName)
+                    : 1;
+            }
+
+            if (rightCgpa === null) {
+                return -1;
+            }
+
+            const difference = leftCgpa - rightCgpa;
+
+            return (
+                (sort === 'cgpa-asc' ? difference : -difference) ||
+                left.fullName.localeCompare(right.fullName)
+            );
+        });
+    }, [students.students, query, sort]);
 
     if (!selectedSet) {
         return (
@@ -59,6 +93,8 @@ export function AdviserStudentsDashboard({
                         totalStudents={students.students.length}
                         query={query}
                         onQueryChange={setQuery}
+                        sort={sort}
+                        onSortChange={setSort}
                         emptyLabel={
                             students.students.length === 0
                                 ? 'No students have joined this set yet.'
@@ -76,12 +112,16 @@ function StudentsTable({
     totalStudents,
     query,
     onQueryChange,
+    sort,
+    onSortChange,
     emptyLabel,
 }: {
     students: DashboardAdviserStudent[];
     totalStudents: number;
     query: string;
     onQueryChange: (value: string) => void;
+    sort: StudentSort;
+    onSortChange: (value: StudentSort) => void;
     emptyLabel: string;
 }) {
     return (
@@ -110,8 +150,55 @@ function StudentsTable({
                             <TableHead className="w-14 px-4 text-center">
                                 S/N
                             </TableHead>
-                            <TableHead className="min-w-52">Student</TableHead>
+                            <TableHead
+                                className="min-w-52"
+                                aria-sort={
+                                    sort === 'name' ? 'ascending' : 'none'
+                                }
+                            >
+                                <button
+                                    type="button"
+                                    className="inline-flex items-center gap-1.5 font-medium text-foreground hover:text-link focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+                                    onClick={() => onSortChange('name')}
+                                >
+                                    Student
+                                    {sort === 'name' && (
+                                        <RiArrowUpLine className="size-3.5" />
+                                    )}
+                                </button>
+                            </TableHead>
                             <TableHead className="w-44">Reg. No.</TableHead>
+                            <TableHead
+                                className="w-24 pr-4 text-right"
+                                aria-sort={
+                                    sort === 'cgpa-asc'
+                                        ? 'ascending'
+                                        : sort === 'cgpa-desc'
+                                          ? 'descending'
+                                          : 'none'
+                                }
+                            >
+                                <button
+                                    type="button"
+                                    className="inline-flex items-center gap-1.5 font-medium text-foreground hover:text-link focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+                                    onClick={() =>
+                                        onSortChange(
+                                            sort === 'cgpa-asc'
+                                                ? 'cgpa-desc'
+                                                : 'cgpa-asc',
+                                        )
+                                    }
+                                >
+                                    CGPA
+                                    {sort === 'cgpa-asc' ? (
+                                        <RiArrowUpLine className="size-3.5" />
+                                    ) : sort === 'cgpa-desc' ? (
+                                        <RiArrowDownLine className="size-3.5" />
+                                    ) : (
+                                        <RiArrowUpDownLine className="size-3.5 text-muted-foreground" />
+                                    )}
+                                </button>
+                            </TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -137,12 +224,15 @@ function StudentsTable({
                                             value={student.registrationNumber}
                                         />
                                     </TableCell>
+                                    <TableCell className="pr-4 text-right tabular-nums">
+                                        {student.cgpa?.toFixed(2) ?? '-'}
+                                    </TableCell>
                                 </TableRow>
                             ))
                         ) : (
                             <TableRow>
                                 <TableCell
-                                    colSpan={3}
+                                    colSpan={4}
                                     className="px-4 py-8 text-center text-muted-foreground"
                                 >
                                     {emptyLabel}

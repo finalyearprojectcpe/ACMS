@@ -14,10 +14,13 @@ return new class extends Migration
         // Keeps each adviser's private assistant history separate from other workspaces.
         Schema::create('assistant_conversations', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('advisor_profile_id')->constrained()->cascadeOnDelete();
+            $table->ulid('public_id')->nullable()->unique();
+            $table->foreignId('advisor_profile_id')->nullable()->constrained()->cascadeOnDelete();
+            $table->foreignId('student_profile_id')->nullable()->constrained()->cascadeOnDelete();
             $table->string('title', 120);
             $table->timestamps();
             $table->index(['advisor_profile_id', 'updated_at']);
+            $table->index(['student_profile_id', 'updated_at']);
         });
     }
 

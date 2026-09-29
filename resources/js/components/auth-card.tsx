@@ -8,14 +8,14 @@ function AuthCard({ className, children, ...props }: ComponentProps<'div'>) {
         <div className={cn('flex w-full flex-col gap-4', className)} {...props}>
             <Card className="overflow-hidden p-0 shadow-sm">
                 <CardContent className="grid min-h-[620px] p-0 lg:grid-cols-[minmax(0,0.95fr)_minmax(360px,1.05fr)]">
-                    <div className="flex min-h-full flex-col justify-center p-6 sm:p-8 lg:p-10">
+                    <div className="flex min-h-full min-w-0 flex-col justify-center p-6 sm:p-8 lg:p-10">
                         {children}
                     </div>
 
                     <div className="relative hidden min-h-full overflow-hidden border-l bg-muted lg:block">
                         <img
                             src="/banner.jpg"
-                            alt="GradeManager banner"
+                            alt=""
                             className="absolute inset-0 h-full w-full object-cover"
                         />
                     </div>

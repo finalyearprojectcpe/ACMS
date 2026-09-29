@@ -9,16 +9,19 @@ use App\Models\AdvisorProfile;
 use App\Models\AssistantConversation;
 use App\Models\Due;
 use App\Models\StudentDueAssignment;
+use App\Models\StudentJoinRequest;
 use App\Models\StudentProfile;
 use App\Models\StudentSet;
 use App\Models\User;
 use App\Services\AdviserActivityData;
-use App\Services\AdviserAssistantService;
+use App\Services\AdviserJoinRequestData;
+use App\Services\AssistantService;
 use App\Services\CourseDashboardData;
 use App\Services\DashboardAccess;
 use App\Services\DashboardPresenter;
 use App\Services\DueDashboardData;
 use App\Services\ResultDashboardData;
+use App\Services\StudentResultStatement;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -29,13 +32,14 @@ use Inertia\Response as InertiaResponse;
 class DashboardController extends Controller
 {
     private const array ROLE_SECTIONS = [
-        'adviser' => ['home', 'student-sets', 'students', 'courses', 'course-registration', 'results', 'student-dues', 'settings', 'assistant'],
-        'student' => ['home', 'dues', 'course-registration', 'results', 'profile-settings'],
+        'adviser' => ['home', 'student-sets', 'students', 'join-requests', 'courses', 'course-registration', 'results', 'student-dues', 'settings', 'assistant'],
+        'student' => ['home', 'dues', 'course-registration', 'results', 'profile-settings', 'assistant'],
     ];
 
     private const array SECTION_TITLES = [
         'home' => 'Home',
         'students' => 'Students',
+        'join-requests' => 'Student Join Requests',
         'courses' => 'Courses & Results',
         'course-registration' => 'Courses & Results',
         'results' => 'Courses & Results',
@@ -53,8 +57,10 @@ class DashboardController extends Controller
         private readonly CourseDashboardData $courses,
         private readonly DueDashboardData $dues,
         private readonly AdviserActivityData $activity,
-        private readonly AdviserAssistantService $assistant,
+        private readonly AdviserJoinRequestData $joins,
+        private readonly AssistantService $assistant,
         private readonly ResultDashboardData $results,
+        private readonly StudentResultStatement $statements,
     ) {}
 
     public function home(Request $request): InertiaResponse
@@ -135,7 +141,7 @@ class DashboardController extends Controller
         $advisor = $this->access->advisor($request);
         $student = $advisor->students()
             ->with(['user', 'studentSet.currentAcademicYear'])
-            ->where('registration_number', $registrationNumber)
+            ->where('registration_number', StudentProfile::registrationNumberFromRoute($registrationNumber))
             ->firstOrFail();
 
         return $this->renderDashboard($request, 'students', overrides: [
@@ -149,11 +155,37 @@ class DashboardController extends Controller
         ]);
     }
 
+    public function joinRequests(Request $request): InertiaResponse
+    {
+        return $this->renderDashboard($request, 'join-requests', overrides: [
+            'adviserJoinRequests' => $this->joins->listing($this->access->advisor($request), $request),
+        ]);
+    }
+
+    public function showJoinRequest(Request $request, StudentJoinRequest $studentJoinRequest): InertiaResponse
+    {
+        return $this->renderDashboard($request, 'join-requests', overrides: [
+            'sectionTitle' => 'Review Student Request',
+            'adviserJoinRequest' => $this->joins->detail($this->access->advisor($request), $studentJoinRequest),
+        ]);
+    }
+
+    public function rejectJoinRequest(Request $request, StudentJoinRequest $studentJoinRequest): InertiaResponse
+    {
+        $detail = $this->joins->detail($this->access->advisor($request), $studentJoinRequest, true);
+        abort_unless($detail['status'] === StudentJoinRequest::StatusPending, 404);
+
+        return $this->renderDashboard($request, 'join-requests', overrides: [
+            'sectionTitle' => 'Return Student Request',
+            'adviserJoinRequest' => $detail,
+        ]);
+    }
+
     public function showStudentSemesterResults(Request $request, string $registrationNumber, string $sessionYears, string $semester): InertiaResponse
     {
         $student = $this->access->advisor($request)->students()
             ->with(['user', 'studentSet.currentAcademicYear'])
-            ->where('registration_number', $registrationNumber)
+            ->where('registration_number', StudentProfile::registrationNumberFromRoute($registrationNumber))
             ->firstOrFail();
         $this->access->semesterByRoute($student->studentSet, $sessionYears, $semester);
 
@@ -162,9 +194,23 @@ class DashboardController extends Controller
             'activeStudentSetId' => (int) $student->student_set_id,
             'studentRecordResults' => [
                 'student' => $this->presenter->adviserStudent($student),
-                'backUrl' => route('dashboard.students.show', ['registrationNumber' => $student->registration_number]),
+                'studentProfileUrl' => route('dashboard.students.show', ['registrationNumber' => $student->routeRegistrationNumber()]),
                 'results' => $this->results->studentResults($student, $sessionYears, $semester, true),
             ],
+        ]);
+    }
+
+    public function previewStudentResultStatement(Request $request, string $registrationNumber): InertiaResponse
+    {
+        $student = $this->access->advisor($request)->students()
+            ->where('registration_number', StudentProfile::registrationNumberFromRoute($registrationNumber))
+            ->firstOrFail();
+
+        return $this->renderDashboard($request, 'students', overrides: [
+            'sectionTitle' => 'Result Statement',
+            'activeStudentSetId' => (int) $student->student_set_id,
+            'adviserStudents' => null,
+            'studentRecordStatement' => $this->statements->build($student),
         ]);
     }
 
@@ -469,11 +515,13 @@ class DashboardController extends Controller
 
     public function assistantConversation(Request $request, AssistantConversation $assistantConversation): InertiaResponse
     {
-        $advisor = $this->access->advisor($request);
-        abort_unless((int) $assistantConversation->advisor_profile_id === (int) $advisor->id, 404);
+        $user = $this->access->user($request);
+        $owner = $user->isAdviser() ? $this->access->advisor($request) : $this->access->student($request);
+        $ownerColumn = $user->isAdviser() ? 'advisor_profile_id' : 'student_profile_id';
+        abort_unless((int) $assistantConversation->{$ownerColumn} === (int) $owner->id, 404);
 
         return $this->renderDashboard($request, 'assistant', overrides: [
-            'adviserAssistant' => $this->assistantPayload($advisor, $assistantConversation),
+            'adviserAssistant' => $this->assistantPayload($owner, $assistantConversation),
         ]);
     }
 
@@ -557,14 +605,20 @@ class DashboardController extends Controller
             'role' => $role,
             'roleLabel' => $role === 'adviser' ? 'Course Adviser' : 'Student',
             'section' => $section,
-            'sectionTitle' => $role === 'student' && $section === 'results' ? 'Results' : self::SECTION_TITLES[$section],
+            'sectionTitle' => match (true) {
+                $role === 'student' && $section === 'results' => 'Results',
+                $role === 'student' && $section === 'course-registration' => 'Course Registration',
+                default => self::SECTION_TITLES[$section],
+            },
             'advisedSets' => $setPayloads,
             'activeStudentSetId' => $selectedSet?->id,
             'adviserHome' => $role === 'adviser' && $section === 'home' ? $this->activity->home($advisor) : null,
+            'adviserJoinRequests' => null,
+            'adviserJoinRequest' => null,
             'adviserRegistrationActivity' => null,
             'adviserPaymentHistory' => null,
-            'adviserAssistant' => ! array_key_exists('adviserAssistant', $overrides) && $role === 'adviser' && $section === 'assistant'
-                ? $this->assistantPayload($advisor)
+            'adviserAssistant' => ! array_key_exists('adviserAssistant', $overrides) && $section === 'assistant'
+                ? $this->assistantPayload($role === 'adviser' ? $advisor : $student)
                 : null,
             'adviserStudentSets' => $role === 'adviser' && $section === 'student-sets'
                 ? $this->presenter->adviserStudentSets($request->routeIs('student-sets.create'))
@@ -591,12 +645,18 @@ class DashboardController extends Controller
             'adviserProfile' => $role === 'adviser' && $section === 'settings' ? $this->presenter->adviserProfile($advisor) : null,
             'studentRecord' => null,
             'studentRecordResults' => null,
+            'studentRecordStatement' => null,
             'studentSetSettings' => null,
             'student' => $student instanceof StudentProfile ? $this->presenter->studentHeader($student) : null,
             'studentProfile' => $role === 'student' && $section === 'profile-settings' ? $this->presenter->studentProfile($student) : null,
-            'studentHome' => $role === 'student' && $section === 'home' ? $this->courses->studentHome($student) : null,
+            'studentHome' => $role === 'student' && $section === 'home'
+                ? $this->courses->studentHome($student) + [
+                    'cgpa' => $this->results->studentOverview($student)['cgpa'],
+                    'pendingDues' => $this->dues->studentPendingDues($student),
+                ] : null,
             'studentDues' => $role === 'student' && $section === 'dues' ? $this->dues->studentDues($student) : null,
-            'studentCourseRegistration' => $role === 'student' && $section === 'course-registration' ? $this->courses->studentRegistration($student) : null,
+            'studentCourseRegistration' => $role === 'student' && $section === 'course-registration'
+                ? $this->courses->studentRegistration($student, $this->resultFilter($request, 'session'), $this->resultFilter($request, 'semester')) : null,
             'studentResults' => $role === 'student' && $section === 'results'
                 ? $this->results->studentResults($student, $this->resultFilter($request, 'session'), $this->resultFilter($request, 'semester'), false)
                 : null,
@@ -610,9 +670,9 @@ class DashboardController extends Controller
         return $user->account_type === AccountType::Adviser ? 'adviser' : 'student';
     }
 
-    private function assistantPayload(AdvisorProfile $advisor, ?AssistantConversation $selected = null): array
+    private function assistantPayload(AdvisorProfile|StudentProfile $owner, ?AssistantConversation $selected = null): array
     {
-        $history = $advisor->assistantConversations()->latest('updated_at')->limit(50)->get();
+        $history = $owner->assistantConversations()->latest('updated_at')->limit(50)->get();
         $selected?->load('messages');
 
         return [

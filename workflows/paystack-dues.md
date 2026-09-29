@@ -9,7 +9,7 @@ Course advisers create dues for the student sets they manage. Each adviser conne
 ## Paystack Setup
 
 1. Create or select the Paystack business account used by GradeManager.
-2. Copy the secret key and public key from the Paystack dashboard.
+2. Copy the secret key from the Paystack dashboard.
 3. Confirm split payments and subaccounts are available for the Paystack account.
 4. Add the webhook URL in Paystack:
 
@@ -17,7 +17,6 @@ Course advisers create dues for the student sets they manage. Each adviser conne
 https://<application-domain>/paystack/webhook
 ```
 
-5. Keep the Paystack dashboard available to course advisers through the Paystack Settings page.
 
 ## Environment Variables
 
@@ -25,9 +24,7 @@ Set these variables in production:
 
 ```env
 PAYSTACK_BASE_URL=https://api.paystack.co
-PAYSTACK_DASHBOARD_URL=https://dashboard.paystack.com
 PAYSTACK_SECRET_KEY=
-PAYSTACK_PUBLIC_KEY=
 PAYSTACK_PAYMENT_CHANNELS=card,bank,ussd,bank_transfer
 PAYSTACK_SPLIT_FEE_BEARER=subaccount
 ```
@@ -36,7 +33,7 @@ PAYSTACK_SPLIT_FEE_BEARER=subaccount
 
 ## Adviser Workflow
 
-1. The adviser opens `Paystack Settings`.
+1. The adviser opens `Settings` and connects a payout account.
 2. The adviser enters the bank, account number, and a clear label.
 3. GradeManager loads supported Nigerian banks from Paystack and caches the list.
 4. GradeManager resolves the bank account with Paystack.
@@ -84,7 +81,7 @@ After configuring production secrets:
 
 1. Sign in as a course adviser.
 2. Connect the adviser's payout account.
-3. Confirm the account shows as active in Paystack Settings.
+3. Confirm the account is verified in Settings.
 4. Create and publish a due for an assigned set.
 5. Sign in as a student from the set and start payment.
 6. Confirm Paystack checkout opens.

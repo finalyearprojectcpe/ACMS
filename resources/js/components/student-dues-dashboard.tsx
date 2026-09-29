@@ -1,11 +1,11 @@
 import { Link } from '@inertiajs/react';
-import { RiCheckboxCircleFill } from '@remixicon/react';
-import type { ReactNode } from 'react';
+import { RiInformationLine } from '@remixicon/react';
+import { useState } from 'react';
 
 import { DashboardMetric } from '@/components/dashboard-metric';
 import { ReceiptAction } from '@/components/receipt-action';
 import { TableEmptyRow } from '@/components/table-empty-row';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import {
     Table,
     TableBody,
@@ -14,180 +14,167 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useReceiptWorkPolling } from '@/hooks/use-receipt-work-polling';
-import type {
-    DashboardStudentDue,
-    DashboardStudentDues,
-    DashboardStudentPaidDue,
-} from '@/types';
+import type { DashboardStudentDueRow, DashboardStudentDues } from '@/types';
 
-type StudentDuesDashboardProps = {
-    dues: DashboardStudentDues;
-};
+type DueFilter = 'unpaid' | 'paid' | 'waived';
 
-export function StudentDuesDashboard({ dues }: StudentDuesDashboardProps) {
-    const hasReceiptWork = dues.paid.some(
+export function StudentDuesDashboard({ dues }: { dues: DashboardStudentDues }) {
+    const [filter, setFilter] = useState<DueFilter>('unpaid');
+    const hasReceiptWork = dues.rows.some(
         (due) =>
-            ['pending', 'processing'].includes(due.receiptStatus ?? '') ||
-            ['queued', 'processing', 'delayed'].includes(
-                due.receiptEmailStatus ?? '',
-            ),
+            due.status === 'Paid' &&
+            (['pending', 'processing'].includes(due.receiptStatus ?? '') ||
+                ['queued', 'processing', 'delayed'].includes(
+                    due.receiptEmailStatus ?? '',
+                )),
     );
     useReceiptWorkPolling(hasReceiptWork);
 
+    const rows = dues.rows.filter((due) => due.status.toLowerCase() === filter);
+
     return (
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-            <div className="grid gap-3 md:grid-cols-2">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+            <div className="grid gap-3 sm:grid-cols-2">
                 <DashboardMetric
-                    label="Paid Amount"
+                    label="Paid"
                     value={dues.paidAmount}
-                    detail={`${dues.paid.length} completed payments`}
+                    detail={`out of ${dues.totalAmount} payable`}
                 />
-                <DashboardMetric
-                    label="Total Dues"
-                    value={dues.totalDues}
-                    detail="Unpaid and paid records"
-                />
+                <DashboardMetric label="Unpaid Dues" value={dues.unpaidCount} />
             </div>
-
-            <DuesCard title="Unpaid Dues">
-                <PendingDuesTable dues={dues.pending} />
-            </DuesCard>
-
-            <DuesCard title="Paid Dues">
-                <PaidDuesTable dues={dues.paid} />
-            </DuesCard>
+            <section className="min-w-0">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+                    <h1 className="text-base font-semibold">Dues</h1>
+                    <Tabs
+                        value={filter}
+                        onValueChange={(value) => setFilter(value as DueFilter)}
+                    >
+                        <TabsList aria-label="Filter dues by status">
+                            <TabsTrigger value="unpaid">Unpaid</TabsTrigger>
+                            <TabsTrigger value="paid">Paid</TabsTrigger>
+                            <TabsTrigger value="waived">Waived</TabsTrigger>
+                        </TabsList>
+                    </Tabs>
+                </div>
+                <div className="mt-4 border border-border">
+                    <Table className="min-w-[620px] text-sm">
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="px-4">Due</TableHead>
+                                <TableHead className="w-32 text-right">
+                                    Amount
+                                </TableHead>
+                                <TableHead className="w-28 text-center">
+                                    Status
+                                </TableHead>
+                                <TableHead className="w-36 pr-4 text-right">
+                                    Action
+                                </TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {rows.length ? (
+                                rows.map((due) => (
+                                    <DueRow key={due.id} due={due} />
+                                ))
+                            ) : (
+                                <TableEmptyRow colSpan={4}>
+                                    No {filter} dues.
+                                </TableEmptyRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
+            </section>
         </div>
     );
 }
 
-function DuesCard({ title, children }: { title: string; children: ReactNode }) {
+function DueRow({ due }: { due: DashboardStudentDueRow }) {
     return (
-        <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
-            <CardHeader className="border-b border-border">
-                <CardTitle>{title}</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">{children}</CardContent>
-        </Card>
-    );
-}
-
-function PendingDuesTable({ dues }: { dues: DashboardStudentDue[] }) {
-    return (
-        <Table className="text-sm">
-            <TableHeader>
-                <TableRow>
-                    <TableHead className="w-[30%] px-4">Name</TableHead>
-                    <TableHead className="hidden md:table-cell">
-                        Description
-                    </TableHead>
-                    <TableHead className="hidden w-[16%] text-center md:table-cell">
-                        Due Date
-                    </TableHead>
-                    <TableHead className="w-[14%] text-center">
-                        Amount
-                    </TableHead>
-                    <TableHead className="w-[14%] pr-4 text-right">
-                        Action
-                    </TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                {dues.length > 0 ? (
-                    dues.map((due) => (
-                        <TableRow key={due.name}>
-                            <TableCell className="px-4 font-medium">
-                                {due.name}
-                            </TableCell>
-                            <TableCell className="hidden max-w-[28rem] truncate text-muted-foreground md:table-cell">
-                                {due.description}
-                            </TableCell>
-                            <TableCell className="hidden text-center tabular-nums md:table-cell">
-                                {due.dueDate ?? 'Not set'}
-                            </TableCell>
-                            <TableCell className="text-center font-semibold tabular-nums">
-                                {due.amount}
-                            </TableCell>
-                            <TableCell className="pr-4 text-right">
-                                {due.paymentUrl ? (
-                                    <Link
-                                        href={due.paymentUrl}
-                                        method="post"
-                                        as="button"
-                                        className="text-xs font-medium text-link"
-                                    >
-                                        {due.paymentActionLabel}
-                                    </Link>
-                                ) : (
-                                    <span
-                                        className="text-xs text-muted-foreground"
-                                        title={
-                                            due.paymentUnavailableReason ??
-                                            undefined
-                                        }
-                                    >
-                                        Unavailable
-                                    </span>
-                                )}
-                            </TableCell>
-                        </TableRow>
-                    ))
-                ) : (
-                    <TableEmptyRow colSpan={5}>No unpaid dues.</TableEmptyRow>
-                )}
-            </TableBody>
-        </Table>
-    );
-}
-
-function PaidDuesTable({ dues }: { dues: DashboardStudentPaidDue[] }) {
-    return (
-        <Table className="text-sm">
-            <TableHeader>
-                <TableRow>
-                    <TableHead className="w-[26%] px-4">Name</TableHead>
-                    <TableHead className="hidden md:table-cell">
-                        Description
-                    </TableHead>
-                    <TableHead className="w-[14%] text-center">
-                        Amount
-                    </TableHead>
-                    <TableHead className="w-[14%] text-center">
-                        Paid At
-                    </TableHead>
-                    <TableHead className="w-[16%] pr-4 text-right">
-                        Receipt
-                    </TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                {dues.length > 0 ? (
-                    dues.map((due) => (
-                        <TableRow key={`${due.name}-${due.paidAt}`}>
-                            <TableCell className="px-4 font-medium">
-                                <span className="flex min-w-0 items-center gap-2">
-                                    <RiCheckboxCircleFill className="size-4 shrink-0 text-link" />
-                                    <span className="truncate">{due.name}</span>
-                                </span>
-                            </TableCell>
-                            <TableCell className="hidden max-w-[28rem] truncate text-muted-foreground md:table-cell">
-                                {due.description}
-                            </TableCell>
-                            <TableCell className="text-center font-semibold tabular-nums">
-                                {due.amount}
-                            </TableCell>
-                            <TableCell className="text-center tabular-nums">
-                                {due.paidAt}
-                            </TableCell>
-                            <TableCell className="pr-4 text-right">
-                                <ReceiptAction receipt={due} />
-                            </TableCell>
-                        </TableRow>
-                    ))
-                ) : (
-                    <TableEmptyRow colSpan={5}>No paid dues.</TableEmptyRow>
-                )}
-            </TableBody>
-        </Table>
+        <TableRow>
+            <TableCell className="px-4 whitespace-normal">
+                <span className="font-medium">{due.name}</span>
+                {due.paidAt ? (
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                        Paid {due.paidAt}
+                    </span>
+                ) : null}
+            </TableCell>
+            <TableCell className="text-right font-medium tabular-nums">
+                {due.amount}
+            </TableCell>
+            <TableCell className="text-center">
+                <div className="inline-flex items-center gap-1">
+                    <Badge
+                        variant={
+                            due.status === 'Unpaid'
+                                ? 'destructive'
+                                : 'secondary'
+                        }
+                        className={
+                            due.status === 'Paid'
+                                ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                                : undefined
+                        }
+                    >
+                        {due.status}
+                    </Badge>
+                    {due.status === 'Waived' && due.waiverReason ? (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <button
+                                    type="button"
+                                    aria-label={`Reason ${due.name} was waived`}
+                                    className="text-muted-foreground"
+                                >
+                                    <RiInformationLine className="size-4" />
+                                </button>
+                            </TooltipTrigger>
+                            <TooltipContent>{due.waiverReason}</TooltipContent>
+                        </Tooltip>
+                    ) : null}
+                </div>
+            </TableCell>
+            <TableCell className="pr-4 text-right">
+                {due.status === 'Unpaid' ? (
+                    due.paymentUrl ? (
+                        <Link
+                            href={due.paymentUrl}
+                            method="post"
+                            as="button"
+                            className="font-medium text-link hover:underline"
+                        >
+                            {due.paymentActionLabel ?? 'Pay now'}
+                        </Link>
+                    ) : (
+                        <span
+                            className="text-muted-foreground"
+                            title={due.paymentUnavailableReason ?? undefined}
+                        >
+                            Unavailable
+                        </span>
+                    )
+                ) : due.status === 'Paid' && due.receiptStatus !== undefined ? (
+                    <ReceiptAction
+                        receipt={{
+                            receiptStatus: due.receiptStatus ?? null,
+                            receiptUrl: due.receiptUrl ?? null,
+                            receiptRetryUrl: due.receiptRetryUrl ?? null,
+                            receiptEmailStatus: due.receiptEmailStatus ?? null,
+                            receiptEmailRetryUrl:
+                                due.receiptEmailRetryUrl ?? null,
+                        }}
+                    />
+                ) : null}
+            </TableCell>
+        </TableRow>
     );
 }

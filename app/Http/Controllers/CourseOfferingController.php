@@ -11,7 +11,6 @@ use App\Services\DashboardAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class CourseOfferingController extends Controller
@@ -44,10 +43,7 @@ class CourseOfferingController extends Controller
                 $course = $set->courses()->create([
                     'code' => $validated['code'],
                     'title' => $validated['title'],
-                    'slug' => Str::slug($validated['code'].' '.$validated['title']),
                 ]);
-            } else {
-                $course->update(['title' => $validated['title']]);
             }
 
             $offering = $academicSessionSemester->courseOfferings()->create([
@@ -80,6 +76,12 @@ class CourseOfferingController extends Controller
         $courseOffering = $this->access->courseOfferingByRoute($set, $period, $courseCode);
         $validated = $request->validated();
 
+        if ($courseOffering->registrationItems()->exists()) {
+            throw ValidationException::withMessages([
+                'course' => 'This course is part of a student registration. Its details cannot be changed here.',
+            ]);
+        }
+
         if ($set->courses()
             ->where('code', $validated['code'])
             ->whereKeyNot($courseOffering->course_id)
@@ -90,11 +92,21 @@ class CourseOfferingController extends Controller
         }
 
         DB::transaction(function () use ($set, $courseOffering, $validated): void {
-            $courseOffering->course->update([
-                'code' => $validated['code'],
-                'title' => $validated['title'],
-                'slug' => Str::slug($validated['code'].' '.$validated['title']),
-            ]);
+            $course = Course::query()->lockForUpdate()->findOrFail($courseOffering->course_id);
+            $hasStudentRecords = $course->offerings()->whereHas('registrationItems')->exists();
+
+            if ($hasStudentRecords && $course->code !== $validated['code']) {
+                throw ValidationException::withMessages([
+                    'code' => 'This course code is already used in student records. Keep the code and edit only this semester.',
+                ]);
+            }
+
+            if (! $hasStudentRecords) {
+                $course->update([
+                    'code' => $validated['code'],
+                    'title' => $validated['title'],
+                ]);
+            }
             $courseOffering->update([
                 'course_title' => $validated['title'],
                 'credit_units' => (int) $validated['credit_units'],

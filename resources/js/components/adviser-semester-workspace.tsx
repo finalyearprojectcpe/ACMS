@@ -14,17 +14,7 @@ import { ActionLink } from '@/components/action-link';
 import { RegistrationsTable } from '@/components/adviser-course-registration-dashboard';
 import { CourseTable } from '@/components/adviser-course-schedules-dashboard';
 import { SetAcademicPeriodNavigation } from '@/components/set-academic-period-navigation';
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-    AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
@@ -44,11 +34,11 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { WorkspaceSectionTabs } from '@/components/workspace-section-tabs';
 import {
     sessionRouteYears,
     studentSetRouteParameters,
 } from '@/lib/student-sets';
-import { cn } from '@/lib/utils';
 import type {
     DashboardAdviserCourseRegistration,
     DashboardAdviserCourseSchedules,
@@ -153,7 +143,7 @@ export function AdviserSemesterWorkspace({
 
     return (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <header className="border-b pb-4">
+            <header className="shrink-0 border-b">
                 <div>
                     <h1 className="text-xl font-semibold">
                         Courses &amp; Results
@@ -162,6 +152,31 @@ export function AdviserSemesterWorkspace({
                         {set.name}
                     </p>
                 </div>
+                {sessions.length > 0 && selectedSession && selectedSemester ? (
+                    <WorkspaceSectionTabs
+                        label="Courses and results sections"
+                        activeTab={view}
+                        className="mt-4 w-full"
+                        tabs={[
+                            {
+                                key: 'courses',
+                                label: 'Course Schedule',
+                                mobileLabel: 'Courses',
+                                href: routeFor('courses'),
+                            },
+                            {
+                                key: 'registrations',
+                                label: 'Registrations',
+                                href: routeFor('registrations'),
+                            },
+                            {
+                                key: 'results',
+                                label: 'Results',
+                                href: routeFor('results'),
+                            },
+                        ]}
+                    />
+                ) : null}
             </header>
             {sessions.length === 0 ? (
                 <div className="grid flex-1 place-content-center gap-3 text-center">
@@ -224,38 +239,12 @@ export function AdviserSemesterWorkspace({
                                             }
                                             onCheckedChange={changeRegistration}
                                         />
-                                        Registration open
+                                        Registration{' '}
+                                        {selectedSemester.registrationEnabled
+                                            ? 'open'
+                                            : 'closed'}
                                     </label>
                                 </div>
-                                <nav
-                                    aria-label="Semester work"
-                                    className="flex w-full shrink-0 justify-between gap-3 border-b text-sm"
-                                >
-                                    {(
-                                        [
-                                            'courses',
-                                            'registrations',
-                                            'results',
-                                        ] as const
-                                    ).map((target) => (
-                                        <Link
-                                            key={target}
-                                            href={routeFor(target)}
-                                            className={cn(
-                                                'border-b-2 py-3 font-medium whitespace-nowrap',
-                                                view === target
-                                                    ? 'border-foreground text-foreground'
-                                                    : 'border-transparent text-link hover:border-border',
-                                            )}
-                                        >
-                                            {target === 'courses'
-                                                ? 'Course Schedule'
-                                                : target === 'registrations'
-                                                  ? 'Registrations'
-                                                  : 'Results'}
-                                        </Link>
-                                    ))}
-                                </nav>
                                 {view === 'courses' &&
                                 schedules?.selectedSemester ? (
                                     <CoursesPane
@@ -420,7 +409,6 @@ function RegistrationsPane({
 }
 
 function ResultsPane({ results }: { results: DashboardAdviserResults }) {
-    const [publishing, setPublishing] = useState(false);
     const period = results.period;
 
     if (!period) {
@@ -437,7 +425,7 @@ function ResultsPane({ results }: { results: DashboardAdviserResults }) {
                                 <TableHead>Course</TableHead>
                                 <TableHead>Title</TableHead>
                                 <TableHead className="text-right">
-                                    Grades entered
+                                    Results
                                 </TableHead>
                             </TableRow>
                         </TableHeader>
@@ -462,9 +450,16 @@ function ResultsPane({ results }: { results: DashboardAdviserResults }) {
                                             ) : null}
                                         </TableCell>
                                         <TableCell className="text-right tabular-nums">
-                                            {course.registeredCount
-                                                ? `${course.gradedCount}/${course.registeredCount}`
-                                                : '—'}
+                                            {course.publishedAt ? (
+                                                <Badge
+                                                    variant="outline"
+                                                    className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-300"
+                                                >
+                                                    Published
+                                                </Badge>
+                                            ) : (
+                                                `${course.enteredCount}/${course.registeredCount} entered`
+                                            )}
                                         </TableCell>
                                     </TableRow>
                                 ))
@@ -483,63 +478,6 @@ function ResultsPane({ results }: { results: DashboardAdviserResults }) {
                 </div>
                 <ScrollBar orientation="horizontal" />
             </ScrollArea>
-            {!period.publishedAt ? (
-                <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t py-4">
-                    {!period.publication.canPublish &&
-                    period.publication.reason ? (
-                        <p className="text-sm text-muted-foreground">
-                            {period.publication.reason}
-                        </p>
-                    ) : null}
-                    <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                            <Button
-                                className="ml-auto"
-                                disabled={
-                                    !period.publication.canPublish || publishing
-                                }
-                            >
-                                Publish semester results
-                            </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                            <AlertDialogHeader>
-                                <AlertDialogTitle>
-                                    Publish {period.level} {period.semester}{' '}
-                                    results?
-                                </AlertDialogTitle>
-                                <AlertDialogDescription>
-                                    Students in {results.set.name} will be able
-                                    to see their grades and GPA for the{' '}
-                                    {period.session} Session. Grade corrections
-                                    will be recorded.
-                                </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                                <AlertDialogCancel>
-                                    Keep unpublished
-                                </AlertDialogCancel>
-                                <AlertDialogAction
-                                    disabled={publishing}
-                                    onClick={() => {
-                                        setPublishing(true);
-                                        router.post(
-                                            period.publishUrl,
-                                            {},
-                                            {
-                                                onFinish: () =>
-                                                    setPublishing(false),
-                                            },
-                                        );
-                                    }}
-                                >
-                                    Publish results
-                                </AlertDialogAction>
-                            </AlertDialogFooter>
-                        </AlertDialogContent>
-                    </AlertDialog>
-                </footer>
-            ) : null}
         </div>
     );
 }

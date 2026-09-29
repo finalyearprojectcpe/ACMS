@@ -51,11 +51,11 @@ test('an adviser can close reopen and replace their set signup link', function (
     $originalToken = $set->invite_token;
 
     $this->actingAs($advisor->user)
-        ->patch(route('student-sets.update', $parameters), ['student_signup_enabled' => false, 'current_academic_year_id' => $year->id])
+        ->patch(route('student-sets.update', $parameters), ['student_signup_enabled' => false])
         ->assertRedirect();
     expect($set->refresh()->student_signup_enabled)->toBeFalse();
 
-    $this->patch(route('student-sets.update', $parameters), ['student_signup_enabled' => true, 'current_academic_year_id' => $year->id])
+    $this->patch(route('student-sets.update', $parameters), ['student_signup_enabled' => true])
         ->assertRedirect();
     expect($set->refresh()->student_signup_enabled)->toBeTrue();
 

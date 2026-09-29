@@ -191,11 +191,13 @@ export function StudentProfileDashboard({
                         </section>
                     </CardContent>
 
-                    <CardFooter className="mt-auto justify-end border-t bg-muted/20 px-5 py-4 sm:px-6">
-                        <Button type="submit" disabled={form.processing}>
-                            <RiSave3Line />
-                            {form.processing ? 'Saving...' : 'Save Changes'}
-                        </Button>
+                    <CardFooter className="mt-auto border-0 bg-transparent px-0 pb-0">
+                        <div className="mx-auto flex w-full max-w-3xl justify-end px-5 sm:px-6">
+                            <Button type="submit" disabled={form.processing}>
+                                <RiSave3Line />
+                                {form.processing ? 'Saving...' : 'Save Changes'}
+                            </Button>
+                        </div>
                     </CardFooter>
                 </CardForm>
             </Card>

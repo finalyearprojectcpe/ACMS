@@ -2,8 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\StoreAcademicSessionRequest;
-use App\Http\Requests\UpdateAcademicSessionRequest;
+use App\Http\Requests\AcademicSessionRequest;
 use App\Http\Requests\UpdateSemesterRegistrationRequest;
 use App\Models\AcademicSession;
 use App\Models\AcademicSessionSemester;
@@ -22,7 +21,7 @@ class AcademicSessionController extends Controller
     public function __construct(private readonly DashboardAccess $access) {}
 
     public function store(
-        StoreAcademicSessionRequest $request,
+        AcademicSessionRequest $request,
         string $departmentSlug,
         string $entrySession,
     ): RedirectResponse {
@@ -35,6 +34,13 @@ class AcademicSessionController extends Controller
             $session = $set->academicSessions()->create($this->sessionAttributes($validated));
             $this->syncSemesters($session, $validated);
 
+            if ($set->current_semester_id === null) {
+                $set->update([
+                    'current_academic_year_id' => $session->academic_year_id,
+                    'current_semester_id' => Semester::query()->where('slug', 'first')->firstOrFail()->id,
+                ]);
+            }
+
             return $session;
         });
 
@@ -43,7 +49,7 @@ class AcademicSessionController extends Controller
     }
 
     public function update(
-        UpdateAcademicSessionRequest $request,
+        AcademicSessionRequest $request,
         string $departmentSlug,
         string $entrySession,
         string $sessionYears,
@@ -104,19 +110,20 @@ class AcademicSessionController extends Controller
         $academicSessionSemester->loadMissing(['academicSession', 'courseOfferings']);
         $enabled = $request->boolean('registration_enabled');
 
-        if ($enabled && $academicSessionSemester->results_published_at !== null) {
-            throw ValidationException::withMessages([
-                'registration_enabled' => 'Results are already published for this semester. Registration cannot be reopened.',
-            ]);
-        }
-
-        if ($enabled && $academicSessionSemester->courseOfferings->isEmpty()) {
-            throw ValidationException::withMessages([
-                'registration_enabled' => 'Add at least one course before opening registration.',
-            ]);
-        }
-
         DB::transaction(function () use ($set, $academicSessionSemester, $enabled): void {
+            $lockedSemester = AcademicSessionSemester::query()->lockForUpdate()->findOrFail($academicSessionSemester->id);
+            if ($enabled && $lockedSemester->courseOfferings()->whereNotNull('results_published_at')->exists()) {
+                throw ValidationException::withMessages([
+                    'registration_enabled' => 'A subject has already been published for this semester. Registration cannot be reopened.',
+                ]);
+            }
+
+            if ($enabled && $lockedSemester->courseOfferings()->doesntExist()) {
+                throw ValidationException::withMessages([
+                    'registration_enabled' => 'Add at least one course before opening registration.',
+                ]);
+            }
+
             if ($enabled) {
                 AcademicSessionSemester::query()
                     ->whereHas('academicSession', fn ($query) => $query->whereBelongsTo($set))
@@ -124,7 +131,7 @@ class AcademicSessionController extends Controller
                     ->update(['registration_enabled' => false]);
             }
 
-            $academicSessionSemester->update(['registration_enabled' => $enabled]);
+            $lockedSemester->update(['registration_enabled' => $enabled]);
         });
 
         return back()->with('success', $enabled

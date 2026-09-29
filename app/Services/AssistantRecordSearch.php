@@ -52,7 +52,7 @@ class AssistantRecordSearch
             ->map(fn (StudentProfile $student): array => [
                 'title' => $student->user->name,
                 'detail' => $student->registration_number.' · '.$student->studentSet->label(),
-                'url' => route('dashboard.students.show', ['registrationNumber' => $student->registration_number]),
+                'url' => route('dashboard.students.show', ['registrationNumber' => $student->routeRegistrationNumber()]),
             ])->all());
     }
 

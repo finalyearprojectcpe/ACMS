@@ -14,6 +14,7 @@ return new class extends Migration
         // Records each academic session a course adviser creates for one student set and level.
         Schema::create('academic_sessions', function (Blueprint $table) {
             $table->id();
+            $table->ulid('public_id')->nullable()->unique();
             $table->foreignId('student_set_id')->constrained()->cascadeOnDelete();
             $table->foreignId('academic_year_id')->constrained()->restrictOnDelete();
             $table->unsignedSmallInteger('start_year');

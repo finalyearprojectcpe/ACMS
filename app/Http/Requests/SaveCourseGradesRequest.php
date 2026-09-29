@@ -18,7 +18,11 @@ class SaveCourseGradesRequest extends FormRequest
     {
         return [
             'grades' => ['required', 'array'],
-            'grades.*' => ['nullable', Rule::enum(Grade::class)],
+            'grades.*' => ['nullable', Rule::in([
+                ...array_map(fn (Grade $grade): string => $grade->value, Grade::cases()),
+                'missing_script',
+            ])],
+            'reason' => ['nullable', 'string', 'max:1000'],
         ];
     }
 }

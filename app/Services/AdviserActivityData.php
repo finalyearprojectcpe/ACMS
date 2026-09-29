@@ -9,7 +9,10 @@ use Illuminate\Http\Request;
 
 class AdviserActivityData
 {
-    public function __construct(private readonly CurrencyFormatter $currency) {}
+    public function __construct(
+        private readonly CurrencyFormatter $currency,
+        private readonly AdviserJoinRequestData $joins,
+    ) {}
 
     public function home(AdvisorProfile $advisor): array
     {
@@ -20,6 +23,7 @@ class AdviserActivityData
 
         return [
             'hasSets' => $advisor->studentSets()->exists(),
+            ...$this->joins->home($advisor),
             'pendingCount' => (clone $registrations)->count(),
             'pendingRegistrations' => $registrations->limit(5)->get()->map($this->registrationRow(...))->all(),
             'paymentCount' => (clone $payments)->count(),
@@ -92,9 +96,10 @@ class AdviserActivityData
             'id' => (int) $registration->id,
             'studentName' => $student->user->name,
             'studentAvatar' => $student->user->profilePhotoUrl(),
-            'studentUrl' => route('dashboard.students.show', ['registrationNumber' => $student->registration_number]),
+            'studentUrl' => route('dashboard.students.show', ['registrationNumber' => $student->routeRegistrationNumber()]),
             'set' => $student->studentSet->label(),
-            'period' => $semester->academicSession->academicYear->name.' '.$semester->semester->name.' · '.$semester->academicSession->label().' Session',
+            'levelSemester' => $semester->academicSession->academicYear->name.' '.$semester->semester->name,
+            'session' => $semester->academicSession->label().' Session',
             'status' => match ($registration->status) {
                 CourseRegistration::StatusApproved => 'Approved',
                 CourseRegistration::StatusReturned => 'Changes requested',
@@ -113,7 +118,7 @@ class AdviserActivityData
             'id' => (int) $payment->id,
             'studentName' => $student->user->name,
             'studentAvatar' => $student->user->profilePhotoUrl(),
-            'studentUrl' => route('dashboard.students.show', ['registrationNumber' => $student->registration_number]),
+            'studentUrl' => route('dashboard.students.show', ['registrationNumber' => $student->routeRegistrationNumber()]),
             'set' => $student->studentSet->label(),
             'dueName' => $payment->assignment->due->title,
             'dueUrl' => route('dashboard.dues.show', ['due' => $payment->assignment->due]),

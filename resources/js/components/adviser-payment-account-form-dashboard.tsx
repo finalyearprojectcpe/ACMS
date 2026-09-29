@@ -11,8 +11,6 @@ import type { FormEvent } from 'react';
 import { useState } from 'react';
 
 import { storePaymentAccount } from '@/actions/App/Http/Controllers/AdviserAccountController';
-import { section as dashboardSection } from '@/actions/App/Http/Controllers/DashboardController';
-import { ActionLink } from '@/components/action-link';
 import { PaymentAccountSummary } from '@/components/payment-account-summary';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
@@ -114,9 +112,6 @@ export function AdviserPaymentAccountFormDashboard({
         <div
             className={`mx-auto flex w-full flex-col gap-4 ${currentAccount ? 'max-w-5xl' : 'max-w-3xl'}`}
         >
-            <ActionLink href={dashboardSection({ section: 'settings' })}>
-                Back to Settings
-            </ActionLink>
             <div className="flex flex-col gap-2">
                 <h1 className="text-xl font-semibold tracking-normal">
                     {currentAccount

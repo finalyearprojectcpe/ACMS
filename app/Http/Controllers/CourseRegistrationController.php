@@ -4,9 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ReturnCourseRegistrationRequest;
 use App\Http\Requests\StoreCourseRegistrationRequest;
+use App\Models\AcademicSessionSemester;
 use App\Models\CourseRegistration;
 use App\Models\CourseRegistrationItem;
-use App\Services\AcademicContextService;
 use App\Services\CourseRegistrationPlanner;
 use App\Services\DashboardAccess;
 use Illuminate\Http\RedirectResponse;
@@ -18,7 +18,6 @@ class CourseRegistrationController extends Controller
 {
     public function __construct(
         private readonly DashboardAccess $access,
-        private readonly AcademicContextService $academicContext,
     ) {}
 
     public function store(
@@ -26,8 +25,18 @@ class CourseRegistrationController extends Controller
         CourseRegistrationPlanner $planner,
     ): RedirectResponse {
         $student = $this->access->student($request);
-        $semester = $this->academicContext->requireRegistrationContext($student);
         $validated = $request->validated();
+        $semester = $student->studentSet->academicSessions()
+            ->where('start_year', (int) substr($validated['session'], 0, 4))
+            ->where('end_year', (int) substr($validated['session'], 4, 4))
+            ->first()?->semesterInstances()
+            ->whereHas('semester', fn ($query) => $query->where('slug', $validated['semester']))
+            ->first();
+        if (! $semester instanceof AcademicSessionSemester || ! $semester->registration_enabled) {
+            throw ValidationException::withMessages([
+                'registration' => 'Course registration is closed for this semester.',
+            ]);
+        }
         $selected = collect($planner->selectedOptionsFromPayload(
             $planner->plan($student, $semester),
             $validated['items'],
@@ -70,7 +79,11 @@ class CourseRegistrationController extends Controller
             }
         });
 
-        return to_route('dashboard.section', ['section' => 'course-registration'])
+        return to_route('dashboard.section', [
+            'section' => 'course-registration',
+            'session' => $validated['session'],
+            'semester' => $validated['semester'],
+        ])
             ->with('success', $validated['action'] === 'submit'
                 ? 'Course registration sent to your course adviser.'
                 : 'Course registration saved.');
@@ -91,11 +104,6 @@ class CourseRegistrationController extends Controller
             'academicSessionSemester.academicSession',
             'items',
         ]);
-        if ($courseRegistration->academicSessionSemester->results_published_at !== null) {
-            throw ValidationException::withMessages([
-                'registration' => 'Results for this semester are already published. This registration cannot be approved.',
-            ]);
-        }
         $planner->selectedOptionsFromPayload(
             $planner->plan(
                 $courseRegistration->studentProfile,
@@ -107,11 +115,20 @@ class CourseRegistrationController extends Controller
             $courseRegistration->academicSessionSemester->maximum_course_units,
         );
 
-        $courseRegistration->forceFill([
-            'status' => CourseRegistration::StatusApproved,
-            'feedback_note' => null,
-            'reviewed_at' => now(),
-        ])->save();
+        DB::transaction(function () use ($courseRegistration): void {
+            AcademicSessionSemester::query()->lockForUpdate()->findOrFail($courseRegistration->academic_session_semester_id);
+            if ($courseRegistration->items()->whereHas('courseOffering', fn ($query) => $query->whereNotNull('results_published_at'))->exists()) {
+                throw ValidationException::withMessages([
+                    'registration' => 'A subject in this registration has already been published. Its student list cannot be changed.',
+                ]);
+            }
+
+            $courseRegistration->forceFill([
+                'status' => CourseRegistration::StatusApproved,
+                'feedback_note' => null,
+                'reviewed_at' => now(),
+            ])->save();
+        });
 
         return to_route('dashboard.course-registration.show', $courseRegistration->reviewRouteParameters())
             ->with('success', 'Course registration approved.');

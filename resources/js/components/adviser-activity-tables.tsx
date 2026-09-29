@@ -16,6 +16,20 @@ import type {
     DashboardAdviserHomePayment,
 } from '@/types';
 
+function RegistrationPeriod({ item }: { item: DashboardActivityRegistration }) {
+    return (
+        <span className="block">
+            <span className="block font-medium text-foreground">
+                {item.levelSemester}
+            </span>
+            <span className="block text-xs text-muted-foreground">
+                {item.session}
+                {item.submittedAt && ` · ${item.submittedAt}`}
+            </span>
+        </span>
+    );
+}
+
 export function ActivityRegistrationsTable({
     registrations,
     showStatus = false,
@@ -80,11 +94,8 @@ export function ActivityRegistrationsTable({
                                         href={item.studentUrl}
                                     />
                                     {compact && (
-                                        <span className="mt-1 block pl-11 text-xs text-muted-foreground sm:hidden">
-                                            {item.period}
-                                            <span className="block">
-                                                {item.submittedAt}
-                                            </span>
+                                        <span className="mt-1 block pl-11 text-xs sm:hidden">
+                                            <RegistrationPeriod item={item} />
                                         </span>
                                     )}
                                 </TableCell>
@@ -95,18 +106,7 @@ export function ActivityRegistrationsTable({
                                             : undefined
                                     }
                                 >
-                                    <span
-                                        className={
-                                            compact
-                                                ? 'line-clamp-2 font-medium'
-                                                : 'font-medium'
-                                        }
-                                    >
-                                        {item.period}
-                                    </span>
-                                    <span className="block text-xs text-muted-foreground">
-                                        {item.submittedAt}
-                                    </span>
+                                    <RegistrationPeriod item={item} />
                                 </TableCell>
                                 {showStatus && (
                                     <TableCell>
@@ -278,7 +278,7 @@ export function ActivityPaymentsTable({
                             </TableRow>
                         ))
                     ) : (
-                        <TableEmptyRow colSpan={showSet ? 5 : 4}>
+                        <TableEmptyRow colSpan={compact ? 3 : showSet ? 5 : 4}>
                             No completed payments yet.
                         </TableEmptyRow>
                     )}

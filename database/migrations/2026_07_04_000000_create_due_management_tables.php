@@ -39,9 +39,11 @@ return new class extends Migration
         // Stores dues created by a course adviser for one of their student sets.
         Schema::create('dues', function (Blueprint $table): void {
             $table->id();
+            $table->ulid('public_id')->nullable()->unique();
             $table->foreignId('advisor_profile_id')->constrained()->cascadeOnDelete();
             $table->foreignId('student_set_id')->constrained()->restrictOnDelete();
             $table->foreignId('academic_session_id')->constrained()->restrictOnDelete();
+            $table->foreignId('academic_session_semester_id')->nullable()->constrained()->restrictOnDelete();
             $table->foreignId('payment_account_id')->nullable()->constrained()->restrictOnDelete();
             $table->string('title');
             $table->string('description')->nullable();
@@ -55,11 +57,13 @@ return new class extends Migration
 
             $table->index(['student_set_id', 'status']);
             $table->index(['advisor_profile_id', 'academic_session_id']);
+            $table->index(['student_set_id', 'academic_session_semester_id']);
         });
 
         // Tracks whether each student in the set has paid, still owes, or was waived for a due.
         Schema::create('student_due_assignments', function (Blueprint $table): void {
             $table->id();
+            $table->ulid('public_id')->nullable()->unique();
             $table->foreignId('due_id')->constrained()->cascadeOnDelete();
             $table->foreignId('student_profile_id')->constrained()->cascadeOnDelete();
             $table->unsignedInteger('amount_kobo');
@@ -79,6 +83,7 @@ return new class extends Migration
         // Records each Paystack checkout attempt for a student due assignment.
         Schema::create('due_payments', function (Blueprint $table): void {
             $table->id();
+            $table->ulid('public_id')->nullable()->unique();
             $table->foreignId('student_due_assignment_id')->constrained()->cascadeOnDelete();
             $table->foreignId('student_profile_id')->constrained()->cascadeOnDelete();
             $table->foreignId('advisor_profile_id')->constrained()->cascadeOnDelete();

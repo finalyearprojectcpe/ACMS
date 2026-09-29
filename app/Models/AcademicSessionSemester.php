@@ -15,7 +15,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'semester_id',
     'maximum_course_units',
     'registration_enabled',
-    'results_published_at',
 ])]
 class AcademicSessionSemester extends Model
 {
@@ -58,7 +57,6 @@ class AcademicSessionSemester extends Model
         return [
             'maximum_course_units' => 'integer',
             'registration_enabled' => 'boolean',
-            'results_published_at' => 'datetime',
         ];
     }
 }

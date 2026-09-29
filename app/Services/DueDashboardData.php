@@ -167,6 +167,17 @@ class DueDashboardData
         ];
     }
 
+    public function studentPendingDues(StudentProfile $student): array
+    {
+        return $student->dueAssignments()
+            ->with(['due.paymentAccount', 'payments'])
+            ->where('status', StudentDueAssignment::StatusPending)
+            ->whereHas('due', fn ($query) => $query->where('status', Due::StatusPublished))
+            ->latest()->get()
+            ->map(fn (StudentDueAssignment $assignment): array => $this->studentPendingDue($assignment))
+            ->all();
+    }
+
     public function studentDues(StudentProfile $student): array
     {
         $assignments = $student->dueAssignments()
@@ -176,22 +187,36 @@ class DueDashboardData
             ->get();
         $pending = $assignments->where('status', StudentDueAssignment::StatusPending);
         $paid = $assignments->where('status', StudentDueAssignment::StatusPaid);
+        $paidAmount = (int) $paid->sum(
+            fn (StudentDueAssignment $assignment): int => (int) ($assignment->latestPayment?->amount_kobo
+                ?? $assignment->amount_kobo),
+        );
 
         return [
-            'pendingAmount' => $this->presenter->amount((int) $pending->sum('amount_kobo')),
-            'paidAmount' => $this->presenter->amount((int) $paid->sum(
-                fn (StudentDueAssignment $assignment): int => (int) ($assignment->latestPayment?->amount_kobo
-                    ?? $assignment->amount_kobo),
-            )),
-            'totalDues' => $assignments->count(),
-            'pending' => $pending
-                ->map(fn (StudentDueAssignment $assignment): array => $this->studentPendingDue($assignment))
-                ->values()
-                ->all(),
-            'paid' => $paid
-                ->map(fn (StudentDueAssignment $assignment): array => $this->studentPaidDue($assignment))
-                ->values()
-                ->all(),
+            'paidAmount' => $this->presenter->amount($paidAmount),
+            'totalAmount' => $this->presenter->amount($paidAmount + (int) $pending->sum('amount_kobo')),
+            'unpaidCount' => $pending->count(),
+            'rows' => $assignments->map(function (StudentDueAssignment $assignment): array {
+                $row = match ($assignment->status) {
+                    StudentDueAssignment::StatusPaid => $this->studentPaidDue($assignment),
+                    StudentDueAssignment::StatusPending => $this->studentPendingDue($assignment),
+                    default => [
+                        'id' => (int) $assignment->id,
+                        'name' => $assignment->due->title,
+                        'description' => $assignment->due->description,
+                        'amount' => $this->presenter->amount((int) $assignment->amount_kobo),
+                    ],
+                };
+
+                return $row + [
+                    'status' => match ($assignment->status) {
+                        StudentDueAssignment::StatusPaid => 'Paid',
+                        StudentDueAssignment::StatusWaived => 'Waived',
+                        default => 'Unpaid',
+                    },
+                    'waiverReason' => $assignment->waiver_reason,
+                ];
+            })->values()->all(),
         ];
     }
 
@@ -285,7 +310,6 @@ class DueDashboardData
                 ? $this->paymentAccount($due->paymentAccount)
                 : null,
             'detailUrl' => route('dashboard.dues.show', ['due' => $due]),
-            'listUrl' => $this->dueListUrl($due->studentSet, $due->academicSession, $due->academicSessionSemester),
         ];
     }
 

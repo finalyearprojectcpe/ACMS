@@ -24,7 +24,6 @@ import {
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
     Empty,
     EmptyDescription,
@@ -50,7 +49,11 @@ import type {
 } from '@/types';
 
 type Confirmation =
-    | { type: 'current'; session: DashboardStudentSetSession }
+    | {
+          type: 'current';
+          session: DashboardStudentSetSession;
+          semesterId: number;
+      }
     | { type: 'link' }
     | { type: 'remove'; session: DashboardStudentSetSession }
     | null;
@@ -71,7 +74,8 @@ export function StudentSetSettings({
 
     function updateSettings(data: {
         student_signup_enabled?: boolean;
-        current_academic_year_id?: number | null;
+        current_academic_year_id?: number;
+        current_semester_id?: number;
     }) {
         setUpdatingSettings(true);
         router.patch(update.url(parameters), data, {
@@ -81,29 +85,24 @@ export function StudentSetSettings({
         });
     }
 
-    function changeCurrentSession(
+    function changeCurrentPeriod(
         session: DashboardStudentSetSession,
-        checked: boolean,
+        semesterId: number,
     ) {
-        if (!checked) {
-            if (session.isCurrent) {
-                updateSettings({ current_academic_year_id: null });
-            }
+        if (session.isCurrent && session.currentSemesterId === semesterId) {
+            return;
+        }
+
+        if (currentSession?.currentSemesterId) {
+            setConfirmation({ type: 'current', session, semesterId });
 
             return;
         }
 
-        if (session.isCurrent) {
-            return;
-        }
-
-        if (currentSession) {
-            setConfirmation({ type: 'current', session });
-
-            return;
-        }
-
-        updateSettings({ current_academic_year_id: session.level.id });
+        updateSettings({
+            current_academic_year_id: session.level.id,
+            current_semester_id: semesterId,
+        });
     }
 
     function replaceLink() {
@@ -165,17 +164,17 @@ export function StudentSetSettings({
                         </Empty>
                     ) : (
                         <ScrollArea className="h-0 min-h-0 w-full flex-1">
-                            <Table className="min-w-[600px] table-fixed">
+                            <Table className="min-w-[660px] table-fixed">
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead className="w-24 px-4 text-center sm:px-5">
-                                            Current
-                                        </TableHead>
-                                        <TableHead className="w-28">
+                                        <TableHead className="w-28 px-4 sm:px-5">
                                             Level
                                         </TableHead>
                                         <TableHead className="w-40">
                                             Session
+                                        </TableHead>
+                                        <TableHead className="w-56">
+                                            Current Period
                                         </TableHead>
                                         <TableHead className="w-44 pr-4 text-right sm:pr-5">
                                             Actions
@@ -188,26 +187,55 @@ export function StudentSetSettings({
                                             key={session.id}
                                             className="odd:bg-background even:bg-muted/25"
                                         >
-                                            <TableCell className="px-4 text-center sm:px-5">
-                                                <Checkbox
-                                                    checked={session.isCurrent}
-                                                    disabled={busy}
-                                                    aria-label={`${session.isCurrent ? 'Unset' : 'Set'} ${session.level.title} ${session.name} Session as current`}
-                                                    onCheckedChange={(
-                                                        checked,
-                                                    ) =>
-                                                        changeCurrentSession(
-                                                            session,
-                                                            checked === true,
-                                                        )
-                                                    }
-                                                />
-                                            </TableCell>
-                                            <TableCell className="font-medium">
+                                            <TableCell className="px-4 font-medium sm:px-5">
                                                 {session.level.title}
                                             </TableCell>
                                             <TableCell className="tabular-nums">
                                                 {session.name} Session
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex items-center gap-1.5">
+                                                    {session.semesters.map(
+                                                        (semester) => {
+                                                            const selected =
+                                                                session.isCurrent &&
+                                                                session.currentSemesterId ===
+                                                                    semester.id;
+
+                                                            return (
+                                                                <button
+                                                                    key={
+                                                                        semester.id
+                                                                    }
+                                                                    type="button"
+                                                                    disabled={
+                                                                        busy
+                                                                    }
+                                                                    aria-pressed={
+                                                                        selected
+                                                                    }
+                                                                    aria-label={
+                                                                        selected
+                                                                            ? `${session.level.title}, ${semester.name} (${session.name} Session) is current`
+                                                                            : `Make ${session.level.title}, ${semester.name} (${session.name} Session) current`
+                                                                    }
+                                                                    onClick={() =>
+                                                                        changeCurrentPeriod(
+                                                                            session,
+                                                                            semester.id,
+                                                                        )
+                                                                    }
+                                                                    className={`inline-flex min-h-9 min-w-14 items-center justify-center border-2 px-2 text-sm font-bold transition-colors disabled:opacity-50 ${selected ? 'border-emerald-700 bg-emerald-700 text-white dark:border-emerald-500 dark:bg-emerald-600' : 'border-border bg-background text-foreground hover:border-emerald-600 hover:text-emerald-700 dark:hover:text-emerald-300'}`}
+                                                                >
+                                                                    {semester.slug ===
+                                                                    'first'
+                                                                        ? '1st'
+                                                                        : '2nd'}
+                                                                </button>
+                                                            );
+                                                        },
+                                                    )}
+                                                </div>
                                             </TableCell>
                                             <TableCell className="pr-4 text-right sm:pr-5">
                                                 <div className="inline-flex items-center gap-3">
@@ -286,7 +314,7 @@ export function StudentSetSettings({
                                 ? 'Replace the invite link?'
                                 : confirmation?.type === 'remove'
                                   ? `Remove ${confirmation.session.name} Session?`
-                                  : 'Change the current session?'}
+                                  : 'Change the current period?'}
                         </AlertDialogTitle>
                         <AlertDialogDescription>
                             {confirmation?.type === 'link' ? (
@@ -309,15 +337,30 @@ export function StudentSetSettings({
                                 <>
                                     Make{' '}
                                     <strong>
-                                        {confirmation.session.level.title} (
-                                        {confirmation.session.name} Session)
+                                        {confirmation.session.level.title},{' '}
+                                        {
+                                            confirmation.session.semesters.find(
+                                                (item) =>
+                                                    item.id ===
+                                                    confirmation.semesterId,
+                                            )?.name
+                                        }{' '}
+                                        ({confirmation.session.name} Session)
                                     </strong>{' '}
                                     current instead of{' '}
                                     <strong>
-                                        {currentSession?.level.title} (
-                                        {currentSession?.name} Session)
+                                        {currentSession?.level.title},{' '}
+                                        {
+                                            currentSession?.semesters.find(
+                                                (item) =>
+                                                    item.id ===
+                                                    currentSession.currentSemesterId,
+                                            )?.name
+                                        }{' '}
+                                        ({currentSession?.name} Session)
                                     </strong>
-                                    ? Existing registrations stay unchanged.
+                                    ? Students will see the new period on Home.
+                                    Registration and results stay unchanged.
                                 </>
                             ) : null}
                         </AlertDialogDescription>
@@ -344,6 +387,8 @@ export function StudentSetSettings({
                                     updateSettings({
                                         current_academic_year_id:
                                             confirmation.session.level.id,
+                                        current_semester_id:
+                                            confirmation.semesterId,
                                     });
                                 }
                             }}

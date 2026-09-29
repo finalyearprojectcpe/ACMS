@@ -24,12 +24,16 @@ class UpdateStudentSetRequest extends FormRequest
     {
         return [
             'student_signup_enabled' => ['sometimes', 'required', 'boolean'],
-            'current_academic_year_id' => ['sometimes', 'nullable', 'integer', 'exists:academic_years,id'],
+            'current_academic_year_id' => ['sometimes', 'required', 'integer', 'exists:academic_years,id'],
+            'current_semester_id' => ['required_with:current_academic_year_id', 'integer', 'exists:semesters,id'],
         ];
     }
 
     public function attributes(): array
     {
-        return ['current_academic_year_id' => 'academic year'];
+        return [
+            'current_academic_year_id' => 'academic year',
+            'current_semester_id' => 'semester',
+        ];
     }
 }

@@ -6,11 +6,9 @@ use App\AccountStatus;
 use App\AccountType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\RegisterInvitedStudentRequest;
-use App\Models\StudentProfile;
 use App\Models\StudentSet;
 use App\Models\User;
-use App\Services\DueAssignmentService;
-use App\StudentStatus;
+use App\Services\StudentJoinService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -21,7 +19,7 @@ use Inertia\Response as InertiaResponse;
 class StudentInvitationController extends Controller
 {
     public function __construct(
-        private readonly DueAssignmentService $dueAssignments,
+        private readonly StudentJoinService $joins,
     ) {}
 
     public function show(StudentSet $studentSet): InertiaResponse
@@ -62,14 +60,7 @@ class StudentInvitationController extends Controller
                 'password' => $validated['password'],
                 'status' => AccountStatus::Active,
             ]);
-            $student = StudentProfile::query()->create([
-                'user_id' => $user->id,
-                'advisor_profile_id' => $lockedSet->advisor_profile_id,
-                'student_set_id' => $lockedSet->id,
-                'registration_number' => $validated['registration_number'],
-                'status' => StudentStatus::Active,
-            ]);
-            $this->dueAssignments->syncForStudent($student);
+            $this->joins->submit($user, $lockedSet, $validated['registration_number']);
 
             return $user;
         });
@@ -77,6 +68,6 @@ class StudentInvitationController extends Controller
         Auth::login($user);
         $request->session()->regenerate();
 
-        return to_route('dashboard')->with('success', 'Your student account is ready.');
+        return to_route('student-joins.status')->with('success', 'Check your email to verify your request.');
     }
 }

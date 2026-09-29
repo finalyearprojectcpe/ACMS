@@ -1,5 +1,4 @@
-import { useForm } from '@inertiajs/react';
-import { RiArrowLeftLine } from '@remixicon/react';
+import { router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 
 import { ActionLink } from '@/components/action-link';
@@ -19,12 +18,6 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Empty,
-    EmptyDescription,
-    EmptyHeader,
-    EmptyTitle,
-} from '@/components/ui/empty';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import {
     Select,
@@ -41,6 +34,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
 import {
     Tooltip,
     TooltipContent,
@@ -56,13 +50,23 @@ export function AdviserGradeRoster({
     roster: DashboardGradeRoster;
 }) {
     const [confirmOpen, setConfirmOpen] = useState(false);
-    const form = useForm<{ grades: Record<string, string | null> }>({
+    const [publishing, setPublishing] = useState(false);
+    const form = useForm<{
+        grades: Record<string, string | null>;
+        reason: string;
+    }>({
         grades: Object.fromEntries(
-            roster.students.map((student) => [student.itemId, student.grade]),
+            roster.students.map((student) => [
+                student.itemId,
+                student.missingScript ? 'missing_script' : student.grade,
+            ]),
         ),
+        reason: '',
     });
     const changed = roster.students.some(
-        (student) => form.data.grades[student.itemId] !== student.grade,
+        (student) =>
+            form.data.grades[student.itemId] !==
+            (student.missingScript ? 'missing_script' : student.grade),
     );
     const save = () =>
         form.patch(roster.saveUrl, {
@@ -74,11 +78,8 @@ export function AdviserGradeRoster({
         <div className="flex min-h-0 w-full flex-1 flex-col">
             <header className="shrink-0 border-b px-4 py-5 sm:px-6">
                 <div className="mx-auto w-full max-w-3xl">
-                    <ActionLink
-                        href={roster.backUrl}
-                        icon={<RiArrowLeftLine className="size-4" />}
-                    >
-                        Back to semester results
+                    <ActionLink href={roster.semesterResultsUrl}>
+                        Semester Results
                     </ActionLink>
                     <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
                         <div>
@@ -91,23 +92,34 @@ export function AdviserGradeRoster({
                                 {roster.course.units} units
                             </p>
                         </div>
-                        {roster.period.publishedAt ? (
-                            <Badge>Published</Badge>
-                        ) : null}
+                        {roster.publishedAt ? <Badge>Published</Badge> : null}
                     </div>
                 </div>
             </header>
             {roster.students.length === 0 ? (
-                <Empty className="flex-1">
-                    <EmptyHeader>
-                        <EmptyTitle>
-                            No approved students for this course
-                        </EmptyTitle>
-                        <EmptyDescription>
-                            Approve course registrations before entering grades.
-                        </EmptyDescription>
-                    </EmptyHeader>
-                </Empty>
+                <div className="mx-auto w-full max-w-3xl">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Student</TableHead>
+                                <TableHead>Registration number</TableHead>
+                                <TableHead className="text-right">
+                                    Grade
+                                </TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            <TableRow>
+                                <TableCell
+                                    colSpan={3}
+                                    className="py-8 text-center text-muted-foreground"
+                                >
+                                    No approved students for this course.
+                                </TableCell>
+                            </TableRow>
+                        </TableBody>
+                    </Table>
+                </div>
             ) : (
                 <>
                     <ScrollArea scrollRegion className="h-0 min-h-0 flex-1">
@@ -148,7 +160,7 @@ export function AdviserGradeRoster({
                                                 />
                                             </TableCell>
                                             <TableCell className="pr-4 sm:pr-6">
-                                                <div className="ml-auto w-24">
+                                                <div className="ml-auto w-36">
                                                     <Select
                                                         value={
                                                             form.data.grades[
@@ -179,8 +191,7 @@ export function AdviserGradeRoster({
                                                             <SelectValue />
                                                         </SelectTrigger>
                                                         <SelectContent>
-                                                            {!roster.period
-                                                                .publishedAt ? (
+                                                            {!roster.publishedAt ? (
                                                                 <SelectItem value="none">
                                                                     —
                                                                 </SelectItem>
@@ -203,6 +214,9 @@ export function AdviserGradeRoster({
                                                                     </SelectItem>
                                                                 ),
                                                             )}
+                                                            <SelectItem value="missing_script">
+                                                                Missing script
+                                                            </SelectItem>
                                                         </SelectContent>
                                                     </Select>
                                                 </div>
@@ -234,6 +248,11 @@ export function AdviserGradeRoster({
                                                                         {new Date(
                                                                             change.at,
                                                                         ).toLocaleDateString()}
+                                                                        <span className="block">
+                                                                            {
+                                                                                change.reason
+                                                                            }
+                                                                        </span>
                                                                     </div>
                                                                 ),
                                                             )}
@@ -248,9 +267,37 @@ export function AdviserGradeRoster({
                         </div>
                         <ScrollBar orientation="horizontal" />
                     </ScrollArea>
-                    <footer className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-t px-4 py-4 sm:px-6">
-                        <div className="mx-auto flex w-full max-w-3xl justify-end">
-                            {roster.period.publishedAt ? (
+                    {roster.publishedAt && changed ? (
+                        <div className="mx-auto w-full max-w-3xl px-4 py-4 sm:px-6">
+                            <label
+                                htmlFor="correction-reason"
+                                className="mb-2 block text-sm font-medium"
+                            >
+                                Reason for correction
+                            </label>
+                            <Textarea
+                                id="correction-reason"
+                                value={form.data.reason}
+                                onChange={(event) =>
+                                    form.setData('reason', event.target.value)
+                                }
+                                rows={2}
+                            />
+                            {form.errors.reason ? (
+                                <p className="mt-1 text-sm text-destructive">
+                                    {form.errors.reason}
+                                </p>
+                            ) : null}
+                        </div>
+                    ) : null}
+                    <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-4 py-4 sm:px-6">
+                        {!roster.publishedAt && roster.publication.reason ? (
+                            <p className="text-sm text-muted-foreground">
+                                {roster.publication.reason}
+                            </p>
+                        ) : null}
+                        <div className="ml-auto flex w-full max-w-3xl justify-end gap-3">
+                            {roster.publishedAt ? (
                                 <AlertDialog
                                     open={confirmOpen}
                                     onOpenChange={setConfirmOpen}
@@ -258,7 +305,9 @@ export function AdviserGradeRoster({
                                     <AlertDialogTrigger asChild>
                                         <Button
                                             disabled={
-                                                !changed || form.processing
+                                                !changed ||
+                                                !form.data.reason.trim() ||
+                                                form.processing
                                             }
                                         >
                                             Save corrections
@@ -272,9 +321,9 @@ export function AdviserGradeRoster({
                                             <AlertDialogDescription>
                                                 Students can already see these
                                                 results. Your changes will
-                                                update their grades and GPA, and
-                                                each correction will be
-                                                recorded.
+                                                update their results and any
+                                                affected GPA. Each correction
+                                                will be recorded.
                                             </AlertDialogDescription>
                                         </AlertDialogHeader>
                                         <AlertDialogFooter>
@@ -282,7 +331,10 @@ export function AdviserGradeRoster({
                                                 Keep current grades
                                             </AlertDialogCancel>
                                             <AlertDialogAction
-                                                disabled={form.processing}
+                                                disabled={
+                                                    !form.data.reason.trim() ||
+                                                    form.processing
+                                                }
                                                 onClick={save}
                                             >
                                                 Save corrections
@@ -291,12 +343,70 @@ export function AdviserGradeRoster({
                                     </AlertDialogContent>
                                 </AlertDialog>
                             ) : (
-                                <Button
-                                    disabled={!changed || form.processing}
-                                    onClick={save}
-                                >
-                                    Save grades
-                                </Button>
+                                <>
+                                    <Button
+                                        variant="outline"
+                                        disabled={!changed || form.processing}
+                                        onClick={save}
+                                    >
+                                        Save results
+                                    </Button>
+                                    <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                            <Button
+                                                disabled={
+                                                    !roster.publication
+                                                        .canPublish ||
+                                                    changed ||
+                                                    publishing
+                                                }
+                                            >
+                                                Publish {roster.course.code}{' '}
+                                                results
+                                            </Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                            <AlertDialogHeader>
+                                                <AlertDialogTitle>
+                                                    Publish {roster.course.code}{' '}
+                                                    results?
+                                                </AlertDialogTitle>
+                                                <AlertDialogDescription>
+                                                    The {roster.students.length}{' '}
+                                                    students registered for{' '}
+                                                    {roster.course.code} in{' '}
+                                                    {roster.set.name} will see
+                                                    their grades. Other subjects
+                                                    in {roster.period.semester}{' '}
+                                                    remain unpublished.
+                                                </AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                                <AlertDialogCancel>
+                                                    Keep unpublished
+                                                </AlertDialogCancel>
+                                                <AlertDialogAction
+                                                    disabled={publishing}
+                                                    onClick={() => {
+                                                        setPublishing(true);
+                                                        router.post(
+                                                            roster.publishUrl,
+                                                            {},
+                                                            {
+                                                                onFinish: () =>
+                                                                    setPublishing(
+                                                                        false,
+                                                                    ),
+                                                            },
+                                                        );
+                                                    }}
+                                                >
+                                                    Publish subject results
+                                                </AlertDialogAction>
+                                            </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                    </AlertDialog>
+                                </>
                             )}
                         </div>
                     </footer>

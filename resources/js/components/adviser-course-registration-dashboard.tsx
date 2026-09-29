@@ -1,16 +1,11 @@
 import { useForm } from '@inertiajs/react';
-import {
-    RiArrowLeftLine,
-    RiCheckLine,
-    RiFileWarningLine,
-} from '@remixicon/react';
+import { RiCheckLine, RiFileWarningLine } from '@remixicon/react';
 import { useState } from 'react';
 
 import {
     approve as approveCourseRegistration,
     returnForCorrection as returnCourseRegistration,
 } from '@/actions/App/Http/Controllers/CourseRegistrationController';
-import { showStudentSetRegistrations } from '@/actions/App/Http/Controllers/DashboardController';
 import { ActionLink } from '@/components/action-link';
 import { CopyableValue } from '@/components/copyable-value';
 import { CourseRegistrationCourseTable } from '@/components/course-registration-course-table';
@@ -30,7 +25,6 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { studentSetRouteParameters } from '@/lib/student-sets';
 import type {
     DashboardAdviserCourseRegistration,
     DashboardAdviserCourseRegistrationListItem,
@@ -181,24 +175,7 @@ function RegistrationReview({
     return (
         <section className="min-w-0">
             <header className="border-b pb-5">
-                {review.set ? (
-                    <ActionLink
-                        href={showStudentSetRegistrations(
-                            studentSetRouteParameters(review.set),
-                            {
-                                query: {
-                                    session:
-                                        review.routeParameters.sessionYears,
-                                    semester: review.routeParameters.semester,
-                                },
-                            },
-                        )}
-                        icon={<RiArrowLeftLine className="size-4" />}
-                    >
-                        Back to Registrations
-                    </ActionLink>
-                ) : null}
-                <div className="mt-5 grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-4 sm:gap-x-6 lg:grid-cols-[auto_minmax(0,1fr)_minmax(12rem,auto)]">
+                <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-4 sm:gap-x-6 lg:grid-cols-[auto_minmax(0,1fr)_minmax(12rem,auto)]">
                     <StudentPortrait
                         name={review.student.name}
                         image={review.student.avatar}

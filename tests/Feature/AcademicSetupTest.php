@@ -1,8 +1,10 @@
 <?php
 
 use App\Models\AcademicSession;
+use App\Models\AcademicSessionSemester;
 use App\Models\AcademicYear;
 use App\Models\AdvisorProfile;
+use App\Models\Semester;
 use App\Models\StudentProfile;
 use App\Models\StudentSet;
 use App\Models\User;
@@ -29,11 +31,16 @@ test('set progression uses a configured session and is shared by its students', 
     ]);
     $firstYear = AcademicYear::query()->where('year_number', 1)->firstOrFail();
     $secondYear = AcademicYear::query()->where('year_number', 2)->firstOrFail();
-    AcademicSession::factory()->create([
+    $secondSession = AcademicSession::factory()->create([
         'student_set_id' => $set->id,
         'academic_year_id' => $secondYear->id,
         'start_year' => $set->entry_start_year + 1,
         'end_year' => $set->entry_end_year + 1,
+    ]);
+    $firstSemester = Semester::query()->where('slug', 'first')->firstOrFail();
+    AcademicSessionSemester::factory()->create([
+        'academic_session_id' => $secondSession->id,
+        'semester_id' => $firstSemester->id,
     ]);
     $sessionsBefore = AcademicSession::count();
     $context = app(AcademicContextService::class);
@@ -47,6 +54,7 @@ test('set progression uses a configured session and is shared by its students', 
     $this->patch(route('student-sets.update', $set->routeParameters()), [
         'student_signup_enabled' => false,
         'current_academic_year_id' => $secondYear->id,
+        'current_semester_id' => $firstSemester->id,
     ])->assertRedirect(route('student-sets.edit', $set->routeParameters()));
 
     expect($context->academicYearForStudent($student->fresh())->id)->toBe($secondYear->id)
@@ -61,7 +69,11 @@ test('set settings reject other advisers students and invalid academic years', f
     $this->seed(AcademicStructureSeeder::class);
     $set = StudentSet::factory()->create();
     $year = $set->current_academic_year_id;
-    $payload = ['student_signup_enabled' => false, 'current_academic_year_id' => $year];
+    $payload = [
+        'student_signup_enabled' => false,
+        'current_academic_year_id' => $year,
+        'current_semester_id' => Semester::query()->where('slug', 'first')->firstOrFail()->id,
+    ];
     $other = AdvisorProfile::factory()->create();
     $this->actingAs($other->user)->get(route('student-sets.edit', $set->routeParameters()))->assertNotFound();
     $this->patch(route('student-sets.update', $set->routeParameters()), $payload)->assertNotFound();
@@ -80,6 +92,100 @@ test('set settings reject other advisers students and invalid academic years', f
     ])->assertSessionHasErrors('current_academic_year_id');
     expect($set->refresh()->current_academic_year_id)->toBe($year)
         ->and($set->student_signup_enabled)->toBeTrue();
+});
+
+test('a set keeps a current semester after its first session is created', function () {
+    $this->seed(AcademicStructureSeeder::class);
+    $set = StudentSet::factory()->create([
+        'current_academic_year_id' => null,
+        'current_semester_id' => null,
+    ]);
+    $firstYear = AcademicYear::query()->where('year_number', 1)->firstOrFail();
+    $secondYear = AcademicYear::query()->where('year_number', 2)->firstOrFail();
+    $firstSemester = Semester::query()->where('slug', 'first')->firstOrFail();
+    $this->actingAs($set->advisorProfile->user);
+
+    foreach ([$firstYear, $secondYear] as $index => $year) {
+        $this->post(route('student-sets.sessions.store', $set->routeParameters()), [
+            'academic_year_id' => $year->id,
+            'start_year' => $set->entry_start_year + $index,
+            'first_semester_maximum_course_units' => 24,
+            'second_semester_maximum_course_units' => 24,
+        ])->assertSessionHasNoErrors();
+    }
+
+    expect($set->refresh()->current_academic_year_id)->toBe($firstYear->id)
+        ->and($set->current_semester_id)->toBe($firstSemester->id);
+
+    $this->patch(route('student-sets.update', $set->routeParameters()), [
+        'current_academic_year_id' => null,
+        'current_semester_id' => null,
+    ])->assertSessionHasErrors('current_academic_year_id');
+    $this->patch(route('student-sets.update', $set->routeParameters()), [
+        'current_academic_year_id' => $firstYear->id,
+        'current_semester_id' => null,
+    ])->assertSessionHasErrors('current_semester_id');
+
+    expect($set->refresh()->current_academic_year_id)->toBe($firstYear->id)
+        ->and($set->current_semester_id)->toBe($firstSemester->id);
+});
+
+test('the chosen current semester remains visible after course registration closes', function () {
+    $this->seed(AcademicStructureSeeder::class);
+    $set = StudentSet::factory()->create();
+    $student = StudentProfile::factory()->create([
+        'advisor_profile_id' => $set->advisor_profile_id,
+        'student_set_id' => $set->id,
+    ]);
+    $session = AcademicSession::factory()->create([
+        'student_set_id' => $set->id,
+        'academic_year_id' => $set->current_academic_year_id,
+        'start_year' => $set->entry_start_year,
+        'end_year' => $set->entry_end_year,
+    ]);
+    $first = AcademicSessionSemester::factory()->create([
+        'academic_session_id' => $session->id,
+        'semester_id' => Semester::query()->where('slug', 'first')->firstOrFail()->id,
+        'registration_enabled' => true,
+    ]);
+    $second = AcademicSessionSemester::factory()->create([
+        'academic_session_id' => $session->id,
+        'semester_id' => Semester::query()->where('slug', 'second')->firstOrFail()->id,
+    ]);
+
+    $this->actingAs($set->advisorProfile->user)
+        ->patch(route('student-sets.update', $set->routeParameters()), [
+            'current_academic_year_id' => $session->academic_year_id,
+            'current_semester_id' => $first->semester_id,
+        ])->assertSessionHasNoErrors();
+    $this->patch(route('student-sets.semesters.registration.update', [
+        ...$set->routeParameters(),
+        'sessionYears' => $session->routeYears(),
+        'semester' => 'first',
+    ]), ['registration_enabled' => false])->assertSessionHasNoErrors();
+
+    $this->actingAs($student->user)
+        ->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('dashboard.studentHome.currentSemester.name', '1st Semester')
+            ->where('dashboard.studentHome.hasAvailableCourses', false)
+            ->where('dashboard.studentHome.registrationOpen', false));
+    $this->get(route('dashboard.section', [
+        'section' => 'course-registration',
+        'session' => $session->routeYears(),
+        'semester' => 'first',
+    ]))->assertInertia(fn (Assert $page) => $page
+        ->where('dashboard.studentCourseRegistration.registrationOpen', false)
+        ->where('dashboard.studentCourseRegistration.hasAvailableCourses', false)
+        ->where('dashboard.studentCourseRegistration.selectedSemesterId', $first->id));
+
+    $this->actingAs($set->advisorProfile->user)
+        ->patch(route('student-sets.update', $set->routeParameters()), [
+            'current_academic_year_id' => $session->academic_year_id,
+            'current_semester_id' => $second->semester_id,
+        ])->assertSessionHasNoErrors();
+    expect($set->refresh()->current_semester_id)->toBe($second->semester_id)
+        ->and($first->refresh()->registration_enabled)->toBeFalse();
 });
 
 test('an adviser creates a normalized student set from its department and entry year', function () {

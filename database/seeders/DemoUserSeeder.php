@@ -21,7 +21,6 @@ use App\Models\User;
 use App\Services\DueAssignmentService;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 
 class DemoUserSeeder extends Seeder
 {
@@ -74,6 +73,7 @@ class DemoUserSeeder extends Seeder
                 'department_name' => 'Computer Engineering',
                 'student_signup_enabled' => true,
                 'current_academic_year_id' => AcademicYear::query()->where('year_number', 3)->firstOrFail()->id,
+                'current_semester_id' => Semester::query()->where('slug', 'first')->firstOrFail()->id,
             ],
         );
 
@@ -112,7 +112,15 @@ class DemoUserSeeder extends Seeder
                     }
                 }
 
-                $period->update(['results_published_at' => now()]);
+                $publishedCourses = $period->courseOfferings()->orderBy('id')->get();
+                if ($year === 2 && $semesterSlug === 'second') {
+                    $publishedCourses = $publishedCourses->take(1);
+                }
+
+                $publishedCourses->each(fn (CourseOffering $offering) => $offering->forceFill([
+                    'results_published_at' => now(),
+                    'results_published_by_user_id' => $adviser->id,
+                ])->save());
             }
         }
 
@@ -191,7 +199,6 @@ class DemoUserSeeder extends Seeder
                 ['student_set_id' => $set->id, 'code' => $courseData['code']],
                 [
                     'title' => $courseData['title'],
-                    'slug' => Str::slug("{$courseData['code']} {$courseData['title']}"),
                 ],
             );
             $offering = CourseOffering::query()->updateOrCreate(

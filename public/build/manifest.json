@@ -1,68 +1,91 @@
 {
-  "_AuthenticatedSessionController-Bq8LiW7y.js": {
-    "file": "assets/AuthenticatedSessionController-Bq8LiW7y.js",
+  "_AuthenticatedSessionController-D4_pqQYw.js": {
+    "file": "assets/AuthenticatedSessionController-D4_pqQYw.js",
     "name": "AuthenticatedSessionController",
     "imports": [
-      "_flash-toasts-DZ31gTWm.js"
+      "_flash-toasts-BkXOTgmf.js"
     ]
   },
-  "_PasswordResetController-DYIEzIEm.js": {
-    "file": "assets/PasswordResetController-DYIEzIEm.js",
+  "_PasswordResetController-xcJcxX60.js": {
+    "file": "assets/PasswordResetController-xcJcxX60.js",
     "name": "PasswordResetController",
     "imports": [
-      "_flash-toasts-DZ31gTWm.js"
+      "_flash-toasts-BkXOTgmf.js"
     ]
   },
-  "_alert-BcIopLuE.js": {
-    "file": "assets/alert-BcIopLuE.js",
+  "_adviser-qRcoS-4Z.js": {
+    "file": "assets/adviser-qRcoS-4Z.js",
+    "name": "adviser",
+    "imports": [
+      "_flash-toasts-BkXOTgmf.js"
+    ]
+  },
+  "_alert-DTA4_L60.js": {
+    "file": "assets/alert-DTA4_L60.js",
     "name": "alert",
     "imports": [
-      "_utils-CmoFJjK2.js",
-      "_card-Nsljcj1a.js"
+      "_utils-DARV14zp.js",
+      "_card-BBBKDUN7.js"
     ]
   },
-  "_auth-card-CQszzX0-.js": {
-    "file": "assets/auth-card-CQszzX0-.js",
+  "_auth-card-LVwxASWe.js": {
+    "file": "assets/auth-card-LVwxASWe.js",
     "name": "auth-card",
     "imports": [
-      "_utils-CmoFJjK2.js",
-      "_card-Nsljcj1a.js"
+      "_utils-DARV14zp.js",
+      "_card-BBBKDUN7.js"
     ]
   },
-  "_card-Nsljcj1a.js": {
-    "file": "assets/card-Nsljcj1a.js",
+  "_card-BBBKDUN7.js": {
+    "file": "assets/card-BBBKDUN7.js",
     "name": "card",
     "imports": [
-      "_utils-CmoFJjK2.js"
+      "_utils-DARV14zp.js"
     ]
   },
-  "_copyable-value-DftueLCa.js": {
-    "file": "assets/copyable-value-DftueLCa.js",
+  "_copyable-value-DBJyDEMj.js": {
+    "file": "assets/copyable-value-DBJyDEMj.js",
     "name": "copyable-value",
     "imports": [
-      "_utils-CmoFJjK2.js",
+      "_utils-DARV14zp.js",
       "resources/js/app.tsx",
-      "_card-Nsljcj1a.js"
+      "_card-BBBKDUN7.js"
     ]
   },
-  "_dist-BedCxW0z.js": {
-    "file": "assets/dist-BedCxW0z.js",
+  "_dist-BONjqlwe.js": {
+    "file": "assets/dist-BONjqlwe.js",
     "name": "dist",
     "imports": [
-      "_utils-CmoFJjK2.js"
+      "_utils-DARV14zp.js"
     ]
   },
-  "_flash-toasts-DZ31gTWm.js": {
-    "file": "assets/flash-toasts-DZ31gTWm.js",
+  "_dist-BulcO2n1.js": {
+    "file": "assets/dist-BulcO2n1.js",
+    "name": "dist",
+    "imports": [
+      "_utils-DARV14zp.js",
+      "_dist-BONjqlwe.js"
+    ]
+  },
+  "_flash-toasts-BkXOTgmf.js": {
+    "file": "assets/flash-toasts-BkXOTgmf.js",
     "name": "flash-toasts",
     "imports": [
-      "_utils-CmoFJjK2.js",
-      "_card-Nsljcj1a.js"
+      "_utils-DARV14zp.js"
     ]
   },
   "_fonts-B4pDHxjI.css": {
     "file": "assets/fonts-B4pDHxjI.css",
     "src": "_fonts-B4pDHxjI.css"
+  },
+  "_input-e-mLCTfN.js": {
+    "file": "assets/input-e-mLCTfN.js",
+    "name": "input",
+    "imports": [
+      "_utils-DARV14zp.js",
+      "_dist-BONjqlwe.js",
+      "_card-BBBKDUN7.js"
+    ]
   },
   "_inter-400-normal-77YHD8bZ.woff": {
     "file": "assets/inter-400-normal-77YHD8bZ.woff",
@@ -232,34 +255,43 @@
     "file": "assets/inter-600-normal-plRanbMR.woff2",
     "src": "_inter-600-normal-plRanbMR.woff2"
   },
-  "_password-input-D77KvTlf.js": {
-    "file": "assets/password-input-D77KvTlf.js",
+  "_password-input-CWqdvzir.js": {
+    "file": "assets/password-input-CWqdvzir.js",
     "name": "password-input",
     "imports": [
-      "_utils-CmoFJjK2.js",
-      "_flash-toasts-DZ31gTWm.js",
+      "_utils-DARV14zp.js",
+      "_input-e-mLCTfN.js",
       "resources/js/app.tsx",
-      "_card-Nsljcj1a.js"
+      "_card-BBBKDUN7.js"
     ]
   },
-  "_routes-D22GaCZL.js": {
-    "file": "assets/routes-D22GaCZL.js",
+  "_routes-3eJgdkoh.js": {
+    "file": "assets/routes-3eJgdkoh.js",
     "name": "routes",
     "imports": [
-      "_flash-toasts-DZ31gTWm.js"
+      "_flash-toasts-BkXOTgmf.js"
     ]
   },
-  "_select-DVk7uniW.js": {
-    "file": "assets/select-DVk7uniW.js",
+  "_select-C8hkDD9E.js": {
+    "file": "assets/select-C8hkDD9E.js",
     "name": "select",
     "imports": [
-      "_utils-CmoFJjK2.js",
-      "_dist-BedCxW0z.js",
-      "resources/js/app.tsx"
+      "_utils-DARV14zp.js",
+      "_dist-BulcO2n1.js",
+      "resources/js/app.tsx",
+      "_dist-BONjqlwe.js"
     ]
   },
-  "_utils-CmoFJjK2.js": {
-    "file": "assets/utils-CmoFJjK2.js",
+  "_student-joins-r-v-M75k.js": {
+    "file": "assets/student-joins-r-v-M75k.js",
+    "name": "student-joins",
+    "imports": [
+      "_flash-toasts-BkXOTgmf.js",
+      "_adviser-qRcoS-4Z.js"
+    ]
+  },
+  "_utils-DARV14zp.js": {
+    "file": "assets/utils-DARV14zp.js",
     "name": "utils"
   },
   "node_modules/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-cyrillic-ext-wght-normal.woff2": {
@@ -287,7 +319,7 @@
     "src": "node_modules/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-vietnamese-wght-normal.woff2"
   },
   "resources/css/app.css": {
-    "file": "assets/app-CVSxgugw.css",
+    "file": "assets/app-W9sDCXjH.css",
     "name": "app",
     "names": [
       "app.css"
@@ -304,13 +336,14 @@
     ]
   },
   "resources/js/app.tsx": {
-    "file": "assets/app-CJRFPorf.js",
+    "file": "assets/app-ChVDO5xG.js",
     "name": "app",
     "src": "resources/js/app.tsx",
     "isEntry": true,
     "imports": [
-      "_utils-CmoFJjK2.js",
-      "_dist-BedCxW0z.js"
+      "_utils-DARV14zp.js",
+      "_dist-BulcO2n1.js",
+      "_dist-BONjqlwe.js"
     ],
     "dynamicImports": [
       "resources/js/pages/dashboard.tsx",
@@ -319,111 +352,149 @@
       "resources/js/pages/receipt-verification.tsx",
       "resources/js/pages/reset-password.tsx",
       "resources/js/pages/signup.tsx",
-      "resources/js/pages/student-invitation.tsx"
+      "resources/js/pages/student-invitation.tsx",
+      "resources/js/pages/student-join-edit.tsx",
+      "resources/js/pages/student-join-status.tsx"
     ]
   },
   "resources/js/pages/dashboard.tsx": {
-    "file": "assets/dashboard-BG4PiDME.js",
+    "file": "assets/dashboard-Dly4tIgW.js",
     "name": "dashboard",
     "src": "resources/js/pages/dashboard.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_utils-CmoFJjK2.js",
-      "_dist-BedCxW0z.js",
-      "_select-DVk7uniW.js",
-      "_flash-toasts-DZ31gTWm.js",
+      "_utils-DARV14zp.js",
+      "_dist-BulcO2n1.js",
+      "_select-C8hkDD9E.js",
+      "_input-e-mLCTfN.js",
       "resources/js/app.tsx",
-      "_card-Nsljcj1a.js",
-      "_AuthenticatedSessionController-Bq8LiW7y.js",
-      "_copyable-value-DftueLCa.js",
-      "_alert-BcIopLuE.js",
-      "_password-input-D77KvTlf.js"
+      "_dist-BONjqlwe.js",
+      "_card-BBBKDUN7.js",
+      "_AuthenticatedSessionController-D4_pqQYw.js",
+      "_copyable-value-DBJyDEMj.js",
+      "_flash-toasts-BkXOTgmf.js",
+      "_alert-DTA4_L60.js",
+      "_password-input-CWqdvzir.js",
+      "_adviser-qRcoS-4Z.js"
     ]
   },
   "resources/js/pages/forgot-password.tsx": {
-    "file": "assets/forgot-password-BXBHw02u.js",
+    "file": "assets/forgot-password-KtaXSdST.js",
     "name": "forgot-password",
     "src": "resources/js/pages/forgot-password.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_utils-CmoFJjK2.js",
-      "_flash-toasts-DZ31gTWm.js",
-      "_card-Nsljcj1a.js",
-      "_PasswordResetController-DYIEzIEm.js",
-      "_auth-card-CQszzX0-.js",
-      "_routes-D22GaCZL.js"
+      "_utils-DARV14zp.js",
+      "_input-e-mLCTfN.js",
+      "_card-BBBKDUN7.js",
+      "_PasswordResetController-xcJcxX60.js",
+      "_auth-card-LVwxASWe.js",
+      "_flash-toasts-BkXOTgmf.js",
+      "_routes-3eJgdkoh.js"
     ]
   },
   "resources/js/pages/login.tsx": {
-    "file": "assets/login-D_cUUco2.js",
+    "file": "assets/login-DQiYOFJc.js",
     "name": "login",
     "src": "resources/js/pages/login.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_utils-CmoFJjK2.js",
-      "_flash-toasts-DZ31gTWm.js",
-      "_card-Nsljcj1a.js",
-      "_AuthenticatedSessionController-Bq8LiW7y.js",
-      "_PasswordResetController-DYIEzIEm.js",
-      "_auth-card-CQszzX0-.js",
-      "_password-input-D77KvTlf.js"
+      "_utils-DARV14zp.js",
+      "_input-e-mLCTfN.js",
+      "_card-BBBKDUN7.js",
+      "_AuthenticatedSessionController-D4_pqQYw.js",
+      "_PasswordResetController-xcJcxX60.js",
+      "_auth-card-LVwxASWe.js",
+      "_flash-toasts-BkXOTgmf.js",
+      "_password-input-CWqdvzir.js"
     ]
   },
   "resources/js/pages/receipt-verification.tsx": {
-    "file": "assets/receipt-verification-DAJhtsLm.js",
+    "file": "assets/receipt-verification-D4jMhh2n.js",
     "name": "receipt-verification",
     "src": "resources/js/pages/receipt-verification.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_utils-CmoFJjK2.js",
+      "_utils-DARV14zp.js",
       "resources/js/app.tsx",
-      "_card-Nsljcj1a.js",
-      "_copyable-value-DftueLCa.js"
+      "_card-BBBKDUN7.js",
+      "_copyable-value-DBJyDEMj.js"
     ]
   },
   "resources/js/pages/reset-password.tsx": {
-    "file": "assets/reset-password-CVdwFLBi.js",
+    "file": "assets/reset-password-D7ZDSYHO.js",
     "name": "reset-password",
     "src": "resources/js/pages/reset-password.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_utils-CmoFJjK2.js",
-      "_flash-toasts-DZ31gTWm.js",
-      "_card-Nsljcj1a.js",
-      "_PasswordResetController-DYIEzIEm.js",
-      "_auth-card-CQszzX0-.js",
-      "_password-input-D77KvTlf.js",
-      "_routes-D22GaCZL.js"
+      "_utils-DARV14zp.js",
+      "_input-e-mLCTfN.js",
+      "_card-BBBKDUN7.js",
+      "_PasswordResetController-xcJcxX60.js",
+      "_auth-card-LVwxASWe.js",
+      "_flash-toasts-BkXOTgmf.js",
+      "_password-input-CWqdvzir.js",
+      "_routes-3eJgdkoh.js"
     ]
   },
   "resources/js/pages/signup.tsx": {
-    "file": "assets/signup-CY0q_Ytw.js",
+    "file": "assets/signup-BzP-SRu8.js",
     "name": "signup",
     "src": "resources/js/pages/signup.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_utils-CmoFJjK2.js",
-      "_select-DVk7uniW.js",
-      "_flash-toasts-DZ31gTWm.js",
-      "_card-Nsljcj1a.js",
-      "_auth-card-CQszzX0-.js",
-      "_password-input-D77KvTlf.js",
-      "_routes-D22GaCZL.js"
+      "_utils-DARV14zp.js",
+      "_select-C8hkDD9E.js",
+      "_input-e-mLCTfN.js",
+      "_card-BBBKDUN7.js",
+      "_auth-card-LVwxASWe.js",
+      "_flash-toasts-BkXOTgmf.js",
+      "_password-input-CWqdvzir.js",
+      "_routes-3eJgdkoh.js"
     ]
   },
   "resources/js/pages/student-invitation.tsx": {
-    "file": "assets/student-invitation-JxtHZ72K.js",
+    "file": "assets/student-invitation-DZ-HlHuW.js",
     "name": "student-invitation",
     "src": "resources/js/pages/student-invitation.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_utils-CmoFJjK2.js",
-      "_flash-toasts-DZ31gTWm.js",
-      "_card-Nsljcj1a.js",
-      "_auth-card-CQszzX0-.js",
-      "_alert-BcIopLuE.js",
-      "_password-input-D77KvTlf.js",
-      "_routes-D22GaCZL.js"
+      "_utils-DARV14zp.js",
+      "_input-e-mLCTfN.js",
+      "_card-BBBKDUN7.js",
+      "_auth-card-LVwxASWe.js",
+      "_flash-toasts-BkXOTgmf.js",
+      "_alert-DTA4_L60.js",
+      "_password-input-CWqdvzir.js",
+      "_routes-3eJgdkoh.js"
+    ]
+  },
+  "resources/js/pages/student-join-edit.tsx": {
+    "file": "assets/student-join-edit-BvGS2l76.js",
+    "name": "student-join-edit",
+    "src": "resources/js/pages/student-join-edit.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_utils-DARV14zp.js",
+      "_input-e-mLCTfN.js",
+      "_card-BBBKDUN7.js",
+      "_auth-card-LVwxASWe.js",
+      "_flash-toasts-BkXOTgmf.js",
+      "_student-joins-r-v-M75k.js"
+    ]
+  },
+  "resources/js/pages/student-join-status.tsx": {
+    "file": "assets/student-join-status-ajgoGf_Y.js",
+    "name": "student-join-status",
+    "src": "resources/js/pages/student-join-status.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "_utils-DARV14zp.js",
+      "_card-BBBKDUN7.js",
+      "_auth-card-LVwxASWe.js",
+      "_flash-toasts-BkXOTgmf.js",
+      "_routes-3eJgdkoh.js",
+      "_student-joins-r-v-M75k.js"
     ]
   }
 }

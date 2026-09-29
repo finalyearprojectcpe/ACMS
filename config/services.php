@@ -28,9 +28,7 @@ return [
 
     'paystack' => [
         'base_url' => env('PAYSTACK_BASE_URL', 'https://api.paystack.co'),
-        'dashboard_url' => env('PAYSTACK_DASHBOARD_URL', 'https://dashboard.paystack.com'),
         'secret_key' => env('PAYSTACK_SECRET_KEY'),
-        'public_key' => env('PAYSTACK_PUBLIC_KEY'),
         'split_fee_bearer' => env('PAYSTACK_SPLIT_FEE_BEARER', 'subaccount'),
         'channels' => array_values(array_filter(array_map(
             'trim',

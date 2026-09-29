@@ -2,12 +2,10 @@
 
 namespace App\Services;
 
-use App\Models\AcademicSession;
 use App\Models\AcademicSessionSemester;
 use App\Models\AcademicYear;
 use App\Models\StudentProfile;
 use App\Models\StudentSet;
-use Illuminate\Validation\ValidationException;
 
 class AcademicContextService
 {
@@ -21,34 +19,19 @@ class AcademicContextService
         return $this->academicYearForSet($studentProfile->studentSet);
     }
 
-    public function sessionForSetYear(StudentSet $studentSet, AcademicYear $academicYear): ?AcademicSession
+    public function currentSemesterForStudent(StudentProfile $studentProfile): ?AcademicSessionSemester
     {
-        return $studentSet->academicSessions()
-            ->whereBelongsTo($academicYear)
-            ->first();
-    }
+        $set = $studentProfile->studentSet;
 
-    public function registrationContext(StudentProfile $studentProfile): ?AcademicSessionSemester
-    {
-        return AcademicSessionSemester::query()
-            ->with(['academicSession.academicYear', 'semester'])
-            ->where('registration_enabled', true)
-            ->whereHas('academicSession', fn ($query) => $query
-                ->where('student_set_id', $studentProfile->student_set_id))
-            ->latest('id')
-            ->first();
-    }
-
-    public function requireRegistrationContext(StudentProfile $studentProfile): AcademicSessionSemester
-    {
-        $context = $this->registrationContext($studentProfile);
-
-        if (! $context instanceof AcademicSessionSemester) {
-            throw ValidationException::withMessages([
-                'registration' => 'Course registration is not open for your set.',
-            ]);
+        if ($set->current_academic_year_id === null || $set->current_semester_id === null) {
+            return null;
         }
 
-        return $context;
+        return $set->academicSessions()
+            ->where('academic_year_id', $set->current_academic_year_id)
+            ->first()?->semesterInstances()
+            ->with(['academicSession.academicYear', 'semester'])
+            ->where('semester_id', $set->current_semester_id)
+            ->first();
     }
 }

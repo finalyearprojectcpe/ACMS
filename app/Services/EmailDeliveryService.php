@@ -7,6 +7,7 @@ use App\Jobs\SendEmailDelivery;
 use App\Mail\DuePaymentReceiptMail;
 use App\Mail\GradeManagerMail;
 use App\Mail\PasswordResetMail;
+use App\Mail\StudentJoinMail;
 use App\Models\EmailDelivery;
 use Illuminate\Mail\SentMessage;
 use Illuminate\Support\Facades\Mail;
@@ -16,6 +17,12 @@ use Throwable;
 
 class EmailDeliveryService
 {
+    /** @param array<string, string> $metadata */
+    public function sendStudentJoin(EmailDelivery $delivery, array $metadata): EmailDelivery
+    {
+        return $this->queue($delivery, $metadata);
+    }
+
     public function sendPasswordResetInvitation(EmailDelivery $delivery, string $resetUrl): EmailDelivery
     {
         return $this->queue($delivery, [
@@ -154,6 +161,7 @@ class EmailDeliveryService
         return match (data_get($delivery->metadata, 'template')) {
             'password_reset' => new PasswordResetMail($delivery),
             'due_payment_receipt' => new DuePaymentReceiptMail($delivery),
+            'student_join' => new StudentJoinMail($delivery),
             default => throw new RuntimeException('The email type is not supported.'),
         };
     }

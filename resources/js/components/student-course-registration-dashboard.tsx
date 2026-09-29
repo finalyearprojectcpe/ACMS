@@ -1,16 +1,13 @@
 import { router } from '@inertiajs/react';
-import {
-    RiArrowDownSLine,
-    RiSendPlaneLine,
-    RiSave3Line,
-} from '@remixicon/react';
-import type { ReactNode } from 'react';
+import { RiSave3Line, RiSendPlaneLine } from '@remixicon/react';
 import { useMemo, useState } from 'react';
 
 import { store as storeCourseRegistration } from '@/actions/App/Http/Controllers/CourseRegistrationController';
+import { section as dashboardSection } from '@/actions/App/Http/Controllers/DashboardController';
 import { CourseRegistrationCourseTable } from '@/components/course-registration-course-table';
 import { CourseRegistrationStatusBadge } from '@/components/course-registration-status-badge';
 import { QualifiedSemester } from '@/components/qualified-semester';
+import { SetAcademicPeriodNavigation } from '@/components/set-academic-period-navigation';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -23,356 +20,330 @@ import {
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-    Collapsible,
-    CollapsibleContent,
-    CollapsibleTrigger,
-} from '@/components/ui/collapsible';
-import { cn } from '@/lib/utils';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import type {
     DashboardCourseRegistrationCourse,
-    DashboardCourseRegistrationSummary,
     DashboardStudentCourseRegistration,
 } from '@/types';
 
-type StudentCourseRegistrationDashboardProps = {
-    registration: DashboardStudentCourseRegistration;
-};
-
 export function StudentCourseRegistrationDashboard({
     registration,
-}: StudentCourseRegistrationDashboardProps) {
-    const [selectedCourses, setSelectedCourses] = useState<
-        DashboardCourseRegistrationCourse[]
-    >(registration.selectedCourses);
-    const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+}: {
+    registration: DashboardStudentCourseRegistration;
+}) {
+    const [selectedCourses, setSelectedCourses] = useState(
+        registration.selectedCourses,
+    );
+    const [validationError, setValidationError] = useState<string | null>(null);
+    const [processing, setProcessing] = useState(false);
     const selectedKeys = useMemo(
-        () => new Set(selectedCourses.map(courseKey)),
+        () =>
+            new Set(
+                selectedCourses.map((course) =>
+                    String(course.courseOfferingId),
+                ),
+            ),
         [selectedCourses],
     );
-    const selectedUnits = selectedCourses.reduce(
-        (sum, course) => sum + course.units,
-        0,
-    );
-    const exceedsMaximumUnits =
-        registration.available &&
-        selectedUnits > registration.maximumCourseUnits;
-    const initialSelectedKeys = useMemo(
-        () => new Set(registration.selectedCourses.map(courseKey)),
+    const originalKeys = useMemo(
+        () =>
+            new Set(
+                registration.selectedCourses.map((course) =>
+                    String(course.courseOfferingId),
+                ),
+            ),
         [registration.selectedCourses],
     );
-    const isLocked = ['In review', 'Approved'].includes(
-        registration.reviewStatus,
+    const offeredCourses = registration.courseGroups.flatMap(
+        (group) => group.courses,
     );
+    const offeredById = new Map(
+        offeredCourses.map((course) => [course.courseOfferingId, course]),
+    );
+    const selectedUnits = selectedCourses.reduce(
+        (sum, course) =>
+            sum +
+            (offeredById.get(course.courseOfferingId)?.units ?? course.units),
+        0,
+    );
+    const overLimit = selectedUnits > registration.maximumCourseUnits;
     const isDirty =
         selectedCourses.length !== registration.selectedCourses.length ||
         selectedCourses.some(
-            (course) => !initialSelectedKeys.has(courseKey(course)),
+            (course) => !originalKeys.has(String(course.courseOfferingId)),
         );
-    const displayCourses = isLocked
-        ? selectedCourses
-        : registration.courseGroups.flatMap((group) => group.courses);
+    const editable =
+        registration.registrationOpen &&
+        !['In review', 'Approved'].includes(registration.reviewStatus);
+    const courses = editable
+        ? [
+              ...offeredCourses,
+              ...selectedCourses.filter(
+                  (course) => !offeredById.has(course.courseOfferingId),
+              ),
+          ]
+        : selectedCourses;
+    const hasIneligibleSelection =
+        editable &&
+        selectedCourses.some((course) => {
+            const offered = offeredById.get(course.courseOfferingId);
 
-    if (!registration.available || !registration.currentSemester) {
-        return (
-            <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-                <Card className="border border-border bg-background">
-                    <CardContent className="py-10 text-center">
-                        <div className="font-medium">
-                            Course registration is closed
-                        </div>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                            {registration.unavailableReason}
-                        </p>
-                    </CardContent>
-                </Card>
-                {registration.previousRegistrations.length > 0 ? (
-                    <PreviousRegistrations
-                        registrations={registration.previousRegistrations}
-                        open={isHistoryOpen}
-                        onOpenChange={setIsHistoryOpen}
-                    />
-                ) : null}
-            </div>
-        );
+            return !offered || offered.missingPrerequisites.length > 0;
+        });
+    const period = registration.currentSemester;
+
+    function selectionIssue(
+        course: DashboardCourseRegistrationCourse,
+        selected: boolean,
+    ): string | null {
+        const offered = offeredById.get(course.courseOfferingId);
+
+        if (!offered) {
+            return 'No longer offered this semester. Remove this course.';
+        }
+
+        if (offered.missingPrerequisites.length > 0) {
+            return `Pass ${offered.missingPrerequisites.join(', ')} before registering this course.`;
+        }
+
+        if (
+            !selected &&
+            selectedUnits + course.units > registration.maximumCourseUnits
+        ) {
+            return `Exceeds the ${registration.maximumCourseUnits}-unit limit.`;
+        }
+
+        return null;
     }
 
-    const currentSemester = registration.currentSemester;
-
     function toggleCourse(course: DashboardCourseRegistrationCourse) {
-        if (isLocked) {
+        const selected = selectedKeys.has(String(course.courseOfferingId));
+
+        if (!selected && selectionIssue(course, false)) {
             return;
         }
 
-        setSelectedCourses((courses) =>
-            courses.some(
-                (selected) => courseKey(selected) === courseKey(course),
+        setValidationError(null);
+        setSelectedCourses((existing) =>
+            existing.some(
+                (item) => item.courseOfferingId === course.courseOfferingId,
             )
-                ? courses.filter(
-                      (selected) => courseKey(selected) !== courseKey(course),
+                ? existing.filter(
+                      (item) =>
+                          item.courseOfferingId !== course.courseOfferingId,
                   )
-                : [...courses, course],
+                : [...existing, course],
         );
     }
 
     function submit(action: 'save' | 'submit') {
+        if (!period || processing) {
+            return;
+        }
+
         router.post(
             storeCourseRegistration().url,
             {
                 action,
+                session: period.sessionYears,
+                semester: period.slug,
                 items: selectedCourses.map((course) => ({
                     course_offering_id: course.courseOfferingId,
                 })),
             },
-            { preserveScroll: true },
+            {
+                preserveScroll: true,
+                onStart: () => setProcessing(true),
+                onFinish: () => setProcessing(false),
+                onError: (errors) =>
+                    setValidationError(
+                        errors.items ??
+                            errors.registration ??
+                            'This registration could not be saved. Review your courses and try again.',
+                    ),
+                onSuccess: () => setValidationError(null),
+            },
         );
     }
 
     return (
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                    <h1 className="text-lg font-semibold tracking-normal">
-                        <QualifiedSemester
-                            level={currentSemester.level}
-                            semester={currentSemester.name}
-                        />{' '}
-                        Course Registration
-                    </h1>
-                    <div className="text-xs text-muted-foreground">
-                        {currentSemester.session} Session
-                    </div>
-                </div>
-                {!isLocked && (
-                    <div className="flex flex-wrap items-center gap-3">
-                        <span className="text-sm text-muted-foreground">
-                            <span className="font-semibold text-foreground tabular-nums">
-                                {selectedUnits}/
-                                {registration.maximumCourseUnits}
-                            </span>{' '}
-                            units
-                        </span>
-                        <div className="flex gap-2">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                disabled={
-                                    selectedCourses.length === 0 ||
-                                    !isDirty ||
-                                    exceedsMaximumUnits
-                                }
-                                onClick={() => submit('save')}
-                            >
-                                <RiSave3Line />
-                                Save Draft
-                            </Button>
-                            <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                    <Button
-                                        type="button"
-                                        size="sm"
-                                        disabled={
-                                            selectedCourses.length === 0 ||
-                                            exceedsMaximumUnits
-                                        }
-                                    >
-                                        <RiSendPlaneLine />
-                                        Submit for Review
-                                    </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                        <AlertDialogTitle>
-                                            Send course registration for review?
-                                        </AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                            Your course adviser will review the{' '}
-                                            <span className="font-medium text-foreground">
-                                                {selectedUnits} selected units
-                                            </span>
-                                            . You can make changes again if this
-                                            is returned for correction.
-                                        </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                        <AlertDialogCancel>
-                                            Keep Editing
-                                        </AlertDialogCancel>
-                                        <AlertDialogAction
-                                            onClick={() => submit('submit')}
-                                        >
-                                            Send for Review
-                                        </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                </AlertDialogContent>
-                            </AlertDialog>
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            {registration.feedbackNote ? (
-                <Notice tone="warning" title="Returned feedback">
-                    {registration.feedbackNote}
-                </Notice>
-            ) : null}
-
-            {exceedsMaximumUnits ? (
-                <Notice tone="danger">
-                    Remove at least{' '}
-                    {selectedUnits - registration.maximumCourseUnits}{' '}
-                    {selectedUnits - registration.maximumCourseUnits === 1
-                        ? 'unit'
-                        : 'units'}{' '}
-                    before saving or submitting this registration.
-                </Notice>
-            ) : null}
-
-            <Card className="border border-border bg-background shadow-sm ring-1 ring-border/70">
-                <CardHeader className="flex flex-col gap-2 border-b border-border sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                        <CardTitle>Current Semester Courses</CardTitle>
-                        <div className="text-xs text-muted-foreground">
-                            {isLocked
-                                ? 'Courses included in this registration.'
-                                : 'Toggle courses on or off to build your registration.'}
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <CourseRegistrationStatusBadge
-                            status={registration.reviewStatus}
-                        />
-                        <span className="text-sm text-muted-foreground">
-                            <span className="font-semibold text-foreground tabular-nums">
-                                {selectedUnits}/
-                                {registration.maximumCourseUnits}
-                            </span>{' '}
-                            units
-                        </span>
-                    </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                    <CourseRegistrationCourseTable
-                        courses={displayCourses}
-                        selectedKeys={selectedKeys}
-                        selectable={!isLocked}
-                        onToggleCourse={isLocked ? undefined : toggleCourse}
-                        emptyLabel={
-                            isLocked
-                                ? 'No courses in this registration.'
-                                : 'No courses available.'
-                        }
-                    />
-                </CardContent>
-            </Card>
-
-            {registration.previousRegistrations.length > 0 ? (
-                <PreviousRegistrations
-                    registrations={registration.previousRegistrations}
-                    open={isHistoryOpen}
-                    onOpenChange={setIsHistoryOpen}
+        <div className="mx-auto grid min-h-0 w-full max-w-6xl flex-1 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[13rem_minmax(0,1fr)] md:grid-rows-1">
+            <div className="min-h-0 border-b border-border md:border-r md:border-b-0">
+                <SetAcademicPeriodNavigation
+                    sessions={registration.sessions}
+                    selectedSemesterId={registration.selectedSemesterId}
+                    ariaLabel="Course registration semesters"
+                    buildHref={(session, semester) =>
+                        dashboardSection.url(
+                            { section: 'course-registration' },
+                            {
+                                query: {
+                                    session,
+                                    semester: semester ?? undefined,
+                                },
+                            },
+                        )
+                    }
                 />
-            ) : null}
-        </div>
-    );
-}
-
-function PreviousRegistrations({
-    onOpenChange,
-    open,
-    registrations,
-}: {
-    onOpenChange: (open: boolean) => void;
-    open: boolean;
-    registrations: DashboardCourseRegistrationSummary[];
-}) {
-    return (
-        <Collapsible open={open} onOpenChange={onOpenChange}>
-            <CollapsibleTrigger asChild>
-                <button
-                    type="button"
-                    className="flex w-full items-center justify-between gap-4 border border-border bg-background px-4 py-3 text-left shadow-sm ring-1 ring-border/70 transition-colors hover:bg-muted/50"
-                >
-                    <span className="min-w-0">
-                        <span className="block text-sm font-semibold tracking-normal">
-                            Previous Course Registrations
-                        </span>
-                        <span className="mt-0.5 block text-xs text-muted-foreground">
-                            {registrations.length} previous semesters
-                        </span>
-                    </span>
-                    <RiArrowDownSLine
-                        className={cn(
-                            'size-5 shrink-0 text-muted-foreground transition-transform',
-                            open && 'rotate-180',
-                        )}
-                    />
-                </button>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-                <div className="mt-4 grid gap-4">
-                    {registrations.map((registration) => (
-                        <Card
-                            key={registration.id}
-                            className="border border-border bg-background shadow-sm ring-1 ring-border/70"
-                        >
-                            <CardHeader className="flex flex-row items-center justify-between gap-3 border-b border-border">
-                                <div>
-                                    <CardTitle>
-                                        <QualifiedSemester
-                                            level={registration.semester.level}
-                                            semester={
-                                                registration.semester.name
-                                            }
-                                        />
-                                    </CardTitle>
-                                    <div className="mt-1 text-xs text-muted-foreground">
-                                        {registration.semester.session} Session
+            </div>
+            <div className="flex min-h-0 min-w-0 flex-col">
+                <ScrollArea className="min-h-0 min-w-0 flex-1">
+                    <div className="mx-auto w-full max-w-4xl px-0 py-5 md:px-5 md:py-6">
+                        {period ? (
+                            <>
+                                <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-3 pb-5 md:px-0">
+                                    <div>
+                                        <h1 className="text-lg font-semibold">
+                                            <QualifiedSemester
+                                                level={period.level}
+                                                semester={period.name}
+                                            />
+                                        </h1>
+                                        <p className="text-sm text-muted-foreground">
+                                            {period.session} Session
+                                        </p>
                                     </div>
-                                </div>
-                                <CourseRegistrationStatusBadge
-                                    status={registration.status}
-                                />
-                            </CardHeader>
-                            <CardContent className="p-0">
-                                <CourseRegistrationCourseTable
-                                    courses={registration.courses}
-                                />
-                            </CardContent>
-                        </Card>
-                    ))}
-                </div>
-            </CollapsibleContent>
-        </Collapsible>
-    );
-}
+                                    {registration.reviewStatus !==
+                                    'Not submitted' ? (
+                                        <CourseRegistrationStatusBadge
+                                            status={registration.reviewStatus}
+                                        />
+                                    ) : null}
+                                </header>
 
-function Notice({
-    children,
-    title,
-    tone,
-}: {
-    children: ReactNode;
-    title?: string;
-    tone: 'danger' | 'warning';
-}) {
-    return (
-        <div
-            className={cn(
-                'border px-4 py-3 text-sm shadow-sm',
-                tone === 'danger'
-                    ? 'border-red-200 bg-red-50 text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200'
-                    : 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-100',
-            )}
-        >
-            {title ? <div className="font-semibold">{title}</div> : null}
-            <div className={title ? 'mt-1' : undefined}>{children}</div>
+                                {registration.feedbackNote ? (
+                                    <div className="mt-4 border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-100">
+                                        <strong className="block">
+                                            Changes requested
+                                        </strong>
+                                        {registration.feedbackNote}
+                                    </div>
+                                ) : null}
+
+                                <div className="mt-5 border border-border">
+                                    <CourseRegistrationCourseTable
+                                        courses={courses}
+                                        selectedKeys={selectedKeys}
+                                        selectable={editable}
+                                        onToggleCourse={
+                                            editable ? toggleCourse : undefined
+                                        }
+                                        selectionIssue={
+                                            editable
+                                                ? selectionIssue
+                                                : undefined
+                                        }
+                                        totalUnits={
+                                            editable ? undefined : selectedUnits
+                                        }
+                                        emptyLabel={
+                                            !registration.hasAvailableCourses
+                                                ? 'Your course adviser has not assigned any courses for this semester yet.'
+                                                : 'You have not selected any courses for this semester yet.'
+                                        }
+                                    />
+                                </div>
+                            </>
+                        ) : (
+                            <div className="px-4 py-12 text-center text-sm text-muted-foreground">
+                                {registration.sessions.length
+                                    ? 'Choose a semester to see its course registration.'
+                                    : 'Your course adviser has not added any sessions yet.'}
+                            </div>
+                        )}
+                    </div>
+                </ScrollArea>
+                {period &&
+                editable &&
+                (registration.hasAvailableCourses ||
+                    selectedCourses.length > 0) ? (
+                    <div className="border-t border-border px-3 py-3 md:px-5">
+                        <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3">
+                            <div aria-live="polite" className="min-w-0 text-sm">
+                                <span
+                                    className={
+                                        overLimit
+                                            ? 'font-medium text-destructive'
+                                            : 'font-medium tabular-nums'
+                                    }
+                                >
+                                    {selectedUnits} /{' '}
+                                    {registration.maximumCourseUnits} units
+                                </span>
+                                {overLimit ? (
+                                    <span className="ml-2 text-destructive">
+                                        Remove a course to stay within the
+                                        limit.
+                                    </span>
+                                ) : null}
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={
+                                        !isDirty ||
+                                        overLimit ||
+                                        hasIneligibleSelection ||
+                                        processing
+                                    }
+                                    onClick={() => submit('save')}
+                                >
+                                    <RiSave3Line /> Save Draft
+                                </Button>
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button
+                                            size="sm"
+                                            disabled={
+                                                selectedCourses.length === 0 ||
+                                                overLimit ||
+                                                hasIneligibleSelection ||
+                                                processing
+                                            }
+                                        >
+                                            <RiSendPlaneLine /> Submit for
+                                            Review
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>
+                                                Submit {period.level},{' '}
+                                                {period.name}?
+                                            </AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                Your course adviser will review
+                                                the {selectedUnits} units
+                                                selected for {period.session}{' '}
+                                                Session.
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel>
+                                                Keep Editing
+                                            </AlertDialogCancel>
+                                            <AlertDialogAction
+                                                onClick={() => submit('submit')}
+                                            >
+                                                Submit for Review
+                                            </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            </div>
+                        </div>
+                        {validationError ? (
+                            <p
+                                role="alert"
+                                className="mx-auto mt-2 max-w-4xl text-sm text-destructive"
+                            >
+                                {validationError}
+                            </p>
+                        ) : null}
+                    </div>
+                ) : null}
+            </div>
         </div>
     );
-}
-
-function courseKey(course: DashboardCourseRegistrationCourse): string {
-    return course.courseOfferingId.toString();
 }

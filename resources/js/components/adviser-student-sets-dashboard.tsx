@@ -1,18 +1,9 @@
 import { Link, useForm } from '@inertiajs/react';
-import {
-    RiAddLine,
-    RiArrowLeftLine,
-    RiGroupLine,
-    RiSave3Line,
-} from '@remixicon/react';
+import { RiAddLine, RiGroupLine, RiSave3Line } from '@remixicon/react';
 import type { FormEvent } from 'react';
 
-import {
-    createStudentSet,
-    section as dashboardSection,
-} from '@/actions/App/Http/Controllers/DashboardController';
+import { createStudentSet } from '@/actions/App/Http/Controllers/DashboardController';
 import { store as storeStudentSet } from '@/actions/App/Http/Controllers/StudentSetController';
-import { ActionLink } from '@/components/action-link';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -51,11 +42,7 @@ export function AdviserStudentSetsDashboard({
 }: {
     settings: DashboardAdviserStudentSets;
 }) {
-    return settings.isCreating ? (
-        <StudentSetForm />
-    ) : (
-        <EmptyStudentSets />
-    );
+    return settings.isCreating ? <StudentSetForm /> : <EmptyStudentSets />;
 }
 
 function EmptyStudentSets() {
@@ -102,14 +89,6 @@ function StudentSetForm() {
 
     return (
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
-            <ActionLink
-                href={dashboardSection({ section: 'student-sets' })}
-                icon={<RiArrowLeftLine className="size-4" />}
-                className="w-fit"
-            >
-                Back to Student Sets
-            </ActionLink>
-
             <div>
                 <h1 className="text-xl font-semibold tracking-normal">
                     Add New Set

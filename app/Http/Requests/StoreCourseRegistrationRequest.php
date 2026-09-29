@@ -25,7 +25,9 @@ class StoreCourseRegistrationRequest extends FormRequest
     {
         return [
             'action' => ['required', Rule::in(['save', 'submit'])],
-            'items' => ['required', 'array', 'min:1', 'max:24'],
+            'session' => ['required', 'string', 'regex:/^\d{8}$/'],
+            'semester' => ['required', Rule::in(['first', 'second'])],
+            'items' => [$this->input('action') === 'submit' ? 'required' : 'present', 'array', $this->input('action') === 'submit' ? 'min:1' : 'min:0', 'max:24'],
             'items.*.course_offering_id' => ['required', 'integer', 'distinct', 'exists:course_offerings,id'],
         ];
     }

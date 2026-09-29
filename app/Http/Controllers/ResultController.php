@@ -27,10 +27,10 @@ class ResultController extends Controller
     ): RedirectResponse {
         [$set, $period] = $this->period($request, $departmentSlug, $entrySession, $sessionYears, $semester);
         $courseOffering = $this->access->courseOfferingByRoute($set, $period, $courseCode);
-        $this->results->saveGrades($period, $courseOffering, $request->user()->id, $request->validated('grades'));
+        $this->results->saveGrades($period, $courseOffering, $request->user()->id, $request->validated('grades'), $request->validated('reason'));
 
-        return back()->with('success', $period->results_published_at === null
-            ? 'Grades saved. Students cannot see them until you publish this semester.'
+        return back()->with('success', $courseOffering->results_published_at === null
+            ? 'Grades saved.'
             : 'Published grades corrected. Students can see the updated results.');
     }
 
@@ -40,15 +40,17 @@ class ResultController extends Controller
         string $entrySession,
         string $sessionYears,
         string $semester,
+        string $courseCode,
     ): RedirectResponse {
         [$set, $period] = $this->period($request, $departmentSlug, $entrySession, $sessionYears, $semester);
-        $this->results->publish($period);
+        $offering = $this->access->courseOfferingByRoute($set, $period, $courseCode);
+        $this->results->publish($period, $offering, $request->user()->id);
 
         return to_route('student-sets.results.semester', [
             ...$set->routeParameters(),
             'sessionYears' => $sessionYears,
             'semester' => $semester,
-        ])->with('success', 'Semester results published. Students can now see their grades.');
+        ])->with('success', $offering->course->code.' results published. Students can now see their grades.');
     }
 
     /** @return array{StudentSet, AcademicSessionSemester} */

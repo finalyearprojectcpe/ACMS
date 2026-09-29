@@ -63,7 +63,7 @@ class CourseRegistration extends Model
         $session = $this->academicSessionSemester->academicSession;
 
         return [
-            'registrationNumber' => $this->studentProfile->registration_number,
+            'registrationNumber' => $this->studentProfile->routeRegistrationNumber(),
             'sessionYears' => $session->start_year.$session->end_year,
             'semester' => $this->academicSessionSemester->semester->slug,
         ];

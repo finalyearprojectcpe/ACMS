@@ -1,4 +1,5 @@
 import { Link, router } from '@inertiajs/react';
+import { Fragment } from 'react';
 
 import { GradeLetter } from '@/components/grade-letter';
 import {
@@ -32,8 +33,10 @@ import type { DashboardStudentResults } from '@/types';
 
 export function StudentResultsView({
     results,
+    overviewUrl,
 }: {
     results: DashboardStudentResults;
+    overviewUrl?: string;
 }) {
     if (results.periods.length === 0) {
         return (
@@ -41,8 +44,8 @@ export function StudentResultsView({
                 <EmptyHeader>
                     <EmptyTitle>No published results yet</EmptyTitle>
                     <EmptyDescription>
-                        Results appear after the course adviser publishes a
-                        semester.
+                        Results appear as your course adviser publishes each
+                        subject.
                     </EmptyDescription>
                 </EmptyHeader>
             </Empty>
@@ -50,9 +53,10 @@ export function StudentResultsView({
     }
 
     const selected = results.selected;
+    const DetailHeading = overviewUrl ? 'h1' : 'h2';
     const currentKey = selected
         ? `${selected.sessionYears}:${selected.semester}`
-        : '';
+        : 'overview';
     const grouped = Object.groupBy(results.periods, (period) =>
         period.shortLabel.slice(0, 4),
     );
@@ -64,6 +68,12 @@ export function StudentResultsView({
                     <Select
                         value={currentKey}
                         onValueChange={(value) => {
+                            if (value === 'overview' && overviewUrl) {
+                                router.visit(overviewUrl);
+
+                                return;
+                            }
+
                             const period = results.periods.find(
                                 (item) =>
                                     `${item.sessionYears}:${item.semester}` ===
@@ -79,6 +89,11 @@ export function StudentResultsView({
                             <SelectValue placeholder="Choose a semester" />
                         </SelectTrigger>
                         <SelectContent>
+                            {overviewUrl ? (
+                                <SelectItem value="overview">
+                                    Overview
+                                </SelectItem>
+                            ) : null}
                             {results.periods.map((period) => (
                                 <SelectItem
                                     key={period.url}
@@ -92,6 +107,19 @@ export function StudentResultsView({
                 </div>
                 <ScrollArea className="hidden max-h-[min(65dvh,42rem)] md:block">
                     <LevelSemesterRail>
+                        {overviewUrl ? (
+                            <Link
+                                href={overviewUrl}
+                                aria-current={
+                                    currentKey === 'overview'
+                                        ? 'page'
+                                        : undefined
+                                }
+                                className={`${levelSemesterRailItemClassName(currentKey === 'overview')} before:hidden`}
+                            >
+                                Overview
+                            </Link>
+                        ) : null}
                         {Object.entries(grouped).map(([level, periods]) => (
                             <LevelSemesterRailGroup key={level} label={level}>
                                 {periods?.map((period) => (
@@ -124,16 +152,16 @@ export function StudentResultsView({
                     <div className="mx-auto max-w-xl min-w-0">
                         <header className="mb-5 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4">
                             <div className="min-w-0">
-                                <h2 className="text-lg font-semibold">
+                                <DetailHeading className="text-lg font-semibold">
                                     {selected.label}
-                                </h2>
+                                </DetailHeading>
                             </div>
                             <div className="text-right">
                                 <div className="text-xs text-muted-foreground">
-                                    GPA
+                                    Semester GPA
                                 </div>
                                 <strong className="text-xl tabular-nums">
-                                    {selected.gpa?.toFixed(2) ?? '—'}
+                                    {selected.gpa?.toFixed(2) ?? 'Pending'}
                                 </strong>
                             </div>
                         </header>
@@ -166,9 +194,19 @@ export function StudentResultsView({
                                                 {course.units}
                                             </TableCell>
                                             <TableCell className="pr-3 text-right">
-                                                <GradeLetter
-                                                    grade={course.grade}
-                                                />
+                                                {course.pending ? (
+                                                    <span className="text-xs text-muted-foreground">
+                                                        Awaiting result
+                                                    </span>
+                                                ) : course.missingScript ? (
+                                                    <span className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                                                        Missing script
+                                                    </span>
+                                                ) : (
+                                                    <GradeLetter
+                                                        grade={course.grade}
+                                                    />
+                                                )}
                                             </TableCell>
                                         </TableRow>
                                     ))}
@@ -177,8 +215,77 @@ export function StudentResultsView({
                             <ScrollBar orientation="horizontal" />
                         </ScrollArea>
                     </div>
+                ) : overviewUrl ? (
+                    <StudentAcademicHistory history={results.history} />
                 ) : null}
             </section>
+        </div>
+    );
+}
+
+function StudentAcademicHistory({
+    history,
+}: {
+    history: DashboardStudentResults['history'];
+}) {
+    const sessions = Object.groupBy(history, (period) => period.sessionYears);
+
+    return (
+        <div className="mx-auto max-w-2xl min-w-0">
+            <h1 className="mb-4 text-lg font-semibold">Academic History</h1>
+            <ScrollArea className="w-full border-y">
+                <Table className="min-w-[320px] text-sm">
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead className="pl-3">Semester</TableHead>
+                            <TableHead className="w-20 text-right">
+                                GPA
+                            </TableHead>
+                            <TableHead className="w-28 pr-3 text-right">
+                                Official CGPA
+                            </TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {Object.entries(sessions).map(
+                            ([sessionYears, periods]) => (
+                                <Fragment key={sessionYears}>
+                                    <TableRow>
+                                        <TableCell
+                                            colSpan={3}
+                                            className="bg-muted/30 px-3 py-2 font-semibold"
+                                        >
+                                            {periods?.[0].level} ·{' '}
+                                            {periods?.[0].session} Session
+                                        </TableCell>
+                                    </TableRow>
+                                    {periods?.map((period) => (
+                                        <TableRow key={period.url}>
+                                            <TableCell className="pl-3">
+                                                <Link
+                                                    href={period.url}
+                                                    aria-label={`View ${period.level} ${period.semester} result for ${period.session} Session`}
+                                                    className="font-medium text-link hover:underline"
+                                                >
+                                                    {period.semester}
+                                                </Link>
+                                            </TableCell>
+                                            <TableCell className="text-right tabular-nums">
+                                                {period.gpa?.toFixed(2) ??
+                                                    'Pending'}
+                                            </TableCell>
+                                            <TableCell className="pr-3 text-right font-medium tabular-nums">
+                                                {period.cgpa?.toFixed(2) ?? '—'}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </Fragment>
+                            ),
+                        )}
+                    </TableBody>
+                </Table>
+                <ScrollBar orientation="horizontal" />
+            </ScrollArea>
         </div>
     );
 }

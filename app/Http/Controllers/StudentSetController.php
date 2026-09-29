@@ -48,14 +48,26 @@ class StudentSetController extends Controller
     ): RedirectResponse {
         $studentSet = $this->ownedSet($request, $departmentSlug, $entrySession);
         $validated = $request->validated();
-        $academicYearId = $validated['current_academic_year_id'] ?? null;
-
-        if ($academicYearId !== null && ! $studentSet->academicSessions()
-            ->where('academic_year_id', $academicYearId)
-            ->exists()) {
+        if (array_key_exists('current_semester_id', $validated) && ! array_key_exists('current_academic_year_id', $validated)) {
             throw ValidationException::withMessages([
-                'current_academic_year_id' => 'Add a session for this academic level before making it current.',
+                'current_academic_year_id' => 'Choose the session together with its semester.',
             ]);
+        }
+
+        if (array_key_exists('current_academic_year_id', $validated)) {
+            $session = $studentSet->academicSessions()->where('academic_year_id', $validated['current_academic_year_id'])->first();
+
+            if ($session === null) {
+                throw ValidationException::withMessages([
+                    'current_academic_year_id' => 'Add a session for this level before making it current.',
+                ]);
+            }
+
+            if (! $session->semesterInstances()->where('semester_id', $validated['current_semester_id'])->exists()) {
+                throw ValidationException::withMessages([
+                    'current_semester_id' => 'Choose a semester in this session.',
+                ]);
+            }
         }
 
         $studentSet->update($validated);

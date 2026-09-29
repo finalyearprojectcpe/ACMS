@@ -6,7 +6,10 @@ use App\Models\AcademicYear;
 use App\Models\AdvisorProfile;
 use App\Models\Course;
 use App\Models\CourseOffering;
+use App\Models\CourseRegistration;
+use App\Models\CourseRegistrationItem;
 use App\Models\Semester;
+use App\Models\StudentProfile;
 use App\Models\StudentSet;
 use Database\Seeders\AcademicStructureSeeder;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -119,10 +122,11 @@ test('courses stay within their set and can be offered again in a later semester
         'student_set_id' => $set->id,
         'code' => 'CPE 101',
     ]);
-    CourseOffering::factory()->create([
+    $earlierOffering = CourseOffering::factory()->create([
         'course_id' => $course->id,
         'academic_session_semester_id' => $firstSemester->id,
     ]);
+    $originalTitle = $course->title;
 
     $this->actingAs($advisor->user)->post(route('student-sets.courses.store', [
         ...$set->routeParameters(),
@@ -137,7 +141,47 @@ test('courses stay within their set and can be offered again in a later semester
     ])->assertSessionHasNoErrors();
 
     expect(Course::query()->where('student_set_id', $set->id)->where('code', 'CPE 101')->count())->toBe(1)
-        ->and($course->offerings()->count())->toBe(2);
+        ->and($course->offerings()->count())->toBe(2)
+        ->and($course->fresh()->title)->toBe($originalTitle);
+
+    $student = StudentProfile::factory()->create([
+        'advisor_profile_id' => $advisor->id,
+        'student_set_id' => $set->id,
+    ]);
+    $registration = CourseRegistration::factory()->create([
+        'student_profile_id' => $student->id,
+        'academic_session_semester_id' => $firstSemester->id,
+        'status' => CourseRegistration::StatusApproved,
+    ]);
+    CourseRegistrationItem::query()->create([
+        'course_registration_id' => $registration->id,
+        'course_offering_id' => $earlierOffering->id,
+        'course_code' => 'CPE 101',
+        'course_title' => $originalTitle,
+        'credit_units' => $earlierOffering->credit_units,
+        'is_elective' => false,
+    ]);
+    $laterRoute = [
+        ...$set->routeParameters(),
+        'sessionYears' => $secondSession->routeYears(),
+        'semester' => 'first',
+        'courseCode' => 'cpe101',
+    ];
+    $edit = [
+        'code' => 'CPE 103',
+        'title' => 'Updated Title',
+        'credit_units' => 3,
+        'is_elective' => true,
+        'prerequisite_course_ids' => [],
+    ];
+    $this->patch(route('student-sets.courses.update', $laterRoute), $edit)->assertSessionHasErrors('code');
+    $this->patch(route('student-sets.courses.update', $laterRoute), [
+        ...$edit,
+        'code' => 'CPE 101',
+    ])->assertSessionHasNoErrors();
+    $course->refresh();
+    expect($course->code)->toBe('CPE 101')
+        ->and($course->title)->toBe($originalTitle);
 
     $this->post(route('student-sets.courses.store', [
         ...$otherSet->routeParameters(),
@@ -176,6 +220,10 @@ test('session settings protect current sessions and sessions with academic recor
     $semester = AcademicSessionSemester::factory()->create([
         'academic_session_id' => $firstSession->id,
     ]);
+    AcademicSessionSemester::factory()->create([
+        'academic_session_id' => $secondSession->id,
+        'semester_id' => $semester->semester_id,
+    ]);
     $course = Course::factory()->create(['student_set_id' => $set->id]);
     CourseOffering::factory()->create([
         'course_id' => $course->id,
@@ -205,6 +253,7 @@ test('session settings protect current sessions and sessions with academic recor
     $this->patch(route('student-sets.update', $set->routeParameters()), [
         'student_signup_enabled' => true,
         'current_academic_year_id' => $secondYear->id,
+        'current_semester_id' => $semester->semester_id,
     ])->assertSessionHasNoErrors();
 
     $this->delete(route('student-sets.sessions.destroy', [
@@ -215,6 +264,7 @@ test('session settings protect current sessions and sessions with academic recor
     $this->patch(route('student-sets.update', $set->routeParameters()), [
         'student_signup_enabled' => true,
         'current_academic_year_id' => $firstYear->id,
+        'current_semester_id' => $semester->semester_id,
     ])->assertSessionHasNoErrors();
 
     $this->delete(route('student-sets.sessions.destroy', [

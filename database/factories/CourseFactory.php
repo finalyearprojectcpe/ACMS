@@ -28,7 +28,6 @@ class CourseFactory extends Factory
             'student_set_id' => StudentSet::factory(),
             'code' => $code,
             'title' => $title,
-            'slug' => Str::slug("{$code} {$title}"),
         ];
     }
 }

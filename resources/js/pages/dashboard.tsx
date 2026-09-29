@@ -1,9 +1,10 @@
-import { Head, Link, usePage } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { RiArrowLeftLine } from '@remixicon/react';
+import { useEffect, useState } from 'react';
 
 import {
     createStudentSet,
-    home as dashboardHome,
+    section as dashboardSection,
 } from '@/actions/App/Http/Controllers/DashboardController';
 import { AdviserAcademicSessionForm } from '@/components/adviser-academic-session-form';
 import {
@@ -18,6 +19,10 @@ import { AdviserDueFormDashboard } from '@/components/adviser-due-form-dashboard
 import { AdviserDueWaiverFormDashboard } from '@/components/adviser-due-waiver-form-dashboard';
 import { AdviserDuesDashboard } from '@/components/adviser-dues-dashboard';
 import { AdviserHomeDashboard } from '@/components/adviser-home-dashboard';
+import {
+    AdviserJoinRequestDashboard,
+    AdviserJoinRequestsDashboard,
+} from '@/components/adviser-join-requests-dashboard';
 import { AdviserPaymentAccountFormDashboard } from '@/components/adviser-payment-account-form-dashboard';
 import { AdviserGradeRoster } from '@/components/adviser-results-dashboard';
 import { AdviserSemesterWorkspace } from '@/components/adviser-semester-workspace';
@@ -35,6 +40,7 @@ import {
     StudentRecordDashboard,
     StudentRecordResultsDashboard,
 } from '@/components/student-record-dashboard';
+import { StudentResultStatementDashboard } from '@/components/student-result-statement-dashboard';
 import { StudentResultsView } from '@/components/student-results-view';
 import { StudentSetSettings } from '@/components/student-set-settings';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -64,20 +70,39 @@ type DashboardPageProps = {
     dashboard: DashboardContext;
 };
 
+const initialDashboardUrl =
+    typeof window === 'undefined'
+        ? ''
+        : window.location.pathname + window.location.search;
+const hasInternalReferrer =
+    typeof document !== 'undefined' &&
+    document.referrer !== '' &&
+    new URL(document.referrer).origin === window.location.origin;
+
 export default function DashboardPage({ dashboard }: DashboardPageProps) {
     const { auth } = usePage<{
         auth: Auth;
     }>().props;
-    const canGoBack = dashboard.section !== 'home';
+    const [hasInternalHistory, setHasInternalHistory] =
+        useState(hasInternalReferrer);
+    useEffect(
+        () =>
+            router.on('navigate', (event) => {
+                setHasInternalHistory(
+                    hasInternalReferrer ||
+                        event.detail.page.url !== initialDashboardUrl,
+                );
+            }),
+        [],
+    );
+    const canGoBack =
+        dashboard.section !== 'home' &&
+        hasInternalHistory &&
+        typeof window !== 'undefined' &&
+        window.history.length > 1;
 
     function goBack() {
-        if (window.history.length > 1) {
-            window.history.back();
-
-            return;
-        }
-
-        window.location.assign(dashboardHome().url);
+        window.history.back();
     }
     const studentHeaderMeta =
         dashboard.role === 'student' && dashboard.student !== null
@@ -94,6 +119,8 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
         dashboard.adviserHome !== null
             ? dashboard.adviserHome
             : null;
+    const adviserJoinRequests = dashboard.adviserJoinRequests;
+    const adviserJoinRequest = dashboard.adviserJoinRequest;
     const adviserRegistrationActivity = dashboard.adviserRegistrationActivity;
     const adviserPaymentHistory = dashboard.adviserPaymentHistory;
     const adviserAssistant = dashboard.adviserAssistant;
@@ -206,6 +233,7 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
             ? dashboard.studentRecord
             : null;
     const studentRecordResults = dashboard.studentRecordResults;
+    const studentRecordStatement = dashboard.studentRecordStatement;
     const studentResults = dashboard.studentResults;
 
     return (
@@ -278,12 +306,14 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                             <AdviserAssistantDashboard
                                 key={adviserAssistant.selectedId ?? 'new'}
                                 assistant={adviserAssistant}
+                                role={dashboard.role}
                             />
                         ) : (
                             <DashboardPageSurface
                                 bounded={
                                     !studentRecord &&
                                     !studentRecordResults &&
+                                    !studentRecordStatement &&
                                     (!!adviserCourseSchedules ||
                                         !!adviserDues ||
                                         !!adviserStudents ||
@@ -291,6 +321,7 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                                         !!adviserGradeRoster ||
                                         !!adviserCourseOfferingForm ||
                                         !!dashboard.studentSetSettings ||
+                                        !!studentCourseRegistration ||
                                         (!!adviserCourseRegistration &&
                                             !adviserCourseRegistration.review))
                                 }
@@ -302,6 +333,14 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                                 ) : adviserPaymentHistory ? (
                                     <AdviserPaymentHistoryDashboard
                                         history={adviserPaymentHistory}
+                                    />
+                                ) : adviserJoinRequest ? (
+                                    <AdviserJoinRequestDashboard
+                                        request={adviserJoinRequest}
+                                    />
+                                ) : adviserJoinRequests ? (
+                                    <AdviserJoinRequestsDashboard
+                                        listing={adviserJoinRequests}
                                     />
                                 ) : dashboard.studentSetSettings ? (
                                     <StudentSetSettings
@@ -375,6 +414,10 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                                     <StudentRecordResultsDashboard
                                         record={studentRecordResults}
                                     />
+                                ) : studentRecordStatement ? (
+                                    <StudentResultStatementDashboard
+                                        statement={studentRecordStatement}
+                                    />
                                 ) : studentRecord ? (
                                     <StudentRecordDashboard
                                         record={studentRecord}
@@ -391,6 +434,10 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                                     <StudentDuesDashboard dues={studentDues} />
                                 ) : studentCourseRegistration ? (
                                     <StudentCourseRegistrationDashboard
+                                        key={
+                                            studentCourseRegistration.selectedSemesterId ??
+                                            'none'
+                                        }
                                         registration={studentCourseRegistration}
                                     />
                                 ) : studentProfile ? (
@@ -398,12 +445,14 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                                         profile={studentProfile}
                                     />
                                 ) : studentResults ? (
-                                    <div className="mx-auto grid w-full max-w-6xl gap-6">
-                                        <h1 className="text-xl font-semibold">
-                                            Results
-                                        </h1>
+                                    <div className="mx-auto w-full max-w-6xl">
                                         <StudentResultsView
                                             results={studentResults}
+                                            overviewUrl={
+                                                dashboardSection({
+                                                    section: 'results',
+                                                }).url
+                                            }
                                         />
                                     </div>
                                 ) : dashboard.role === 'adviser' &&

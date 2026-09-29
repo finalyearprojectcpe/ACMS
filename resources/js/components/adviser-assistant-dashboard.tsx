@@ -34,19 +34,30 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip';
 import type { DashboardAssistant } from '@/types';
+import type { DashboardRole } from '@/types';
 
-const exampleQuestions = [
+const adviserQuestions = [
     'Which registrations need my review?',
     'How many students are in my set?',
     'Who has paid their dues?',
     'What courses are in this semester?',
 ];
+const studentQuestions = [
+    'Which dues have I not paid?',
+    'What courses did I register this semester?',
+    'Which of my grades have been published?',
+    'How many units am I taking?',
+];
 
 export function AdviserAssistantDashboard({
     assistant,
+    role,
 }: {
     assistant: DashboardAssistant;
+    role: DashboardRole;
 }) {
+    const exampleQuestions =
+        role === 'student' ? studentQuestions : adviserQuestions;
     const form = useForm({ question: '' });
     const messagesEnd = useRef<HTMLDivElement>(null);
     const [exampleIndex, setExampleIndex] = useState(0);
@@ -67,7 +78,12 @@ export function AdviserAssistantDashboard({
         }, 5000);
 
         return () => window.clearInterval(interval);
-    }, [assistant.messages.length, composerFocused, form.data.question]);
+    }, [
+        assistant.messages.length,
+        composerFocused,
+        exampleQuestions.length,
+        form.data.question,
+    ]);
 
     useEffect(() => {
         if (assistant.messages.length > 0) {

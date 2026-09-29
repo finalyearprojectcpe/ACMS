@@ -78,7 +78,7 @@ function StudentInvitationForm({
                 <FieldGroup className="gap-7">
                     <AuthFormHeader
                         title={invitation.studentSet}
-                        description={`Join the set managed by ${invitation.courseAdviser}.`}
+                        description={`Create an account to request access to ${invitation.courseAdviser}'s set.`}
                     />
 
                     {form.errors.invitation ? (
@@ -134,8 +134,7 @@ function StudentInvitationForm({
                         <Input
                             id="registration-number"
                             value={form.data.registration_number}
-                            placeholder="2024001234"
-                            inputMode="numeric"
+                            maxLength={255}
                             autoComplete="off"
                             aria-invalid={Boolean(
                                 form.errors.registration_number,
@@ -225,7 +224,7 @@ function StudentInvitationForm({
                             >
                                 {form.processing
                                     ? 'Creating account...'
-                                    : 'Create student account'}
+                                    : 'Send join request'}
                             </Button>
                             <LoginPrompt />
                         </AuthFormActions>

@@ -4,7 +4,7 @@ Use this workflow when enabling production email delivery for password-reset lin
 
 ## Purpose
 
-Payment receipts are generated and stored before their email is queued, so an email failure never prevents dashboard download. Student access codes stay visible to the course adviser because students do not provide an email address until activation.
+Payment receipts are generated and stored before their email is queued, so an email failure never prevents dashboard download. Students join a set through its invitation link using their own email address.
 
 ## Resend Account
 
@@ -23,7 +23,7 @@ Use a dedicated transactional subdomain such as `mail.example.com` rather than t
 4. Wait until Resend reports the domain as verified.
 5. Use an address on that verified domain, such as `notifications@mail.example.com`.
 
-GradeManager uses one verified platform sender. Adviser institution names belong in message content; do not use an unverified institution domain as the envelope sender.
+GradeManager uses one verified platform sender. Do not use an unverified school domain as the envelope sender.
 
 ## Environment Variables
 
@@ -98,7 +98,7 @@ Historical `email_deliveries` rows retain their original mailer value. New deliv
 ## Verification
 
 1. Request a password reset and confirm the one-time link opens on the correct GradeManager domain.
-2. Confirm the password-reset email identifies the adviser's institution.
+2. Confirm the password-reset email links to the correct GradeManager domain.
 3. Complete one test due payment and confirm the PDF receipt is attached.
 4. Confirm the Resend webhook changes the delivery from sent to delivered.
 5. Test a rejected address and confirm the dashboard does not continuously retry a bounced or suppressed message.

@@ -14,6 +14,7 @@ return new class extends Migration
         // Groups students by department and entry session under the course adviser who manages them.
         Schema::create('student_sets', function (Blueprint $table) {
             $table->id();
+            $table->ulid('public_id')->nullable()->unique();
             $table->foreignId('advisor_profile_id')->constrained()->cascadeOnDelete();
             $table->string('department_name');
             $table->string('department_slug');
@@ -22,6 +23,7 @@ return new class extends Migration
             $table->string('invite_token', 64)->unique();
             $table->boolean('student_signup_enabled')->default(true);
             $table->foreignId('current_academic_year_id')->nullable()->constrained('academic_years')->restrictOnDelete();
+            $table->foreignId('current_semester_id')->nullable()->constrained('semesters')->restrictOnDelete();
             $table->timestamps();
 
             $table->unique(

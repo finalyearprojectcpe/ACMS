@@ -146,7 +146,7 @@ class DashboardAccess
         return CourseRegistration::query()
             ->whereHas('studentProfile', fn ($query) => $query
                 ->where('advisor_profile_id', $advisor->id)
-                ->where('registration_number', $registrationNumber))
+                ->where('registration_number', StudentProfile::registrationNumberFromRoute($registrationNumber)))
             ->whereHas('academicSessionSemester', fn ($query) => $query
                 ->whereHas('academicSession', fn ($sessions) => $sessions
                     ->where('start_year', (int) substr($sessionYears, 0, 4))
