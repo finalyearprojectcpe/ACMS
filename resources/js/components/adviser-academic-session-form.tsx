@@ -116,7 +116,7 @@ export function AdviserAcademicSessionForm({
                 icon={<RiArrowLeftLine className="size-4" />}
                 className="w-fit"
             >
-                Set Settings
+                Go to Set Settings
             </ActionLink>
             <Card className="w-full border border-border bg-background">
                 <CardForm onSubmit={submit}>

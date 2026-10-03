@@ -8,7 +8,7 @@ Payment receipts are generated and stored before their email is queued, so an em
 
 ## Resend Account
 
-1. Create a Resend team for GradeManager.
+1. Create a Resend team for ACMS.
 2. Create a sending-only API key for the production application.
 3. Store the key only in deployment secrets.
 4. Review the account's email quota and request rate before enabling production receipt delivery.
@@ -23,7 +23,7 @@ Use a dedicated transactional subdomain such as `mail.example.com` rather than t
 4. Wait until Resend reports the domain as verified.
 5. Use an address on that verified domain, such as `notifications@mail.example.com`.
 
-GradeManager uses one verified platform sender. Do not use an unverified school domain as the envelope sender.
+ACMS uses one verified platform sender. Do not use an unverified school domain as the envelope sender.
 
 ## Environment Variables
 
@@ -32,7 +32,7 @@ Set these values in production:
 ```env
 MAIL_MAILER=resend
 MAIL_FROM_ADDRESS=notifications@mail.example.com
-MAIL_FROM_NAME="GradeManager"
+MAIL_FROM_NAME="ACMS"
 
 RESEND_API_KEY=re_xxxxxxxxx
 RESEND_WEBHOOK_SECRET=whsec_xxxxxxxxx
@@ -60,7 +60,7 @@ Subscribe only to these events:
 - `email.suppressed`
 - `email.complained`
 
-Copy the webhook signing secret into `RESEND_WEBHOOK_SECRET`. The official Resend Laravel middleware verifies every webhook signature before GradeManager updates a delivery record. Open and click tracking are not needed for these transactional messages.
+Copy the webhook signing secret into `RESEND_WEBHOOK_SECRET`. The official Resend Laravel middleware verifies every webhook signature before ACMS updates a delivery record. Open and click tracking are not needed for these transactional messages.
 
 ## Queue Worker
 
@@ -77,10 +77,10 @@ The application limits Resend work to four requests per second to remain below t
 Receipt generation and email delivery are separate jobs:
 
 1. Paystack confirms the exact amount paid.
-2. GradeManager generates and stores the PDF receipt on the private receipt disk.
+2. ACMS generates and stores the PDF receipt on the private receipt disk.
 3. The email job attaches that stored PDF through Laravel's storage attachment API.
 4. The email also contains a signed seven-day fallback download link.
-5. The receipt remains downloadable from GradeManager after the email link expires.
+5. The receipt remains downloadable from ACMS after the email link expires.
 
 Do not make the PDF public to simplify email delivery. Resend receives the attachment bytes from the queue worker, while the permanent stored copy remains private.
 
@@ -97,8 +97,8 @@ Historical `email_deliveries` rows retain their original mailer value. New deliv
 
 ## Verification
 
-1. Request a password reset and confirm the one-time link opens on the correct GradeManager domain.
-2. Confirm the password-reset email links to the correct GradeManager domain.
+1. Request a password reset and confirm the one-time link opens on the configured ACMS domain.
+2. Confirm the password-reset email links to the configured ACMS domain.
 3. Complete one test due payment and confirm the PDF receipt is attached.
 4. Confirm the Resend webhook changes the delivery from sent to delivered.
 5. Test a rejected address and confirm the dashboard does not continuously retry a bounced or suppressed message.

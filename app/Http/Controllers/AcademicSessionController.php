@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\AcademicSessionRequest;
-use App\Http\Requests\UpdateSemesterRegistrationRequest;
 use App\Models\AcademicSession;
 use App\Models\AcademicSessionSemester;
 use App\Models\Semester;
@@ -88,7 +87,7 @@ class AcademicSessionController extends Controller
         }
 
         if ($academicSession->hasAcademicRecords()) {
-            return back()->with('error', 'This session contains courses or course registrations, so it cannot be removed.');
+            return back()->with('error', 'This session contains courses, registrations, or dues, so it cannot be removed.');
         }
 
         $label = $academicSession->label();
@@ -96,47 +95,6 @@ class AcademicSessionController extends Controller
 
         return to_route('student-sets.edit', $set->routeParameters())
             ->with('success', "{$label} Session removed.");
-    }
-
-    public function updateRegistration(
-        UpdateSemesterRegistrationRequest $request,
-        string $departmentSlug,
-        string $entrySession,
-        string $sessionYears,
-        string $semester,
-    ): RedirectResponse {
-        $set = $this->ownedSet($request, $departmentSlug, $entrySession);
-        $academicSessionSemester = $this->access->semesterByRoute($set, $sessionYears, $semester);
-        $academicSessionSemester->loadMissing(['academicSession', 'courseOfferings']);
-        $enabled = $request->boolean('registration_enabled');
-
-        DB::transaction(function () use ($set, $academicSessionSemester, $enabled): void {
-            $lockedSemester = AcademicSessionSemester::query()->lockForUpdate()->findOrFail($academicSessionSemester->id);
-            if ($enabled && $lockedSemester->courseOfferings()->whereNotNull('results_published_at')->exists()) {
-                throw ValidationException::withMessages([
-                    'registration_enabled' => 'A subject has already been published for this semester. Registration cannot be reopened.',
-                ]);
-            }
-
-            if ($enabled && $lockedSemester->courseOfferings()->doesntExist()) {
-                throw ValidationException::withMessages([
-                    'registration_enabled' => 'Add at least one course before opening registration.',
-                ]);
-            }
-
-            if ($enabled) {
-                AcademicSessionSemester::query()
-                    ->whereHas('academicSession', fn ($query) => $query->whereBelongsTo($set))
-                    ->whereKeyNot($academicSessionSemester->id)
-                    ->update(['registration_enabled' => false]);
-            }
-
-            $lockedSemester->update(['registration_enabled' => $enabled]);
-        });
-
-        return back()->with('success', $enabled
-            ? 'Course registration is open for this semester.'
-            : 'Course registration is closed for this semester.');
     }
 
     private function ownedSet(Request $request, string $departmentSlug, string $entrySession): StudentSet

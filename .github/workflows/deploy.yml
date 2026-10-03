@@ -1,4 +1,4 @@
-name: Deploy GradeManager Latest Changes
+name: Deploy ACMS Latest Changes
 
 on:
   push:

@@ -4,11 +4,11 @@ Use this workflow when enabling online dues payment for course advisers.
 
 ## Purpose
 
-Course advisers create dues for the student sets they manage. Each adviser connects the bank account that should receive those dues from the dashboard. GradeManager keeps one central Paystack integration and creates Paystack subaccounts for adviser payout accounts, so staff do not manage API keys.
+Course advisers create dues for the student sets they manage. Each adviser connects the bank account that should receive those dues from the dashboard. ACMS keeps one central Paystack integration and creates Paystack subaccounts for adviser payout accounts, so staff do not manage API keys.
 
 ## Paystack Setup
 
-1. Create or select the Paystack business account used by GradeManager.
+1. Create or select the Paystack business account used by ACMS.
 2. Copy the secret key from the Paystack dashboard.
 3. Confirm split payments and subaccounts are available for the Paystack account.
 4. Add the webhook URL in Paystack:
@@ -35,10 +35,10 @@ PAYSTACK_SPLIT_FEE_BEARER=subaccount
 
 1. The adviser opens `Settings` and connects a payout account.
 2. The adviser enters the bank, account number, and a clear label.
-3. GradeManager loads supported Nigerian banks from Paystack and caches the list.
-4. GradeManager resolves the bank account with Paystack.
-5. GradeManager creates one Paystack subaccount for the adviser.
-6. If the adviser changes bank details later, GradeManager updates that same Paystack subaccount and current local payout record.
+3. ACMS loads supported Nigerian banks from Paystack and caches the list.
+4. ACMS resolves the bank account with Paystack.
+5. ACMS creates one Paystack subaccount for the adviser.
+6. If the adviser changes bank details later, ACMS updates that same Paystack subaccount and current local payout record.
 7. Every unpaid and future due managed by the adviser uses that current payout account.
 
 If a due is still a draft, it can exist without a payout account. Publishing requires an active Paystack payout account so students never pay into an unclear settlement destination.
@@ -50,8 +50,8 @@ Do not hardcode bank names or bank codes in product code. The Paystack bank list
 ## Payment Flow
 
 1. Student clicks `Pay now`.
-2. GradeManager resolves the adviser's current payout account and creates a `due_payments` record with a payout snapshot.
-3. GradeManager initializes a Paystack transaction with:
+2. ACMS resolves the adviser's current payout account and creates a `due_payments` record with a payout snapshot.
+3. ACMS initializes a Paystack transaction with:
     - student email
     - amount in kobo
     - unique reference
@@ -59,13 +59,13 @@ Do not hardcode bank names or bank codes in product code. The Paystack bank list
     - payment metadata for audit
 4. Paystack redirects the student to checkout.
 5. Paystack calls the webhook after payment, refund, or dispute events.
-6. GradeManager verifies the signature and transaction reference before it marks an assignment as paid.
+6. ACMS verifies the signature and transaction reference before it marks an assignment as paid.
 7. A valid refund or dispute reverses the payment and restores the due to pending when no earlier successful payment remains.
-8. GradeManager queues a PDF receipt from the stored payment record and emails it after generation.
+8. ACMS queues a PDF receipt from the stored payment record and emails it after generation.
 
 The PDF records the exact amount Paystack confirmed and uses Paystack's transaction ID as its verification identity. Its QR code opens a permanent signed verification page. Receipt generation and email delivery have separate retry states, so an email failure never blocks dashboard download.
 
-Published due amounts remain editable. Changing an amount updates pending and waived student assignments and closes their open checkout links. Completed payments and receipts keep their original verified amounts. If an older checkout completes after an amount change, GradeManager records the amount attached to that verified Paystack transaction instead of rewriting payment history.
+Published due amounts remain editable. Changing an amount updates pending and waived student assignments and closes their open checkout links. Completed payments and receipts keep their original verified amounts. If an older checkout completes after an amount change, ACMS records the amount attached to that verified Paystack transaction instead of rewriting payment history.
 
 Course advisers can waive an individual student due with a reason, restore a waived due when needed, or archive a published due. Archiving stops new checkouts without deleting the payment history.
 
@@ -105,4 +105,4 @@ php artisan test --compact --filter=due
 - Show the connected bank details only to the adviser who owns the payout account.
 - Verify bank account details with Paystack before creating the subaccount.
 - Verify webhook signatures before processing webhook payloads.
-- Store only the sanitized webhook fields required for audit and idempotency; do not retain card, customer, or authorization details that GradeManager does not need.
+- Store only the sanitized webhook fields required for audit and idempotency; do not retain card, customer, or authorization details that ACMS does not need.

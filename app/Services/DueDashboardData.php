@@ -12,6 +12,7 @@ use App\Models\StudentDueAssignment;
 use App\Models\StudentProfile;
 use App\Models\StudentSet;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class DueDashboardData
 {
@@ -28,15 +29,20 @@ class DueDashboardData
             ->orderBy('start_year')
             ->get() ?? collect();
         $dues = $set?->dues()
-            ->with(['studentSet', 'academicSession', 'academicSessionSemester.semester', 'assignments', 'paymentAccount'])
+            ->with(['studentSet', 'academicSession.academicYear', 'academicSessionSemester.semester', 'paymentAccount'])
             ->when($selectedSemester instanceof AcademicSessionSemester, fn ($query) => $query->where('academic_session_semester_id', $selectedSemester->id))
             ->when($selectedSession instanceof AcademicSession && ! $selectedSemester instanceof AcademicSessionSemester, fn ($query) => $query->where('academic_session_id', $selectedSession->id)->whereNull('academic_session_semester_id'))
             ->latest()
             ->get() ?? collect();
-        $assignments = $dues->where('status', Due::StatusPublished)
-            ->flatMap(fn (Due $due): Collection => $due->assignments);
-        $pending = $assignments->where('status', StudentDueAssignment::StatusPending);
-        $paid = $assignments->where('status', StudentDueAssignment::StatusPaid);
+        $assignmentTotals = $dues->isEmpty() ? collect() : DB::table('student_due_assignments')
+            ->select('due_id', 'status')
+            ->selectRaw('COUNT(*) AS assignment_count, SUM(amount_kobo) AS amount_kobo')
+            ->whereIn('due_id', $dues->pluck('id'))
+            ->groupBy('due_id', 'status')
+            ->get()
+            ->groupBy('due_id');
+        $publishedDues = $dues->where('status', Due::StatusPublished);
+        $amountFor = fn (Due $due, string $status): int => (int) ($assignmentTotals->get($due->id)?->firstWhere('status', $status)?->amount_kobo ?? 0);
 
         return [
             'selectedSet' => $set instanceof StudentSet ? $this->presenter->studentSet($set) : null,
@@ -61,9 +67,9 @@ class DueDashboardData
                 : ($selectedSession instanceof AcademicSession
                     ? $selectedSession->academicYear->name.' · '.$selectedSession->label().' Session · Whole Session'
                     : 'All Dues'),
-            'collectedAmount' => $this->presenter->amount((int) $paid->sum('amount_kobo')),
-            'outstandingAmount' => $this->presenter->amount((int) $pending->sum('amount_kobo')),
-            'dues' => $dues->map(fn (Due $due): array => $this->dueSummary($due))->all(),
+            'collectedAmount' => $this->presenter->amount((int) $publishedDues->sum(fn (Due $due): int => $amountFor($due, StudentDueAssignment::StatusPaid))),
+            'outstandingAmount' => $this->presenter->amount((int) $publishedDues->sum(fn (Due $due): int => $amountFor($due, StudentDueAssignment::StatusPending))),
+            'dues' => $dues->map(fn (Due $due): array => $this->dueSummary($due, $assignmentTotals->get($due->id, collect())))->all(),
             'paymentSettingsUrl' => route('dashboard.section', ['section' => 'settings']),
             'hasActivePaymentAccount' => PaymentAccount::currentFor($advisor) instanceof PaymentAccount,
         ];
@@ -115,7 +121,6 @@ class DueDashboardData
                 'title' => $due?->title ?? '',
                 'description' => $due?->description ?? '',
                 'amountNaira' => $due instanceof Due ? (string) ((int) $due->amount_kobo / 100) : '',
-                'dueOn' => $due?->due_on?->toDateString() ?? now()->addMonth()->toDateString(),
             ],
             'due' => $due instanceof Due ? [
                 'id' => (int) $due->id,
@@ -139,7 +144,7 @@ class DueDashboardData
         return [
             'due' => $this->dueSummary($due),
             'students' => $due->assignments
-                ->sortBy(fn (StudentDueAssignment $assignment): string => $assignment->studentProfile->user->name)
+                ->sortBy(fn (StudentDueAssignment $assignment): string => $assignment->studentProfile->official_name)
                 ->values()
                 ->map(fn (StudentDueAssignment $assignment): array => $this->dueStudent($assignment))
                 ->all(),
@@ -160,8 +165,8 @@ class DueDashboardData
             'assignment' => [
                 'id' => (int) $assignment->id,
                 'publicId' => $assignment->public_id,
-                'studentName' => $assignment->studentProfile->user->name,
-                'studentAvatar' => $assignment->studentProfile->user->profilePhotoUrl(),
+                'studentName' => $assignment->studentProfile->official_name,
+                'studentAvatar' => $assignment->studentProfile->user?->profilePhotoUrl(),
                 'registrationNumber' => $assignment->studentProfile->registration_number,
             ],
         ];
@@ -237,6 +242,7 @@ class DueDashboardData
             return [
                 'status' => $assignment->status,
                 'name' => $due->title,
+                'url' => route('dashboard.dues.show', ['due' => $due]),
                 'period' => $due->academicSession?->label().' Session'.($due->academicSessionSemester ? ' · '.$due->academicSessionSemester->semester->name : ''),
                 'amount' => $this->presenter->amount((int) ($payment?->amount_kobo ?? $assignment->amount_kobo)),
                 'assignedAt' => $assignment->created_at?->toFormattedDateString(),
@@ -276,12 +282,18 @@ class DueDashboardData
         ];
     }
 
-    private function dueSummary(Due $due): array
+    private function dueSummary(Due $due, ?Collection $assignmentTotals = null): array
     {
-        $due->loadMissing(['studentSet', 'academicSession.academicYear', 'academicSessionSemester.semester', 'assignments', 'paymentAccount']);
-        $paid = $due->assignments->where('status', StudentDueAssignment::StatusPaid);
-        $pending = $due->assignments->where('status', StudentDueAssignment::StatusPending);
-        $waived = $due->assignments->where('status', StudentDueAssignment::StatusWaived);
+        $due->loadMissing(['studentSet', 'academicSession.academicYear', 'academicSessionSemester.semester', 'paymentAccount']);
+        if ($assignmentTotals === null) {
+            $due->loadMissing('assignments');
+        }
+        $counts = fn (string $status): int => $assignmentTotals === null
+            ? $due->assignments->where('status', $status)->count()
+            : (int) ($assignmentTotals->firstWhere('status', $status)?->assignment_count ?? 0);
+        $amount = fn (string $status): int => $assignmentTotals === null
+            ? (int) $due->assignments->where('status', $status)->sum('amount_kobo')
+            : (int) ($assignmentTotals->firstWhere('status', $status)?->amount_kobo ?? 0);
 
         return [
             'id' => (int) $due->id,
@@ -300,12 +312,11 @@ class DueDashboardData
                 'semester' => $due->academicSessionSemester?->semester->name ?? 'Whole Session',
                 'semesterOrder' => (int) ($due->academicSessionSemester?->semester->sort_order ?? 0),
             ],
-            'dueDate' => $due->due_on?->toFormattedDateString(),
-            'paidCount' => $paid->count(),
-            'pendingCount' => $pending->count(),
-            'waivedCount' => $waived->count(),
-            'collectedAmount' => $this->presenter->amount((int) $paid->sum('amount_kobo')),
-            'outstandingAmount' => $this->presenter->amount((int) $pending->sum('amount_kobo')),
+            'paidCount' => $counts(StudentDueAssignment::StatusPaid),
+            'pendingCount' => $counts(StudentDueAssignment::StatusPending),
+            'waivedCount' => $counts(StudentDueAssignment::StatusWaived),
+            'collectedAmount' => $this->presenter->amount($amount(StudentDueAssignment::StatusPaid)),
+            'outstandingAmount' => $this->presenter->amount($amount(StudentDueAssignment::StatusPending)),
             'paymentAccount' => $due->paymentAccount instanceof PaymentAccount
                 ? $this->paymentAccount($due->paymentAccount)
                 : null,
@@ -340,8 +351,11 @@ class DueDashboardData
         return [
             'id' => (int) $assignment->id,
             'publicId' => $assignment->public_id,
-            'studentName' => $assignment->studentProfile->user->name,
-            'studentAvatar' => $assignment->studentProfile->user->profilePhotoUrl(),
+            'studentName' => $assignment->studentProfile->official_name,
+            'studentAvatar' => $assignment->studentProfile->user?->profilePhotoUrl(),
+            'profileUrl' => route('dashboard.students.show', [
+                'registrationNumber' => $assignment->studentProfile->routeRegistrationNumber(),
+            ]),
             'registrationNumber' => $assignment->studentProfile->registration_number,
             'amount' => $this->presenter->amount((int) ($payment?->amount_kobo ?? $assignment->amount_kobo)),
             'status' => match ($assignment->status) {
@@ -373,7 +387,6 @@ class DueDashboardData
             'name' => $assignment->due->title,
             'description' => $assignment->due->description,
             'amount' => $this->presenter->amount((int) $assignment->amount_kobo),
-            'dueDate' => $assignment->due->due_on?->toFormattedDateString(),
             'paymentUrl' => $canPay
                 ? route('dashboard.dues.payments.store', ['studentDueAssignment' => $assignment])
                 : null,

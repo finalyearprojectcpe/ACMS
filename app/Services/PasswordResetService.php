@@ -37,7 +37,7 @@ class PasswordResetService
             'advisor_profile_id' => $user->advisorProfile?->id ?? $user->studentProfile?->advisor_profile_id,
             'user_id' => $user->id,
             'recipient_email' => $email,
-            'subject' => 'Reset your GradeManager password',
+            'subject' => 'Reset your ACMS password',
             'mailer' => 'resend',
             'status' => 'queued',
             'metadata' => [],

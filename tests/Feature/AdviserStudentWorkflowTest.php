@@ -18,6 +18,7 @@ test('the adviser set page shows its signup link and joined students', function 
     ]);
     StudentProfile::factory()->create([
         'user_id' => $studentUser->id,
+        'official_name' => 'Adaeze Okoro',
         'advisor_profile_id' => $advisor->id,
         'student_set_id' => $set->id,
         'registration_number' => '2025001234',

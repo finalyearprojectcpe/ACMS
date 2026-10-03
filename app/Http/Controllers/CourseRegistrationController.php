@@ -2,155 +2,129 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\ReturnCourseRegistrationRequest;
 use App\Http\Requests\StoreCourseRegistrationRequest;
 use App\Models\AcademicSessionSemester;
+use App\Models\CourseOffering;
 use App\Models\CourseRegistration;
-use App\Models\CourseRegistrationItem;
+use App\Models\StudentProfile;
 use App\Services\CourseRegistrationPlanner;
 use App\Services\DashboardAccess;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class CourseRegistrationController extends Controller
 {
-    public function __construct(
-        private readonly DashboardAccess $access,
-    ) {}
+    public function __construct(private readonly DashboardAccess $access) {}
 
     public function store(
         StoreCourseRegistrationRequest $request,
         CourseRegistrationPlanner $planner,
+        string $departmentSlug,
+        string $entrySession,
+        string $sessionYears,
+        string $semester,
+        string $registrationNumber,
     ): RedirectResponse {
-        $student = $this->access->student($request);
+        $advisor = $this->access->advisor($request);
+        $set = $this->access->studentSetByRoute($advisor, $departmentSlug, $entrySession);
+        $student = $set->students()
+            ->where('registration_number', StudentProfile::registrationNumberFromRoute($registrationNumber))
+            ->firstOrFail();
+        $period = $this->access->semesterByRoute($set, $sessionYears, $semester);
         $validated = $request->validated();
-        $semester = $student->studentSet->academicSessions()
-            ->where('start_year', (int) substr($validated['session'], 0, 4))
-            ->where('end_year', (int) substr($validated['session'], 4, 4))
-            ->first()?->semesterInstances()
-            ->whereHas('semester', fn ($query) => $query->where('slug', $validated['semester']))
-            ->first();
-        if (! $semester instanceof AcademicSessionSemester || ! $semester->registration_enabled) {
-            throw ValidationException::withMessages([
-                'registration' => 'Course registration is closed for this semester.',
-            ]);
-        }
-        $selected = collect($planner->selectedOptionsFromPayload(
-            $planner->plan($student, $semester),
-            $validated['items'],
-            $semester->maximum_course_units,
-        ));
 
-        $registration = CourseRegistration::query()->firstOrNew([
-            'student_profile_id' => $student->id,
-            'academic_session_semester_id' => $semester->id,
-        ]);
+        DB::transaction(function () use ($advisor, $student, $period, $validated, $planner): void {
+            $lockedPeriod = AcademicSessionSemester::query()->lockForUpdate()->findOrFail($period->id);
+            $selected = collect($planner->selectedOptionsFromPayload(
+                $planner->plan($student, $lockedPeriod),
+                $validated['items'],
+                (int) $lockedPeriod->maximum_course_units,
+            ))->map(function (array $course) use ($lockedPeriod): array {
+                $source = CourseOffering::query()->with('prerequisiteCourses')->findOrFail($course['courseOfferingId']);
+                if ((int) $source->academic_session_semester_id === (int) $lockedPeriod->id) {
+                    return $course;
+                }
 
-        if ($registration->exists && ! $registration->isEditableByStudent()) {
-            throw ValidationException::withMessages([
-                'items' => 'This registration is already with your course adviser and cannot be changed yet.',
-            ]);
-        }
+                $offering = $lockedPeriod->courseOfferings()->firstOrCreate(
+                    ['course_id' => $course['courseId']],
+                    [
+                        'course_title' => $source->course_title,
+                        'credit_units' => $source->credit_units,
+                        'is_elective' => $source->is_elective,
+                        'is_retake_only' => true,
+                    ],
+                );
+                if ($offering->wasRecentlyCreated) {
+                    $offering->prerequisiteCourses()->sync($source->prerequisiteCourses->modelKeys());
+                }
 
-        DB::transaction(function () use ($student, $semester, $registration, $selected, $validated): void {
-            $isSubmit = $validated['action'] === 'submit';
-            $registration->forceFill([
+                $course['courseOfferingId'] = (int) $offering->id;
+
+                return $course;
+            })->keyBy('courseOfferingId');
+            $registration = CourseRegistration::query()->firstOrCreate([
                 'student_profile_id' => $student->id,
-                'academic_session_semester_id' => $semester->id,
-                'status' => $isSubmit
-                    ? CourseRegistration::StatusSubmitted
-                    : CourseRegistration::StatusDraft,
-                'feedback_note' => $isSubmit ? null : $registration->feedback_note,
-                'submitted_at' => $isSubmit ? now() : null,
-                'reviewed_at' => null,
-            ])->save();
-            $registration->items()->delete();
+                'academic_session_semester_id' => $lockedPeriod->id,
+            ]);
+            if ($registration->status === CourseRegistration::StatusAssigned && $validated['action'] === 'draft') {
+                throw ValidationException::withMessages([
+                    'action' => 'Assigned courses cannot be moved back to a draft.',
+                ]);
+            }
+            $existing = $registration->items()->with('courseOffering')->get()->keyBy('course_offering_id');
 
-            foreach ($selected as $course) {
+            foreach ($existing as $offeringId => $item) {
+                if ($selected->has($offeringId)) {
+                    continue;
+                }
+
+                if ($item->grade !== null || $item->missing_script || $item->courseOffering?->results_published_at !== null) {
+                    throw ValidationException::withMessages([
+                        'items' => "{$item->course_code} has a result and cannot be removed from this assignment.",
+                    ]);
+                }
+
+                $item->delete();
+            }
+
+            foreach ($selected as $offeringId => $course) {
+                if ($existing->has($offeringId)) {
+                    continue;
+                }
+
+                if ($lockedPeriod->courseOfferings()->whereKey($offeringId)->whereNotNull('results_published_at')->exists()) {
+                    throw ValidationException::withMessages([
+                        'items' => "{$course['code']} has already been published and cannot receive new students.",
+                    ]);
+                }
+
                 $registration->items()->create([
-                    'course_offering_id' => $course['courseOfferingId'],
+                    'course_offering_id' => $offeringId,
                     'is_elective' => $course['isElective'],
+                    'assignment_origin' => $course['assignmentOrigin'],
                     'course_code' => $course['code'],
                     'course_title' => $course['title'],
                     'credit_units' => $course['units'],
                 ]);
             }
-        });
 
-        return to_route('dashboard.section', [
-            'section' => 'course-registration',
-            'session' => $validated['session'],
-            'semester' => $validated['semester'],
-        ])
-            ->with('success', $validated['action'] === 'submit'
-                ? 'Course registration sent to your course adviser.'
-                : 'Course registration saved.');
-    }
-
-    public function approve(
-        Request $request,
-        CourseRegistrationPlanner $planner,
-        string $registrationNumber,
-        string $sessionYears,
-        string $semester,
-    ): RedirectResponse {
-        $advisor = $this->access->advisor($request);
-        $courseRegistration = $this->access->registrationByRoute($advisor, $registrationNumber, $sessionYears, $semester);
-        abort_unless($courseRegistration->status === CourseRegistration::StatusSubmitted, 404);
-        $courseRegistration->loadMissing([
-            'studentProfile',
-            'academicSessionSemester.academicSession',
-            'items',
-        ]);
-        $planner->selectedOptionsFromPayload(
-            $planner->plan(
-                $courseRegistration->studentProfile,
-                $courseRegistration->academicSessionSemester,
-            ),
-            $courseRegistration->items->map(fn (CourseRegistrationItem $item): array => [
-                'course_offering_id' => (int) $item->course_offering_id,
-            ])->all(),
-            $courseRegistration->academicSessionSemester->maximum_course_units,
-        );
-
-        DB::transaction(function () use ($courseRegistration): void {
-            AcademicSessionSemester::query()->lockForUpdate()->findOrFail($courseRegistration->academic_session_semester_id);
-            if ($courseRegistration->items()->whereHas('courseOffering', fn ($query) => $query->whereNotNull('results_published_at'))->exists()) {
-                throw ValidationException::withMessages([
-                    'registration' => 'A subject in this registration has already been published. Its student list cannot be changed.',
-                ]);
-            }
-
-            $courseRegistration->forceFill([
-                'status' => CourseRegistration::StatusApproved,
-                'feedback_note' => null,
-                'reviewed_at' => now(),
+            $assign = $validated['action'] === 'assign';
+            $registration->forceFill([
+                'status' => $assign ? CourseRegistration::StatusAssigned : CourseRegistration::StatusDraft,
+                'assigned_by_user_id' => $assign ? $advisor->user_id : null,
+                'assigned_at' => $assign ? now() : null,
             ])->save();
         });
 
-        return to_route('dashboard.course-registration.show', $courseRegistration->reviewRouteParameters())
-            ->with('success', 'Course registration approved.');
-    }
+        $destination = match ($validated['from'] ?? null) {
+            'home' => to_route('dashboard'),
+            'profile' => to_route('dashboard.students.show', ['registrationNumber' => $student->routeRegistrationNumber()]),
+            default => to_route('student-sets.courses.show', [
+                ...$set->routeParameters(), 'session' => $sessionYears, 'semester' => $semester,
+            ]),
+        };
 
-    public function returnForCorrection(
-        ReturnCourseRegistrationRequest $request,
-        string $registrationNumber,
-        string $sessionYears,
-        string $semester,
-    ): RedirectResponse {
-        $advisor = $this->access->advisor($request);
-        $courseRegistration = $this->access->registrationByRoute($advisor, $registrationNumber, $sessionYears, $semester);
-        abort_unless($courseRegistration->status === CourseRegistration::StatusSubmitted, 404);
-        $courseRegistration->forceFill([
-            'status' => CourseRegistration::StatusReturned,
-            'feedback_note' => $request->string('feedback_note')->trim()->toString()
-                ?: 'Review the selected courses and submit the registration again.',
-            'reviewed_at' => now(),
-        ])->save();
-
-        return to_route('dashboard.course-registration.show', $courseRegistration->reviewRouteParameters())
-            ->with('success', 'Course registration returned to the student.');
+        return $destination->with('success', $validated['action'] === 'assign' ? 'Courses assigned to student.' : 'Course plan saved.');
     }
 }

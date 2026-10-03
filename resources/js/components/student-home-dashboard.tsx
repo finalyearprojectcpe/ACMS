@@ -2,10 +2,8 @@ import { Link } from '@inertiajs/react';
 
 import { section as dashboardSection } from '@/actions/App/Http/Controllers/DashboardController';
 import { CopyableValue } from '@/components/copyable-value';
-import { CourseRegistrationStatusBadge } from '@/components/course-registration-status-badge';
 import { StudentPortrait } from '@/components/student-portrait';
 import { TableEmptyRow } from '@/components/table-empty-row';
-import { Button } from '@/components/ui/button';
 import {
     Table,
     TableBody,
@@ -15,6 +13,8 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { courseTone, courseToneClasses } from '@/lib/course-presentation';
+import { cn } from '@/lib/utils';
 import type { DashboardStudentHome } from '@/types';
 
 export function StudentHomeDashboard({ home }: { home: DashboardStudentHome }) {
@@ -49,9 +49,18 @@ export function StudentHomeDashboard({ home }: { home: DashboardStudentHome }) {
                             {home.student.entrySet}
                         </IdentityField>
                         <IdentityField label="CGPA">
-                            <span className="font-semibold tabular-nums">
-                                {home.cgpa?.toFixed(2) ?? '—'}
-                            </span>
+                            {home.resultsLocked ? (
+                                <Link
+                                    href={dashboardSection('dues').url}
+                                    className="font-semibold text-link hover:underline"
+                                >
+                                    Locked · View Dues
+                                </Link>
+                            ) : (
+                                <span className="font-semibold tabular-nums">
+                                    {home.cgpa?.toFixed(2) ?? '—'}
+                                </span>
+                            )}
                         </IdentityField>
                         <IdentityField label="Course Adviser">
                             {home.courseAdvisor}
@@ -66,17 +75,9 @@ export function StudentHomeDashboard({ home }: { home: DashboardStudentHome }) {
                         Current Course Load
                     </h2>
                     {period ? (
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm text-muted-foreground">
-                                {period.session} Session
-                            </span>
-                            {home.courses.length > 0 &&
-                            home.registrationStatus ? (
-                                <CourseRegistrationStatusBadge
-                                    status={home.registrationStatus}
-                                />
-                            ) : null}
-                        </div>
+                        <span className="text-sm text-muted-foreground">
+                            {period.session} Session
+                        </span>
                     ) : null}
                 </div>
                 <div className="border border-border">
@@ -95,8 +96,40 @@ export function StudentHomeDashboard({ home }: { home: DashboardStudentHome }) {
                         <TableBody>
                             {home.courses.length ? (
                                 home.courses.map((course) => (
-                                    <TableRow key={course.code}>
-                                        <TableCell className="px-4 font-semibold">
+                                    <TableRow
+                                        key={course.code}
+                                        className={
+                                            courseToneClasses.row[
+                                                courseTone(
+                                                    course.assignmentOrigin,
+                                                    course.isElective,
+                                                )
+                                            ]
+                                        }
+                                    >
+                                        <TableCell
+                                            className={cn(
+                                                'px-4 font-semibold',
+                                                courseToneClasses.marker[
+                                                    courseTone(
+                                                        course.assignmentOrigin,
+                                                        course.isElective,
+                                                    )
+                                                ],
+                                            )}
+                                            title={
+                                                course.assignmentOrigin ===
+                                                'carryover'
+                                                    ? 'Carryover'
+                                                    : undefined
+                                            }
+                                        >
+                                            {course.assignmentOrigin ===
+                                            'carryover' ? (
+                                                <span className="sr-only">
+                                                    Carryover:{' '}
+                                                </span>
+                                            ) : null}
                                             {course.code}
                                         </TableCell>
                                         <TableCell className="whitespace-normal">
@@ -113,35 +146,8 @@ export function StudentHomeDashboard({ home }: { home: DashboardStudentHome }) {
                                         <span>
                                             {!period
                                                 ? 'No current semester has been selected.'
-                                                : !home.hasAvailableCourses
-                                                  ? 'Your course adviser has not assigned any courses for this semester yet.'
-                                                  : home.registrationStatus ===
-                                                      'Draft'
-                                                    ? 'Your course registration is still a draft.'
-                                                    : home.registrationStatus ===
-                                                        'Changes requested'
-                                                      ? 'Your course registration needs changes.'
-                                                      : 'You have not selected any courses for this semester yet.'}
+                                                : 'Your course adviser has not assigned courses for this semester.'}
                                         </span>
-                                        {period &&
-                                        home.registrationOpen &&
-                                        home.hasAvailableCourses ? (
-                                            <Button asChild size="sm">
-                                                <Link
-                                                    href={dashboardSection({
-                                                        section:
-                                                            'course-registration',
-                                                    })}
-                                                >
-                                                    {home.registrationStatus ===
-                                                        'Draft' ||
-                                                    home.registrationStatus ===
-                                                        'Changes requested'
-                                                        ? 'Continue registration'
-                                                        : 'Register courses'}
-                                                </Link>
-                                            </Button>
-                                        ) : null}
                                     </div>
                                 </TableEmptyRow>
                             )}

@@ -74,7 +74,7 @@ export function AdviserPaymentAccountFormDashboard({
     const currentAccount = accountForm.accounts[0] ?? null;
     const form = useForm<PaymentAccountFormData>({
         label: currentAccount?.label ?? 'Student dues account',
-        business_name: currentAccount?.businessName ?? 'GradeManager Dues',
+        business_name: currentAccount?.businessName ?? 'ACMS Dues',
         bank_code: '',
         account_number: '',
     });

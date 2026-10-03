@@ -1,12 +1,12 @@
-import { Link, router } from '@inertiajs/react';
+import { Link } from '@inertiajs/react';
 import { Fragment } from 'react';
 
+import { section as dashboardSection } from '@/actions/App/Http/Controllers/DashboardController';
+import { AcademicPeriodLayout } from '@/components/academic-period-layout';
+import { AcademicPeriodNavigation } from '@/components/academic-period-navigation';
+import { DownloadButton } from '@/components/download-button';
 import { GradeLetter } from '@/components/grade-letter';
-import {
-    LevelSemesterRail,
-    LevelSemesterRailGroup,
-    levelSemesterRailItemClassName,
-} from '@/components/level-semester-rail';
+import { Button } from '@/components/ui/button';
 import {
     Empty,
     EmptyDescription,
@@ -15,13 +15,6 @@ import {
 } from '@/components/ui/empty';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import {
     Table,
     TableBody,
     TableCell,
@@ -29,14 +22,19 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { courseTone, courseToneClasses } from '@/lib/course-presentation';
+import { cn } from '@/lib/utils';
+import { pdf as semesterResultsPdf } from '@/routes/dashboard/student-results';
 import type { DashboardStudentResults } from '@/types';
 
 export function StudentResultsView({
     results,
     overviewUrl,
+    allowDownload = false,
 }: {
     results: DashboardStudentResults;
     overviewUrl?: string;
+    allowDownload?: boolean;
 }) {
     if (results.periods.length === 0) {
         return (
@@ -53,173 +51,215 @@ export function StudentResultsView({
     }
 
     const selected = results.selected;
+    const canDownload =
+        allowDownload &&
+        selected &&
+        !selected.locked &&
+        selected.courses.some((course) => !course.pending);
     const DetailHeading = overviewUrl ? 'h1' : 'h2';
     const currentKey = selected
         ? `${selected.sessionYears}:${selected.semester}`
         : 'overview';
-    const grouped = Object.groupBy(results.periods, (period) =>
-        period.shortLabel.slice(0, 4),
+    const grouped = Object.groupBy(
+        results.periods,
+        (period) => period.sessionYears,
     );
 
     return (
-        <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 content-start md:grid-cols-[14rem_minmax(0,1fr)] md:content-normal">
-            <div className="border-b md:border-r md:border-b-0">
-                <div className="p-4 md:hidden">
-                    <Select
-                        value={currentKey}
-                        onValueChange={(value) => {
-                            if (value === 'overview' && overviewUrl) {
-                                router.visit(overviewUrl);
-
-                                return;
-                            }
-
-                            const period = results.periods.find(
-                                (item) =>
-                                    `${item.sessionYears}:${item.semester}` ===
-                                    value,
-                            );
-
-                            if (period) {
-                                router.visit(period.url);
-                            }
-                        }}
-                    >
-                        <SelectTrigger aria-label="Semester result">
-                            <SelectValue placeholder="Choose a semester" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {overviewUrl ? (
-                                <SelectItem value="overview">
-                                    Overview
-                                </SelectItem>
-                            ) : null}
-                            {results.periods.map((period) => (
-                                <SelectItem
-                                    key={period.url}
-                                    value={`${period.sessionYears}:${period.semester}`}
-                                >
-                                    {period.label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
-                <ScrollArea className="hidden max-h-[min(65dvh,42rem)] md:block">
-                    <LevelSemesterRail>
-                        {overviewUrl ? (
-                            <Link
-                                href={overviewUrl}
-                                aria-current={
-                                    currentKey === 'overview'
-                                        ? 'page'
-                                        : undefined
-                                }
-                                className={`${levelSemesterRailItemClassName(currentKey === 'overview')} before:hidden`}
-                            >
-                                Overview
-                            </Link>
-                        ) : null}
-                        {Object.entries(grouped).map(([level, periods]) => (
-                            <LevelSemesterRailGroup key={level} label={level}>
-                                {periods?.map((period) => (
-                                    <Link
-                                        key={period.url}
-                                        href={period.url}
-                                        aria-current={
-                                            `${period.sessionYears}:${period.semester}` ===
-                                            currentKey
-                                                ? 'page'
-                                                : undefined
-                                        }
-                                        className={levelSemesterRailItemClassName(
-                                            `${period.sessionYears}:${period.semester}` ===
-                                                currentKey,
-                                        )}
-                                    >
-                                        {period.semester === 'first'
-                                            ? '1st Semester'
-                                            : '2nd Semester'}
-                                    </Link>
-                                ))}
-                            </LevelSemesterRailGroup>
-                        ))}
-                    </LevelSemesterRail>
-                </ScrollArea>
-            </div>
-            <section className="min-w-0 py-5 md:pl-6">
+        <AcademicPeriodLayout
+            className="md:min-h-[min(65dvh,42rem)]"
+            navigation={(collapsed) => (
+                <AcademicPeriodNavigation
+                    collapsed={collapsed}
+                    ariaLabel="Semester results"
+                    overview={
+                        overviewUrl
+                            ? {
+                                  key: 'overview',
+                                  href: overviewUrl,
+                                  label: 'Overview',
+                                  compactLabel: 'All',
+                                  selected: currentKey === 'overview',
+                              }
+                            : undefined
+                    }
+                    groups={Object.entries(grouped).map(
+                        ([sessionYears, periods]) => ({
+                            key: sessionYears,
+                            label: periods?.[0].level ?? '',
+                            detail: `${periods?.[0].session ?? ''} Session`,
+                            compactLabel: (periods?.[0].level ?? '').replace(
+                                /\s*Level$/i,
+                                'L',
+                            ),
+                            links: (periods ?? []).map((period) => ({
+                                key: `${period.sessionYears}:${period.semester}`,
+                                href: period.url,
+                                label:
+                                    period.semester === 'first'
+                                        ? '1st Semester'
+                                        : '2nd Semester',
+                                compactLabel:
+                                    period.semester === 'first' ? '1st' : '2nd',
+                                selected:
+                                    `${period.sessionYears}:${period.semester}` ===
+                                    currentKey,
+                                locked: period.locked,
+                            })),
+                        }),
+                    )}
+                />
+            )}
+        >
+            <section className="min-w-0 flex-1 py-5 md:pl-6">
                 {selected ? (
-                    <div className="mx-auto max-w-xl min-w-0">
-                        <header className="mb-5 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4">
+                    <div className="mx-auto max-w-2xl min-w-0">
+                        <header className="mb-5 flex flex-wrap items-start justify-between gap-4">
                             <div className="min-w-0">
                                 <DetailHeading className="text-lg font-semibold">
                                     {selected.label}
                                 </DetailHeading>
                             </div>
-                            <div className="text-right">
-                                <div className="text-xs text-muted-foreground">
-                                    Semester GPA
+                            {!selected.locked ? (
+                                <div className="flex flex-wrap items-center justify-end gap-4">
+                                    <div className="text-right">
+                                        <div className="text-xs text-muted-foreground">
+                                            Semester GPA
+                                        </div>
+                                        <strong className="text-xl tabular-nums">
+                                            {selected.gpa?.toFixed(2) ??
+                                                'Pending'}
+                                        </strong>
+                                    </div>
                                 </div>
-                                <strong className="text-xl tabular-nums">
-                                    {selected.gpa?.toFixed(2) ?? 'Pending'}
-                                </strong>
-                            </div>
+                            ) : null}
                         </header>
-                        <ScrollArea className="w-full border-y">
-                            <Table className="min-w-[460px]">
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead className="pl-3">
-                                            Course
-                                        </TableHead>
-                                        <TableHead>Title</TableHead>
-                                        <TableHead className="text-right">
-                                            Units
-                                        </TableHead>
-                                        <TableHead className="pr-3 text-right">
-                                            Grade
-                                        </TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {selected.courses.map((course) => (
-                                        <TableRow key={course.code}>
-                                            <TableCell className="pl-3 font-medium whitespace-nowrap">
-                                                {course.code}
-                                            </TableCell>
-                                            <TableCell>
-                                                {course.title}
-                                            </TableCell>
-                                            <TableCell className="text-right tabular-nums">
-                                                {course.units}
-                                            </TableCell>
-                                            <TableCell className="pr-3 text-right">
-                                                {course.pending ? (
-                                                    <span className="text-xs text-muted-foreground">
-                                                        Awaiting result
-                                                    </span>
-                                                ) : course.missingScript ? (
-                                                    <span className="text-xs font-medium text-amber-700 dark:text-amber-300">
-                                                        Missing script
-                                                    </span>
-                                                ) : (
-                                                    <GradeLetter
-                                                        grade={course.grade}
-                                                    />
-                                                )}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                            <ScrollBar orientation="horizontal" />
-                        </ScrollArea>
+                        {selected.locked ? (
+                            <Empty className="border-y py-12">
+                                <EmptyHeader>
+                                    <EmptyTitle>Results locked</EmptyTitle>
+                                    <EmptyDescription>
+                                        {selected.unpaidDueCount}{' '}
+                                        {selected.unpaidDueCount === 1
+                                            ? 'due'
+                                            : 'dues'}{' '}
+                                        for this period must be paid or waived
+                                        before you can view these results.
+                                    </EmptyDescription>
+                                </EmptyHeader>
+                                <Button asChild>
+                                    <Link href={dashboardSection('dues').url}>
+                                        View Dues
+                                    </Link>
+                                </Button>
+                            </Empty>
+                        ) : (
+                            <>
+                                <ScrollArea className="w-full border-y">
+                                    <Table className="min-w-[460px]">
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead className="pl-3">
+                                                    Course
+                                                </TableHead>
+                                                <TableHead>Title</TableHead>
+                                                <TableHead className="text-right">
+                                                    Units
+                                                </TableHead>
+                                                <TableHead className="pr-3 text-right">
+                                                    Grade
+                                                </TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {selected.courses.map((course) => (
+                                                <TableRow
+                                                    key={course.code}
+                                                    className={
+                                                        courseToneClasses.row[
+                                                            courseTone(
+                                                                course.assignmentOrigin,
+                                                                course.isElective,
+                                                            )
+                                                        ]
+                                                    }
+                                                >
+                                                    <TableCell
+                                                        className={cn(
+                                                            'pl-3 font-medium whitespace-nowrap',
+                                                            courseToneClasses
+                                                                .marker[
+                                                                courseTone(
+                                                                    course.assignmentOrigin,
+                                                                    course.isElective,
+                                                                )
+                                                            ],
+                                                        )}
+                                                        title={
+                                                            course.assignmentOrigin ===
+                                                            'carryover'
+                                                                ? 'Carryover'
+                                                                : undefined
+                                                        }
+                                                    >
+                                                        {course.assignmentOrigin ===
+                                                        'carryover' ? (
+                                                            <span className="sr-only">
+                                                                Carryover:{' '}
+                                                            </span>
+                                                        ) : null}
+                                                        {course.code}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {course.title}
+                                                    </TableCell>
+                                                    <TableCell className="text-right tabular-nums">
+                                                        {course.units}
+                                                    </TableCell>
+                                                    <TableCell className="pr-3 text-right">
+                                                        {course.pending ? (
+                                                            <span className="text-xs text-muted-foreground">
+                                                                Awaiting result
+                                                            </span>
+                                                        ) : course.missingScript ? (
+                                                            <span className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                                                                Missing script
+                                                            </span>
+                                                        ) : (
+                                                            <GradeLetter
+                                                                grade={
+                                                                    course.grade
+                                                                }
+                                                            />
+                                                        )}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                    <ScrollBar orientation="horizontal" />
+                                </ScrollArea>
+                                {canDownload && (
+                                    <div className="flex justify-end pt-4">
+                                        <DownloadButton
+                                            href={semesterResultsPdf.url({
+                                                sessionYears:
+                                                    selected.sessionYears,
+                                                semester: selected.semester,
+                                            })}
+                                        >
+                                            Download as PDF
+                                        </DownloadButton>
+                                    </div>
+                                )}
+                            </>
+                        )}
                     </div>
                 ) : overviewUrl ? (
                     <StudentAcademicHistory history={results.history} />
                 ) : null}
             </section>
-        </div>
+        </AcademicPeriodLayout>
     );
 }
 
@@ -271,11 +311,17 @@ function StudentAcademicHistory({
                                                 </Link>
                                             </TableCell>
                                             <TableCell className="text-right tabular-nums">
-                                                {period.gpa?.toFixed(2) ??
-                                                    'Pending'}
+                                                {period.locked
+                                                    ? 'Locked'
+                                                    : (period.gpa?.toFixed(2) ??
+                                                      'Pending')}
                                             </TableCell>
                                             <TableCell className="pr-3 text-right font-medium tabular-nums">
-                                                {period.cgpa?.toFixed(2) ?? '—'}
+                                                {period.locked
+                                                    ? 'Locked'
+                                                    : (period.cgpa?.toFixed(
+                                                          2,
+                                                      ) ?? '—')}
                                             </TableCell>
                                         </TableRow>
                                     ))}

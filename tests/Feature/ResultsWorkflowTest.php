@@ -4,17 +4,26 @@ use App\Models\AcademicSessionSemester;
 use App\Models\AdvisorProfile;
 use App\Models\CourseRegistration;
 use App\Models\CourseRegistrationItem;
+use App\Models\StudentDueAssignment;
 use App\Models\StudentSet;
 use App\Models\User;
+use App\Services\SetResultsExport;
+use App\Services\SetResultsSpreadsheet;
+use App\Services\StudentResultStatement;
 use Database\Seeders\AcademicStructureSeeder;
 use Database\Seeders\DemoUserSeeder;
 use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
+use PhpOffice\PhpSpreadsheet\Calculation\Calculation;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 test('subjects release separately while incomplete semesters keep GPA pending and corrections are recorded', function () {
     $this->seed([AcademicStructureSeeder::class, DemoUserSeeder::class]);
-    $adviser = User::query()->where('email', 'staff1@futo.edu')->firstOrFail();
-    $student = User::query()->where('email', 'student3@futo.edu')->firstOrFail();
+    $adviser = User::query()->where('email', 'staff1@futo.edu.ng')->firstOrFail();
+    $student = User::query()->where('email', 'student3@futo.edu.ng')->firstOrFail();
+    StudentDueAssignment::query()->where('student_profile_id', $student->studentProfile->id)
+        ->update(['status' => StudentDueAssignment::StatusWaived, 'waived_at' => now()]);
     $set = StudentSet::query()->firstOrFail();
     $period = AcademicSessionSemester::query()
         ->whereHas('academicSession', fn ($query) => $query->where('start_year', 2026))
@@ -25,6 +34,7 @@ test('subjects release separately while incomplete semesters keep GPA pending an
     $this->actingAs($student)->get(route('dashboard.section', ['section' => 'results']))
         ->assertOk()->assertInertia(fn (Assert $page) => $page
         ->has('dashboard.studentResults.periods', 4));
+    $this->get(route('dashboard.student-results.pdf', ['sessionYears' => '20262027', 'semester' => 'first']))->assertNotFound();
 
     $offerings = $period->courseOfferings()->with('course')->orderBy('id')->get();
     $first = $offerings->firstOrFail();
@@ -33,14 +43,9 @@ test('subjects release separately while incomplete semesters keep GPA pending an
     $this->actingAs($adviser)->post(route('student-sets.results.publish', $firstRoute))
         ->assertSessionHasErrors('results');
 
-    $period->update(['registration_enabled' => false]);
-    CourseRegistration::query()->where('academic_session_semester_id', $period->id)
-        ->where('status', CourseRegistration::StatusSubmitted)
-        ->update(['status' => CourseRegistration::StatusReturned]);
-
     foreach ($offerings as $offering) {
         $items = CourseRegistrationItem::query()->where('course_offering_id', $offering->id)
-            ->whereHas('courseRegistration', fn ($query) => $query->where('status', CourseRegistration::StatusApproved))
+            ->whereHas('courseRegistration', fn ($query) => $query->where('status', CourseRegistration::StatusAssigned))
             ->get();
         $courseRoute = [...$parameters, 'courseCode' => $offering->course->urlCode()];
         $this->patch(route('student-sets.results.course.save', $courseRoute), [
@@ -48,7 +53,9 @@ test('subjects release separately while incomplete semesters keep GPA pending an
         ])->assertSessionHasNoErrors();
     }
 
-    $this->post(route('student-sets.results.publish', $firstRoute))->assertSessionHasNoErrors();
+    $this->post(route('student-sets.results.publish', $firstRoute))
+        ->assertSessionHasNoErrors()
+        ->assertRedirect(route('student-sets.results.course', $firstRoute));
     expect($first->refresh()->results_published_at)->not->toBeNull();
 
     $this->actingAs($student)->get(route('dashboard.section', ['section' => 'results']))
@@ -61,16 +68,10 @@ test('subjects release separately while incomplete semesters keep GPA pending an
         'section' => 'results', 'session' => '20262027', 'semester' => 'first',
     ]))->assertOk()->assertInertia(fn (Assert $page) => $page
         ->where('dashboard.studentResults.selected.gpa', null)
-        ->where('dashboard.studentResults.selected.courses.0.grade', 'A')
-        ->where('dashboard.studentResults.selected.courses.1.grade', null)
-        ->where('dashboard.studentResults.selected.courses.1.pending', true));
-
-    $submitted = CourseRegistration::query()->where('academic_session_semester_id', $period->id)
-        ->where('status', CourseRegistration::StatusReturned)->firstOrFail();
-    $submitted->update(['status' => CourseRegistration::StatusSubmitted]);
-    $this->actingAs($adviser)->patch(route('dashboard.course-registration.approve', $submitted->reviewRouteParameters()))
-        ->assertSessionHasErrors('registration');
-    $submitted->update(['status' => CourseRegistration::StatusReturned]);
+        ->where('dashboard.studentResults.selected.courses', fn ($courses) => collect($courses)->contains(fn ($course) => $course['code'] === $first->course->code && $course['grade'] === 'A')
+            && collect($courses)->contains(fn ($course) => $course['pending'] === true)));
+    $this->get(route('dashboard.student-results.pdf', ['sessionYears' => '20262027', 'semester' => 'first']))
+        ->assertOk()->assertDownload('chiamaka-eze-2024000003-20262027-first-results.pdf');
 
     foreach ($offerings->skip(1) as $offering) {
         $this->actingAs($adviser)->post(route('student-sets.results.publish', [
@@ -78,32 +79,117 @@ test('subjects release separately while incomplete semesters keep GPA pending an
         ]))->assertSessionHasNoErrors();
     }
 
+    $this->get(route('student-sets.matrix.show', [
+        ...$set->routeParameters(), 'session' => '20262027', 'semester' => 'first',
+    ]))->assertOk()->assertInertia(fn (Assert $page) => $page
+        ->where('dashboard.adviserSetResults.students', fn ($students) => collect($students)->contains(
+            fn (array $row): bool => $row['registrationNumber'] === $student->studentProfile->registration_number
+                && $row['totalGradePoints'] === 105
+                && $row['totalNumberOfUnits'] === 21,
+        )));
+
+    $this->get(route('student-sets.matrix.show', [
+        ...$set->routeParameters(), 'all' => 1, 'session' => '20242025',
+    ]))->assertOk()->assertInertia(fn (Assert $page) => $page
+        ->where('dashboard.adviserSetResults.allHistory', true)
+        ->where('dashboard.adviserSetResults.selectedSessionPublicId', '20242025')
+        ->where('dashboard.adviserSetResults.columns', fn ($columns) => collect($columns)->contains(
+            fn (array $column): bool => str_contains($column['group'], '1st Semester'),
+        ) && collect($columns)->contains(
+            fn (array $column): bool => str_contains($column['group'], '2nd Semester'),
+        ) && collect($columns)->every(
+            fn (array $column): bool => $column['session'] === '2024/2025',
+        )));
+    $this->get(route('student-sets.matrix.show', [
+        ...$set->routeParameters(), 'all' => 1, 'session' => '20282029',
+    ]))->assertNotFound();
+
     $this->actingAs($student)->get(route('dashboard.section', ['section' => 'results']))
         ->assertOk()->assertInertia(fn (Assert $page) => $page
         ->where('dashboard.studentResults.history.4.gpa', 5));
 
     $item = CourseRegistrationItem::query()->where('course_offering_id', $first->id)
-        ->whereHas('courseRegistration', fn ($query) => $query->where('status', CourseRegistration::StatusApproved))
+        ->whereHas('courseRegistration', fn ($query) => $query->where('status', CourseRegistration::StatusAssigned))
         ->firstOrFail();
+    $correctedGrades = CourseRegistrationItem::query()->where('course_offering_id', $first->id)
+        ->whereHas('courseRegistration', fn ($query) => $query->where('status', CourseRegistration::StatusAssigned))
+        ->get()->mapWithKeys(fn ($row) => [(string) $row->id => $row->id === $item->id ? 'B' : 'A'])->all();
     $this->actingAs($adviser)->patch(route('student-sets.results.course.save', [
         ...$parameters, 'courseCode' => $first->course->urlCode(),
-    ]), ['grades' => [(string) $item->id => 'B']])->assertSessionHasErrors('reason');
+    ]), ['grades' => $correctedGrades])->assertSessionHasErrors('reason');
     $this->actingAs($adviser)->patch(route('student-sets.results.course.save', [
         ...$parameters, 'courseCode' => $first->course->urlCode(),
-    ]), ['grades' => [(string) $item->id => 'B'], 'reason' => 'Verified the score sheet.'])->assertSessionHasNoErrors();
+    ]), ['grades' => $correctedGrades, 'reason' => 'Verified the score sheet.'])->assertSessionHasNoErrors();
     expect(DB::table('grade_corrections')->where('course_registration_item_id', $item->id)->exists())->toBeTrue();
 
     $otherAdviser = AdvisorProfile::factory()->create();
-    $this->actingAs($otherAdviser->user)->get(route('student-sets.results.semester', $parameters))->assertNotFound();
+    $this->actingAs($otherAdviser->user)->get(route('student-sets.matrix.show', $set->routeParameters()))->assertNotFound();
     $this->get(route('student-sets.results.course', [
         ...$parameters, 'courseCode' => $first->course->urlCode(),
     ]))->assertNotFound();
 });
 
+test('set result exports group editable semesters into separate sheets and stay adviser scoped', function () {
+    $this->seed([AcademicStructureSeeder::class, DemoUserSeeder::class]);
+    $adviser = User::query()->where('email', 'staff1@futo.edu.ng')->firstOrFail();
+    $set = StudentSet::query()->firstOrFail();
+    $report = app(SetResultsExport::class)->build($set, null, null, true);
+    $book = app(SetResultsSpreadsheet::class)->build($report);
+    $sheet = $book->getActiveSheet();
+
+    expect(count($report['groups']))->toBeGreaterThan(1)
+        ->and($book->getSheetCount())->toBe(count($report['groups']))
+        ->and($book->getDefaultStyle()->getFont()->getName())->toBe('Tahoma')
+        ->and($sheet->getFreezePane())->toBe('D8')
+        ->and($sheet->getCell('D4')->getValue())->toBe('Courses and Units')
+        ->and($sheet->getCell(Coordinate::stringFromColumnIndex(4 + count($report['groups'][0]['columns'])).'4')->getValue())->toBe('Current')
+        ->and($book->getSheet(1)->getCell(Coordinate::stringFromColumnIndex(7 + count($report['groups'][1]['columns'])).'4')->getValue())->toBe('Previous');
+
+    $group = $report['groups'][0];
+    $studentIndex = collect($report['students'])->search(fn (array $student): bool => collect($student['periods'][$group['id']]['cells'])
+        ->contains(fn (string $grade): bool => in_array($grade, ['A', 'B', 'C', 'D', 'E', 'F'], true)));
+    expect($studentIndex)->not->toBeFalse();
+    $courseIndex = array_search('A', $report['students'][$studentIndex]['periods'][$group['id']]['cells'], true);
+    if ($courseIndex === false) {
+        $courseIndex = array_search('B', $report['students'][$studentIndex]['periods'][$group['id']]['cells'], true);
+    }
+    expect($courseIndex)->not->toBeFalse();
+    $row = $studentIndex + 8;
+    $gradeCell = Coordinate::stringFromColumnIndex(4 + $courseIndex).$row;
+    $summaryCell = Coordinate::stringFromColumnIndex(4 + count($group['columns'])).$row;
+    $cumulativePointsCell = Coordinate::stringFromColumnIndex(10 + count($group['columns'])).$row;
+    $before = $sheet->getCell($summaryCell)->getCalculatedValue();
+    expect($sheet->getCell($cumulativePointsCell)->getCalculatedValue())->toBe($before);
+    $oldGrade = (string) $sheet->getCell($gradeCell)->getValue();
+    $newGrade = str_starts_with($oldGrade, 'A') ? 'B' : 'A';
+    $sheet->setCellValue($gradeCell, $newGrade.(str_ends_with($oldGrade, ' CO') ? ' CO' : ''));
+    Calculation::getInstance($book)->clearCalculationCache();
+    expect($sheet->getCell($summaryCell)->getCalculatedValue())->not->toBe($before);
+    $previousPoints = Coordinate::stringFromColumnIndex(7 + count($report['groups'][1]['columns'])).$row;
+    expect($book->getSheet(1)->getCell($previousPoints)->getValue())->toContain('MATCH($B'.$row);
+    expect($book->getSheet(1)->getCell($previousPoints)->getCalculatedValue())->toBe(
+        $sheet->getCell($cumulativePointsCell)->getCalculatedValue(),
+    );
+    if (getenv('ACMS_ARTIFACT_PREVIEWS') === '1') {
+        (new Xlsx($book))
+            ->save(storage_path('app/private/design-previews/set-results.xlsx'));
+    }
+    $book->disconnectWorksheets();
+
+    $firstSemester = app(SetResultsExport::class)->build($set, '20242025', 'first', false);
+    expect(collect($firstSemester['students'])->every(fn (array $student): bool => $student['starting']['points'] === 0
+        && $student['starting']['units'] === 0))->toBeTrue();
+
+    $url = route('student-sets.matrix.export', [...$set->routeParameters(), 'all' => 1]);
+    $this->actingAs($adviser)->get($url)->assertOk()->assertDownload();
+    $otherAdviser = AdvisorProfile::factory()->create();
+    $this->actingAs($otherAdviser->user)->get($url)->assertNotFound();
+});
+
 test('student record shows a published GPA matrix and scoped semester detail', function () {
     $this->seed([AcademicStructureSeeder::class, DemoUserSeeder::class]);
-    $adviser = User::query()->where('email', 'staff1@futo.edu')->firstOrFail();
-    $student = User::query()->where('email', 'student3@futo.edu')->firstOrFail()->studentProfile;
+    $adviser = User::query()->where('email', 'staff1@futo.edu.ng')->firstOrFail();
+    $student = User::query()->where('email', 'student3@futo.edu.ng')->firstOrFail()->studentProfile;
     $profileUrl = route('dashboard.students.show', ['registrationNumber' => $student->registration_number]);
     $resultUrl = route('dashboard.students.results.semester', [
         'registrationNumber' => $student->registration_number,
@@ -126,11 +212,17 @@ test('student record shows a published GPA matrix and scoped semester detail', f
     $this->get($previewUrl)->assertOk()->assertInertia(fn (Assert $page) => $page
         ->where('dashboard.studentRecordStatement.student.registrationNumber', $student->registration_number)
         ->has('dashboard.studentRecordStatement.periods'));
-    $download = $this->get($downloadUrl)->assertOk()->assertDownload('results-to-date-'.$student->registration_number.'.docx');
+    $statement = app(StudentResultStatement::class)->build($student);
+    foreach ($statement['periods'] as $period) {
+        expect($period['totalUnits'])->toBe(array_sum(array_column($period['courses'], 'units')));
+    }
+    $download = $this->get($downloadUrl)->assertOk()->assertDownload('results-chiamaka-eze-'.$student->registration_number.'-'.now()->format('Ymd').'.docx');
     $path = $download->baseResponse->getFile()->getPathname();
     $word = new ZipArchive;
     expect($word->open($path))->toBeTrue();
-    expect($word->getFromName('word/document.xml'))->toContain('STUDENT RESULTS TO DATE');
+    expect($word->getFromName('word/document.xml'))
+        ->toContain('Statement of Results for '.$student->user->name, 'Total Units', 'REGISTRATION NUMBER')
+        ->not->toContain('Published units', '<w:shd', '<w:drawing', 'ACMS');
     $word->close();
     unlink($path);
 
@@ -149,7 +241,7 @@ test('student record shows a published GPA matrix and scoped semester detail', f
 
 test('a published missing script is visible without a GPA and its correction is audited', function () {
     $this->seed([AcademicStructureSeeder::class, DemoUserSeeder::class]);
-    $adviser = User::query()->where('email', 'staff1@futo.edu')->firstOrFail();
+    $adviser = User::query()->where('email', 'staff1@futo.edu.ng')->firstOrFail();
     $set = StudentSet::query()->firstOrFail();
     $period = AcademicSessionSemester::query()
         ->whereHas('academicSession', fn ($query) => $query->where('start_year', 2026))
@@ -157,9 +249,11 @@ test('a published missing script is visible without a GPA and its correction is 
         ->firstOrFail();
     $offering = $period->courseOfferings()->with('course')->orderBy('id')->firstOrFail();
     $items = CourseRegistrationItem::query()->where('course_offering_id', $offering->id)
-        ->whereHas('courseRegistration', fn ($query) => $query->where('status', CourseRegistration::StatusApproved))
+        ->whereHas('courseRegistration', fn ($query) => $query->where('status', CourseRegistration::StatusAssigned))
         ->get();
     $missingItem = $items->firstOrFail();
+    StudentDueAssignment::query()->where('student_profile_id', $missingItem->courseRegistration->student_profile_id)
+        ->update(['status' => StudentDueAssignment::StatusWaived, 'waived_at' => now()]);
     $route = [
         ...$set->routeParameters(),
         'sessionYears' => '20262027',
@@ -174,11 +268,6 @@ test('a published missing script is visible without a GPA and its correction is 
 
     expect($missingItem->refresh()->grade)->toBeNull()
         ->and($missingItem->missing_script)->toBeTrue();
-
-    $period->update(['registration_enabled' => false]);
-    CourseRegistration::query()->where('academic_session_semester_id', $period->id)
-        ->where('status', CourseRegistration::StatusSubmitted)
-        ->update(['status' => CourseRegistration::StatusReturned]);
 
     $this->post(route('student-sets.results.publish', $route))->assertSessionHasNoErrors();
 

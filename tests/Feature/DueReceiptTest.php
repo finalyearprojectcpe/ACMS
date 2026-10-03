@@ -18,6 +18,7 @@ use App\Services\DueReceiptService;
 use App\Services\EmailDeliveryService;
 use App\Services\ReceiptPdfService;
 use App\Services\ReceiptUrlService;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Mail;
@@ -55,6 +56,9 @@ test('confirmed Paystack payments queue, store, email, verify, and download PDF 
         ->and($payment->receiptEmailDelivery->metadata['attachment']['path'])->toBe($payment->receipt_path)
         ->and((new DuePaymentReceiptMail($payment->receiptEmailDelivery))->render())
         ->toContain($fixture['advisorName']);
+    if (getenv('ACMS_ARTIFACT_PREVIEWS') === '1') {
+        file_put_contents(storage_path('app/private/design-previews/receipt-no-logo.pdf'), Storage::disk('local')->get($payment->receipt_path));
+    }
     Queue::assertPushed(SendEmailDelivery::class);
 
     Config::set('services.resend.key', 're_test_key');
@@ -93,6 +97,44 @@ test('confirmed Paystack payments queue, store, email, verify, and download PDF 
             ->where('receipt.transactionId', '987654321')
             ->where('receipt.amount', '₦15,000.00')
             ->etc());
+});
+
+test('receipt logo is captured at payment completion and survives later set logo changes', function () {
+    Queue::fake();
+    Storage::fake('local');
+    $fixture = createDueReceiptFixture();
+    $set = $fixture['due']->studentSet;
+    $adviser = $set->advisorProfile->user;
+    $route = $set->routeParameters();
+
+    $this->actingAs($adviser)->post(route('student-sets.logo.store', $route), [
+        'logo' => UploadedFile::fake()->image('first.png', 96, 96),
+    ])->assertRedirect(route('student-sets.edit', $route));
+    $firstLogo = $set->refresh()->logo_path;
+    expect(Storage::disk('local')->exists($firstLogo))->toBeTrue();
+    $this->get(route('student-sets.logo.show', $route))->assertOk();
+    $this->actingAs(AdvisorProfile::factory()->create()->user)
+        ->get(route('student-sets.logo.show', $route))->assertNotFound();
+    $this->actingAs($adviser);
+
+    $payment = app(DuePaymentService::class)->recordPaystackData($fixture['payment'], successfulPaystackData($fixture));
+    expect($payment->receipt_logo_path)->toBe($firstLogo)
+        ->and($payment->receipt_number)->toBe('987654321');
+
+    $this->post(route('student-sets.logo.store', $route), [
+        'logo' => UploadedFile::fake()->image('replacement.png', 96, 96),
+    ])->assertSessionHasNoErrors();
+    $this->delete(route('student-sets.logo.destroy', $route))->assertSessionHasNoErrors();
+
+    $pdf = app(ReceiptPdfService::class)->generate($payment);
+    if (getenv('ACMS_ARTIFACT_PREVIEWS') === '1') {
+        file_put_contents(storage_path('app/private/design-previews/receipt-with-logo.pdf'), $pdf);
+    }
+
+    expect($set->refresh()->logo_path)->toBeNull()
+        ->and($payment->refresh()->receipt_logo_path)->toBe($firstLogo)
+        ->and(Storage::disk('local')->exists($firstLogo))->toBeTrue()
+        ->and($pdf)->toStartWith('%PDF');
 });
 
 test('a generated receipt remains ready when its email cannot be queued', function () {
@@ -144,6 +186,57 @@ test('a late completion keeps the exact older checkout amount after a due amount
         ->and($payment->amount_kobo)->toBe(1500000)
         ->and($assignment->refresh()->amount_kobo)->toBe(1500000)
         ->and($assignment->status)->toBe(StudentDueAssignment::StatusPaid);
+});
+
+test('a late successful checkout does not undo a waiver and is recovered when the waiver is removed', function () {
+    Queue::fake();
+    $fixture = createDueReceiptFixture();
+    $assignment = $fixture['assignment'];
+
+    app(DueAssignmentService::class)->waive($assignment, $fixture['due']->studentSet->advisorProfile->user, 'Hardship');
+    $payment = app(DuePaymentService::class)->recordPaystackData(
+        $fixture['payment'],
+        successfulPaystackData($fixture),
+    );
+
+    expect($payment->status)->toBe(DuePayment::StatusSuccess)
+        ->and($assignment->refresh()->status)->toBe(StudentDueAssignment::StatusWaived)
+        ->and($assignment->latest_due_payment_id)->toBeNull();
+    Queue::assertPushed(GenerateDuePaymentReceipt::class);
+
+    app(DueAssignmentService::class)->restore($assignment);
+
+    expect($assignment->refresh()->status)->toBe(StudentDueAssignment::StatusPaid)
+        ->and($assignment->latest_due_payment_id)->toBe($payment->id);
+});
+
+test('a second successful checkout does not replace the due settlement', function () {
+    Queue::fake();
+    $fixture = createDueReceiptFixture();
+    $first = app(DuePaymentService::class)->recordPaystackData(
+        $fixture['payment'],
+        successfulPaystackData($fixture),
+    );
+    $second = $first->replicate(['paystack_transaction_id', 'receipt_number', 'paid_at']);
+    $second->reference = 'DUE-RECEIPT-SECOND';
+    $second->status = DuePayment::StatusInitialized;
+    $second->receipt_status = null;
+    $second->save();
+
+    $secondPayload = successfulPaystackData($fixture);
+    $secondPayload['reference'] = $second->reference;
+    $secondPayload['id'] = 987654322;
+    $secondPayload['paid_at'] = '2026-07-11T11:00:00+01:00';
+    $second = app(DuePaymentService::class)->recordPaystackData($second, $secondPayload);
+
+    expect($second->status)->toBe(DuePayment::StatusSuccess)
+        ->and($fixture['assignment']->refresh()->status)->toBe(StudentDueAssignment::StatusPaid)
+        ->and($fixture['assignment']->latest_due_payment_id)->toBe($first->id);
+
+    app(DuePaymentService::class)->reversePayment($first, [], 'Gateway reversal');
+
+    expect($fixture['assignment']->refresh()->status)->toBe(StudentDueAssignment::StatusPaid)
+        ->and($fixture['assignment']->latest_due_payment_id)->toBe($second->id);
 });
 
 /**

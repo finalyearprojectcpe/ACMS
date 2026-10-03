@@ -40,16 +40,21 @@ test('a course adviser builds a set schedule from sessions through courses', fun
         ->whereBelongsTo($firstSemester)
         ->firstOrFail();
     expect($session->semesterInstances)->toHaveCount(2);
+    $this->post(route('student-sets.catalog.store', $set->routeParameters()), [
+        'courses' => [[
+            'code' => 'cpe 101',
+            'title' => 'Introduction to Computer Engineering',
+            'credit_units' => 3,
+            'is_elective' => false,
+        ]],
+    ])->assertSessionHasNoErrors();
+    $course = $set->courses()->firstOrFail();
     $this->post(route('student-sets.courses.store', [
         ...$set->routeParameters(),
         'sessionYears' => $session->routeYears(),
         'semester' => $semester->semester->slug,
     ]), [
-        'code' => 'cpe 101',
-        'title' => 'Introduction to Computer Engineering',
-        'credit_units' => 3,
-        'is_elective' => false,
-        'prerequisite_course_ids' => [],
+        'course_ids' => [$course->id],
     ])->assertSessionHasNoErrors();
 
     $offering = CourseOffering::query()->with('course')->firstOrFail();
@@ -68,32 +73,33 @@ test('a course adviser builds a set schedule from sessions through courses', fun
     $this->get(route('student-sets.courses.edit', $courseRoute))->assertOk();
     $this->get(route('student-sets.results.course', $courseRoute))->assertOk();
 
-    $this->patch(route('student-sets.semesters.registration.update', [
-        ...$set->routeParameters(),
-        'sessionYears' => $session->routeYears(),
-        'semester' => $semester->semester->slug,
-    ]), ['registration_enabled' => true])->assertSessionHasNoErrors();
-
     $this->get(route('student-sets.courses.show', [
         ...$set->routeParameters(),
         'session' => $session->routeYears(),
         'semester' => $semester->semester->slug,
     ]))->assertOk()->assertInertia(fn (Assert $page) => $page
-        ->where('dashboard.sectionTitle', 'Courses & Results')
+        ->where('dashboard.sectionTitle', 'Courses')
         ->where('dashboard.adviserCourseSchedules.selectedSet.id', $set->id)
         ->where('dashboard.adviserCourseSchedules.selectedSemester.maximumCourseUnits', 24)
-        ->where('dashboard.adviserCourseSchedules.selectedSemester.registrationEnabled', true)
         ->where('dashboard.adviserCourseSchedules.selectedSemester.offerings.0.code', 'CPE 101'));
 });
 
 test('courses stay within their set and can be offered again in a later semester', function () {
     $this->seed(AcademicStructureSeeder::class);
     $advisor = AdvisorProfile::factory()->create();
-    $set = StudentSet::factory()->create(['advisor_profile_id' => $advisor->id]);
+    $set = StudentSet::factory()->create([
+        'advisor_profile_id' => $advisor->id,
+        'department_name' => 'Computer Engineering',
+        'department_slug' => 'computer-engineering',
+        'entry_start_year' => 2024,
+        'entry_end_year' => 2025,
+    ]);
     $otherSet = StudentSet::factory()->create([
         'advisor_profile_id' => $advisor->id,
         'department_name' => 'Electrical Engineering',
         'department_slug' => 'electrical-engineering',
+        'entry_start_year' => 2025,
+        'entry_end_year' => 2026,
     ]);
     $firstYear = AcademicYear::query()->where('year_number', 1)->firstOrFail();
     $secondYear = AcademicYear::query()->where('year_number', 2)->firstOrFail();
@@ -133,11 +139,7 @@ test('courses stay within their set and can be offered again in a later semester
         'sessionYears' => $secondSession->routeYears(),
         'semester' => $secondSemester->semester->slug,
     ]), [
-        'code' => 'CPE 101',
-        'title' => 'Introduction to Computer Engineering',
-        'credit_units' => 3,
-        'is_elective' => true,
-        'prerequisite_course_ids' => [],
+        'course_ids' => [$course->id],
     ])->assertSessionHasNoErrors();
 
     expect(Course::query()->where('student_set_id', $set->id)->where('code', 'CPE 101')->count())->toBe(1)
@@ -151,7 +153,7 @@ test('courses stay within their set and can be offered again in a later semester
     $registration = CourseRegistration::factory()->create([
         'student_profile_id' => $student->id,
         'academic_session_semester_id' => $firstSemester->id,
-        'status' => CourseRegistration::StatusApproved,
+        'status' => CourseRegistration::StatusAssigned,
     ]);
     CourseRegistrationItem::query()->create([
         'course_registration_id' => $registration->id,
@@ -188,11 +190,7 @@ test('courses stay within their set and can be offered again in a later semester
         'sessionYears' => $secondSession->routeYears(),
         'semester' => $secondSemester->semester->slug,
     ]), [
-        'code' => 'CPE 201',
-        'title' => 'Digital Systems',
-        'credit_units' => 3,
-        'is_elective' => false,
-        'prerequisite_course_ids' => [],
+        'course_ids' => [$course->id],
     ])->assertNotFound();
 });
 

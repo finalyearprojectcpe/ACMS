@@ -45,6 +45,8 @@ export type DashboardAdviserStudent = {
     id: number;
     fullName: string;
     email: string | null;
+    emailUnverified: boolean;
+    pendingEmail: string | null;
     registrationNumber: string;
     registrationRouteValue: string;
     cgpa: number | null;
@@ -53,15 +55,30 @@ export type DashboardAdviserStudent = {
     studentSet: DashboardStudentSetContext;
     entrySession: DashboardAcademicSession | null;
     advisorName: string;
-    profileUrl: string;
+    profileUrl: string | null;
+    accountStatus:
+        | 'not_joined'
+        | 'verify_email'
+        | 'review'
+        | 'declined'
+        | 'active';
+    claimId: string | null;
 };
 
 export type DashboardAdviserHome = {
     hasSets: boolean;
     requestCount: number;
     recentRequests: DashboardJoinRequestRow[];
-    pendingCount: number;
-    pendingRegistrations: DashboardActivityRegistration[];
+    unassignedCount: number;
+    unassignedStudents: Array<{
+        name: string;
+        avatar: string | null;
+        registrationNumber: string;
+        set: string;
+        period: string;
+        profileUrl: string;
+        url: string;
+    }>;
     paymentCount: number;
     recentPayments: DashboardAdviserHomePayment[];
 };
@@ -71,27 +88,11 @@ export type DashboardJoinRequestRow = {
     name: string;
     registrationNumber: string;
     set: string;
-    status: 'pending' | 'approved' | 'rejected';
-    emailVerified: boolean;
     requestedAt: string;
     url: string;
 };
 
-export type DashboardJoinRequestList = {
-    status: 'pending' | 'reviewed';
-    requests: DashboardPageRows<DashboardJoinRequestRow>;
-};
-
-export type DashboardJoinRequestDetail = DashboardJoinRequestRow & {
-    email: string;
-    conflict: boolean;
-    reason: string | null;
-    reviewedAt: string | null;
-    reviewer: string | null;
-    rejecting: boolean;
-    canApprove: boolean;
-    profileUrl: string | null;
-};
+export type DashboardJoinRequestDetail = DashboardJoinRequestRow;
 
 export type DashboardResultStatement = {
     student: {
@@ -113,24 +114,11 @@ export type DashboardResultStatement = {
             units: number;
             grade: string;
         }[];
-        publishedUnits: number;
+        totalUnits: number;
         awaitingPublication: number;
         gpa: number | null;
         cgpa: number | null;
     }[];
-};
-
-export type DashboardActivityRegistration = {
-    id: number;
-    studentName: string;
-    studentAvatar: string | null;
-    studentUrl: string;
-    set: string;
-    levelSemester: string;
-    session: string;
-    status: string;
-    submittedAt: string | null;
-    url: string;
 };
 
 export type DashboardAdviserHomePayment = {
@@ -151,13 +139,8 @@ export type DashboardPageRows<T> = {
     current_page: number;
     last_page: number;
     total: number;
+    from: number | null;
     links: { url: string | null; label: string; active: boolean }[];
-};
-
-export type DashboardRegistrationActivity = {
-    status: string;
-    search: string;
-    registrations: DashboardPageRows<DashboardActivityRegistration>;
 };
 
 export type DashboardPaymentHistory = {
@@ -174,7 +157,10 @@ export type DashboardAssistant = {
         id: number;
         role: 'user' | 'assistant';
         content: string;
-        sources: { title: string; url: string }[];
+        html: string | null;
+        status: 'queued' | 'running' | 'completed' | 'failed' | null;
+        error: string | null;
+        sources: { title: string; url: string; records?: number }[];
     }[];
 };
 
@@ -201,9 +187,8 @@ export type DashboardCourseScheduleSemesterSummary = {
     id: number;
     publicId: string;
     name: string;
-    slug: string;
+    slug: 'first' | 'second';
     maximumCourseUnits: number;
-    registrationEnabled: boolean;
     resultsPublishedAt: string | null;
     courseCount: number;
 };
@@ -215,10 +200,18 @@ export type DashboardCourseScheduleSemester = {
     slug: string;
     session: DashboardAcademicSession & { level: DashboardLevel };
     maximumCourseUnits: number;
-    registrationEnabled: boolean;
     resultsPublishedAt: string | null;
     totalUnits: number;
     offerings: DashboardAdviserCourseOffering[];
+    students: Array<{
+        name: string;
+        avatar: string | null;
+        registrationNumber: string;
+        courseCount: number;
+        units: number;
+        assignmentUrl: string;
+        profileUrl: string | null;
+    }>;
 };
 
 export type DashboardAdviserCourseOffering = {
@@ -230,6 +223,11 @@ export type DashboardAdviserCourseOffering = {
     title: string;
     units: number;
     category: 'normal' | 'elective';
+    retakeOnly: boolean;
+    assignedCount: number;
+    enteredCount: number;
+    publishedAt: string | null;
+    gradeUrl: string;
     prerequisites: DashboardAdviserCoursePrerequisite[];
 };
 
@@ -256,6 +254,100 @@ export type DashboardAdviserCourseOfferingForm = {
         prerequisiteCourseIds: number[];
     } | null;
     prerequisiteOptions: DashboardAdviserCoursePrerequisiteOption[];
+    catalogCourses: Array<{
+        id: number;
+        code: string;
+        title: string;
+        units: number;
+        isElective: boolean;
+    }>;
+    catalogUrl: string;
+};
+
+export type DashboardAdviserCourseCatalog = {
+    set: DashboardStudentSetContext;
+    courses: Array<{
+        code: string;
+        urlCode: string;
+        title: string;
+        units: number;
+        isElective: boolean;
+        scheduledCount: number;
+    }>;
+    editingCode: string | null;
+};
+
+export type DashboardAdviserCourseAssignment = {
+    set: DashboardStudentSetContext;
+    student: {
+        name: string;
+        avatar: string | null;
+        registrationNumber: string;
+        profileUrl: string | null;
+    };
+    period: {
+        level: string;
+        session: string;
+        semester: string;
+        sessionYears: string;
+        slug: string;
+    };
+    maximumUnits: number;
+    status: 'unassigned' | 'draft' | 'assigned';
+    selectedCourses: DashboardCourseRegistrationCourse[];
+    courseGroups: DashboardCourseRegistrationGroup[];
+};
+
+export type DashboardAdviserSetResults = {
+    set: DashboardStudentSetContext;
+    allHistory: boolean;
+    selectedSemesterId: number | null;
+    selectedSessionPublicId: string | null;
+    periods: Array<{
+        id: number;
+        publicId: string;
+        name: string;
+        level: DashboardLevel;
+        semesters: Array<{
+            id: number;
+            publicId: string;
+            name: string;
+            slug: 'first' | 'second';
+        }>;
+    }>;
+    allHistoryUrl: string;
+    exportAvailable?: boolean;
+    columns: Array<{
+        id: string;
+        periodId: number;
+        code: string;
+        title: string;
+        units: number;
+        group: string;
+        session: string;
+        url: string;
+        isElective: boolean;
+        carryoverOnly: boolean;
+    }>;
+    students: Array<{
+        name: string;
+        avatar: string | null;
+        registrationNumber: string;
+        profileUrl: string | null;
+        cells: Record<
+            string,
+            {
+                grade: string | null;
+                assignmentOrigin: 'scheduled' | 'carryover' | 'deferred';
+                state: 'missing' | 'published' | 'unpublished' | 'awaiting';
+            }
+        >;
+        totalGradePoints: number;
+        totalNumberOfUnits: number;
+        gpa: number | null;
+        cgpa: number | null;
+        standing: string | null;
+    }>;
 };
 
 export type DashboardAdviserAcademicSessionForm = {
@@ -297,7 +389,11 @@ export type DashboardAdviserDues = {
         routeYears: string;
         name: string;
         level: string;
-        semesters: Array<{ id: number; slug: string; name: string }>;
+        semesters: Array<{
+            id: number;
+            slug: 'first' | 'second';
+            name: string;
+        }>;
     }>;
     selectedPeriod:
         | { kind: 'all' }
@@ -328,7 +424,6 @@ export type DashboardAdviserDueSummary = {
         semester: string;
         semesterOrder: number;
     };
-    dueDate: string | null;
     paidCount: number;
     pendingCount: number;
     waivedCount: number;
@@ -356,7 +451,6 @@ export type DashboardAdviserDueForm = {
         title: string;
         description: string;
         amountNaira: string;
-        dueOn: string;
     };
     due: {
         id: number;
@@ -385,6 +479,7 @@ export type DashboardAdviserDueStudent = {
     publicId: string;
     studentName: string;
     studentAvatar: string | null;
+    profileUrl: string | null;
     registrationNumber: string;
     amount: string;
     status: 'Paid' | 'Unpaid' | 'Waived';
@@ -441,6 +536,7 @@ export type DashboardAdviserStudentSets = {
 export type DashboardStudentSetSettings = {
     set: DashboardStudentSetContext;
     sessions: DashboardStudentSetSession[];
+    logoUrl: string | null;
 };
 
 export type DashboardStudentSetSession = DashboardAcademicSession & {
@@ -469,7 +565,16 @@ export type DashboardStudentRecord = {
     student: DashboardAdviserStudent;
     entrySession: DashboardAcademicSession;
     courseAdvisor: string;
-    pendingRegistrations: Array<{ label: string; url: string }>;
+    courseAssignments: Array<{
+        level: string;
+        session: string;
+        semester: string;
+        status: 'unassigned' | 'draft' | 'assigned';
+        courseCount: number;
+        units: number;
+        maximumUnits: number;
+        url: string;
+    }>;
     results: {
         cgpa: number | null;
         columns: Array<{
@@ -492,6 +597,7 @@ export type DashboardStudentRecord = {
 
 export type DashboardStudentRecordDue = {
     name: string;
+    url: string;
     period: string;
     amount: string;
     assignedAt: string | null;
@@ -508,44 +614,6 @@ export type DashboardStudentRecordResults = {
     results: DashboardStudentResults;
 };
 
-export type DashboardResultsSession = DashboardAcademicSession & {
-    level: DashboardLevel;
-    semesters: Array<{
-        id: number;
-        publicId: string;
-        name: string;
-        slug: string;
-        registrationEnabled: boolean;
-        courseCount: number;
-        resultsPublishedAt: string | null;
-    }>;
-};
-
-export type DashboardAdviserResults = {
-    set: DashboardStudentSetContext;
-    sessions: DashboardResultsSession[];
-    selectedSemesterId: number | null;
-    period: null | {
-        level: string;
-        session: string;
-        semester: string;
-        registrationEnabled: boolean;
-        scheduleUrl: string;
-        registrationsUrl: string;
-    };
-    courses: Array<{
-        publicId: string;
-        code: string;
-        title: string;
-        units: number;
-        isElective: boolean;
-        registeredCount: number;
-        enteredCount: number;
-        publishedAt: string | null;
-        url: string;
-    }>;
-};
-
 export type DashboardGradeRoster = {
     set: DashboardStudentSetContext;
     period: {
@@ -556,8 +624,7 @@ export type DashboardGradeRoster = {
     course: { code: string; title: string; units: number; isElective: boolean };
     publishedAt: string | null;
     publication: {
-        approvedCount: number;
-        awaitingReviewCount: number;
+        assignedCount: number;
         totalResults: number;
         enteredResults: number;
         canPublish: boolean;
@@ -568,9 +635,10 @@ export type DashboardGradeRoster = {
         name: string;
         avatar: string | null;
         registrationNumber: string;
-        profileUrl: string;
+        profileUrl: string | null;
         grade: string | null;
         missingScript: boolean;
+        assignmentOrigin: 'scheduled' | 'carryover' | 'deferred';
         corrections: Array<{
             from: string;
             to: string;
@@ -591,14 +659,18 @@ export type DashboardStudentResults = {
         semester: string;
         gpa: number | null;
         cgpa: number | null;
+        locked: boolean;
         url: string;
     }>;
     periods: Array<{
         sessionYears: string;
         semester: string;
         label: string;
-        shortLabel: string;
+        level: string;
+        session: string;
         gpa: number | null;
+        locked: boolean;
+        unpaidDueCount: number;
         url: string;
     }>;
     selected: null | {
@@ -606,10 +678,14 @@ export type DashboardStudentResults = {
         semester: string;
         label: string;
         gpa: number | null;
+        locked: boolean;
+        unpaidDueCount: number;
         courses: Array<{
             code: string;
             title: string;
             units: number;
+            assignmentOrigin: 'scheduled' | 'carryover' | 'deferred';
+            isElective: boolean;
             grade: string | null;
             missingScript: boolean;
             pending: boolean;
@@ -620,8 +696,6 @@ export type DashboardStudentResults = {
 export type DashboardStudentProfile = {
     name: {
         full: string;
-        surname: string;
-        otherNames: string;
     };
     avatar: string | null;
 };
@@ -641,9 +715,7 @@ export type DashboardStudentHome = {
     } | null;
     courseAdvisor: string;
     cgpa: number | null;
-    registrationStatus: string | null;
-    registrationOpen: boolean;
-    hasAvailableCourses: boolean;
+    resultsLocked: boolean;
     totalCourseUnits: number;
     courses: DashboardStudentHomeCourse[];
     pendingDues: DashboardStudentHomeDue[];
@@ -653,6 +725,8 @@ export type DashboardStudentHomeCourse = {
     code: string;
     title: string;
     units: number;
+    assignmentOrigin: 'scheduled' | 'carryover' | 'deferred';
+    isElective: boolean;
 };
 
 export type DashboardStudentHomeDue = DashboardStudentDue;
@@ -671,7 +745,6 @@ export type DashboardStudentDueRow = {
     amount: string;
     status: 'Paid' | 'Unpaid' | 'Waived';
     waiverReason: string | null;
-    dueDate?: string | null;
     paidAt?: string;
     paymentUrl?: string | null;
     paymentActionLabel?: string;
@@ -683,15 +756,12 @@ export type DashboardStudentDue = {
     name: string;
     description: string | null;
     amount: string;
-    dueDate: string | null;
     paymentUrl: string | null;
     paymentActionLabel: string;
     paymentUnavailableReason: string | null;
 };
 
-export type DashboardStudentCourseRegistration = {
-    registrationOpen: boolean;
-    hasAvailableCourses: boolean;
+export type DashboardStudentCourses = {
     currentSemester: {
         name: string;
         level: string;
@@ -705,78 +775,35 @@ export type DashboardStudentCourseRegistration = {
         publicId: string;
         name: string;
         level: DashboardLevel;
-        semesters: Array<{ id: number; publicId: string; name: string }>;
+        semesters: Array<{
+            id: number;
+            publicId: string;
+            name: string;
+            slug: 'first' | 'second';
+        }>;
     }>;
-    maximumCourseUnits: number;
-    reviewStatus: string;
-    feedbackNote: string | null;
     selectedCourses: DashboardCourseRegistrationCourse[];
-    courseGroups: DashboardCourseRegistrationGroup[];
 };
 
 export type DashboardCourseRegistrationCourse = {
     courseOfferingId: number;
+    courseId: number;
+    assignmentOrigin: 'scheduled' | 'carryover' | 'deferred';
     code: string;
     title: string;
     units: number;
     category: string;
-    categoryValue: 'normal' | 'elective';
+    categoryValue: 'normal' | 'elective' | 'carryover' | 'deferred';
     isElective: boolean;
     prerequisites: string[];
     missingPrerequisites: string[];
 };
 
 export type DashboardCourseRegistrationGroup = {
-    key: 'normal' | 'elective';
+    key: 'normal' | 'elective' | 'carryover' | 'deferred';
     title: string;
     courses: DashboardCourseRegistrationCourse[];
 };
-
-export type DashboardCourseRegistrationSummary = {
-    id: number;
-    status: string;
-    semester: {
-        level: string;
-        name: string;
-        session: string;
-    };
-    totalUnits: number;
-    courses: DashboardCourseRegistrationCourse[];
-    reviewUrl: string;
-};
-
-export type DashboardAdviserCourseRegistration = {
-    selectedSet: DashboardStudentSetContext | null;
-    sessions: DashboardCourseScheduleSession[];
-    selectedSessionId: number | null;
-    selectedSemesterId: number | null;
-    status: string;
-    registrations: DashboardAdviserCourseRegistrationListItem[];
-    review: DashboardCourseRegistrationReview | null;
-};
-
-export type DashboardAdviserCourseRegistrationListItem =
-    DashboardCourseRegistrationSummary & {
-        student: {
-            name: string;
-            avatar: string | null;
-            registrationNumber: string;
-            profileUrl: string;
-        };
-        submittedAt: string | null;
-    };
-
-export type DashboardCourseRegistrationReview =
-    DashboardAdviserCourseRegistrationListItem & {
-        routeParameters: {
-            registrationNumber: string;
-            sessionYears: string;
-            semester: string;
-        };
-        set: DashboardStudentSetContext | null;
-        feedbackNote: string | null;
-        canReview: boolean;
-    };
 
 export type DashboardContext = {
     role: DashboardRole;
@@ -786,19 +813,18 @@ export type DashboardContext = {
     advisedSets: DashboardStudentSetContext[];
     activeStudentSetId: number | null;
     adviserHome: DashboardAdviserHome | null;
-    adviserJoinRequests: DashboardJoinRequestList | null;
     adviserJoinRequest: DashboardJoinRequestDetail | null;
-    adviserRegistrationActivity: DashboardRegistrationActivity | null;
     adviserPaymentHistory: DashboardPaymentHistory | null;
     adviserAssistant: DashboardAssistant | null;
     adviserStudentSets: DashboardAdviserStudentSets | null;
     studentSetSettings: DashboardStudentSetSettings | null;
     adviserStudents: DashboardAdviserStudents | null;
     adviserCourseSchedules: DashboardAdviserCourseSchedules | null;
+    adviserCourseCatalog: DashboardAdviserCourseCatalog | null;
+    adviserCourseAssignment: DashboardAdviserCourseAssignment | null;
+    adviserSetResults: DashboardAdviserSetResults | null;
     adviserAcademicSessionForm: DashboardAdviserAcademicSessionForm | null;
     adviserCourseOfferingForm: DashboardAdviserCourseOfferingForm | null;
-    adviserCourseRegistration: DashboardAdviserCourseRegistration | null;
-    adviserResults: DashboardAdviserResults | null;
     adviserGradeRoster: DashboardGradeRoster | null;
     adviserDues: DashboardAdviserDues | null;
     adviserDueForm: DashboardAdviserDueForm | null;
@@ -814,6 +840,6 @@ export type DashboardContext = {
     studentProfile: DashboardStudentProfile | null;
     studentHome: DashboardStudentHome | null;
     studentDues: DashboardStudentDues | null;
-    studentCourseRegistration: DashboardStudentCourseRegistration | null;
+    studentCourses: DashboardStudentCourses | null;
     studentResults: DashboardStudentResults | null;
 };

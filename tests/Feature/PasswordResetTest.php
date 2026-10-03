@@ -4,8 +4,12 @@ use App\Mail\PasswordResetMail;
 use App\Models\AdvisorProfile;
 use App\Models\EmailDelivery;
 use App\Models\User;
+use App\Services\EmailDeliveryService;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 
 test('active users can reset their password with a single-use link', function () {
@@ -27,7 +31,7 @@ test('active users can reset their password with a single-use link', function ()
         ->where('email', $user->email)
         ->exists())->toBeTrue()
         ->and((new PasswordResetMail($delivery))->render())
-        ->toContain('your GradeManager account');
+        ->toContain('your ACMS account');
 
     $this->get($resetUrl)
         ->assertOk()
@@ -39,11 +43,11 @@ test('active users can reset their password with a single-use link', function ()
     $this->post(route('password.update'), [
         'token' => $token,
         'email' => $user->email,
-        'password' => 'new-secure-password',
-        'password_confirmation' => 'new-secure-password',
+        'password' => 'reset12',
+        'password_confirmation' => 'reset12',
     ])->assertRedirect(route('home'));
 
-    expect(Hash::check('new-secure-password', $user->refresh()->password))->toBeTrue()
+    expect(Hash::check('reset12', $user->refresh()->password))->toBeTrue()
         ->and(DB::table('password_reset_tokens')
             ->where('email', $user->email)
             ->exists())->toBeFalse();
@@ -51,11 +55,11 @@ test('active users can reset their password with a single-use link', function ()
     $this->post(route('password.update'), [
         'token' => $token,
         'email' => $user->email,
-        'password' => 'another-password',
-        'password_confirmation' => 'another-password',
+        'password' => 'reset34',
+        'password_confirmation' => 'reset34',
     ])->assertSessionHasErrors('email');
 
-    expect(Hash::check('new-secure-password', $user->refresh()->password))->toBeTrue();
+    expect(Hash::check('reset12', $user->refresh()->password))->toBeTrue();
 });
 
 test('password reset requests do not reveal whether an email exists', function () {
@@ -85,9 +89,27 @@ test('an expired reset token cannot change the password', function () {
     $this->post(route('password.update'), [
         'token' => $token,
         'email' => $user->email,
-        'password' => 'new-secure-password',
-        'password_confirmation' => 'new-secure-password',
+        'password' => 'reset12',
+        'password_confirmation' => 'reset12',
     ])->assertSessionHasErrors('email');
 
     expect(Hash::check('old-password', $user->refresh()->password))->toBeTrue();
+});
+
+test('email delivery respects the configured local mailer without Resend credentials', function () {
+    Config::set('mail.default', 'log');
+    Config::set('services.resend.key', null);
+    Mail::fake();
+    Queue::fake();
+    $delivery = EmailDelivery::factory()->create([
+        'mailer' => 'resend',
+        'metadata' => ['template' => 'password_reset', 'reset_url' => 'https://example.test/reset'],
+    ]);
+
+    app(EmailDeliveryService::class)->sendPasswordResetInvitation($delivery, 'https://example.test/reset');
+    app(EmailDeliveryService::class)->deliver($delivery);
+
+    expect($delivery->refresh()->mailer)->toBe('log')
+        ->and($delivery->status)->toBe('sent');
+    Mail::assertSent(PasswordResetMail::class);
 });

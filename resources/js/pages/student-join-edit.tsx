@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 
 import { AuthCard, AuthFormHeader } from '@/components/auth-card';
 import { FlashToasts } from '@/components/flash-toasts';
+import { MatchedStudentIdentity } from '@/components/matched-student-identity';
 import { Button } from '@/components/ui/button';
 import {
     Field,
@@ -15,8 +16,7 @@ import { status, update } from '@/routes/student-joins';
 
 type JoinEdit = {
     set: string;
-    surname: string;
-    otherNames: string;
+    officialName: string;
     email: string;
     registrationNumber: string;
     status: 'pending' | 'rejected';
@@ -28,11 +28,11 @@ export default function StudentJoinEditPage({
 }: {
     request: JoinEdit;
 }) {
-    const form = useForm({
-        surname: request.surname,
-        other_names: request.otherNames,
+    const form = useForm<{ email: string; registration_number?: string }>({
         email: request.email,
-        registration_number: request.registrationNumber,
+        ...(request.status === 'rejected'
+            ? { registration_number: request.registrationNumber }
+            : {}),
     });
 
     function submit(event: FormEvent<HTMLFormElement>) {
@@ -64,55 +64,15 @@ export default function StudentJoinEditPage({
                                     <p className="mt-1">{request.reason}</p>
                                 </div>
                             ) : null}
+                            <MatchedStudentIdentity
+                                name={request.officialName}
+                                registrationNumber={
+                                    request.status === 'pending'
+                                        ? request.registrationNumber
+                                        : undefined
+                                }
+                            />
                             <FieldGroup>
-                                <div className="grid gap-4 sm:grid-cols-2">
-                                    <Field
-                                        data-invalid={Boolean(
-                                            form.errors.surname,
-                                        )}
-                                    >
-                                        <FieldLabel htmlFor="join-surname">
-                                            Surname
-                                        </FieldLabel>
-                                        <Input
-                                            id="join-surname"
-                                            value={form.data.surname}
-                                            onChange={(event) =>
-                                                form.setData(
-                                                    'surname',
-                                                    event.target.value,
-                                                )
-                                            }
-                                            required
-                                        />
-                                        <FieldError>
-                                            {form.errors.surname}
-                                        </FieldError>
-                                    </Field>
-                                    <Field
-                                        data-invalid={Boolean(
-                                            form.errors.other_names,
-                                        )}
-                                    >
-                                        <FieldLabel htmlFor="join-other-names">
-                                            Other names
-                                        </FieldLabel>
-                                        <Input
-                                            id="join-other-names"
-                                            value={form.data.other_names}
-                                            onChange={(event) =>
-                                                form.setData(
-                                                    'other_names',
-                                                    event.target.value,
-                                                )
-                                            }
-                                            required
-                                        />
-                                        <FieldError>
-                                            {form.errors.other_names}
-                                        </FieldError>
-                                    </Field>
-                                </div>
                                 <Field
                                     data-invalid={Boolean(form.errors.email)}
                                 >
@@ -133,30 +93,35 @@ export default function StudentJoinEditPage({
                                     />
                                     <FieldError>{form.errors.email}</FieldError>
                                 </Field>
-                                <Field
-                                    data-invalid={Boolean(
-                                        form.errors.registration_number,
-                                    )}
-                                >
-                                    <FieldLabel htmlFor="join-registration-number">
-                                        Registration number
-                                    </FieldLabel>
-                                    <Input
-                                        id="join-registration-number"
-                                        value={form.data.registration_number}
-                                        maxLength={255}
-                                        onChange={(event) =>
-                                            form.setData(
-                                                'registration_number',
-                                                event.target.value,
-                                            )
-                                        }
-                                        required
-                                    />
-                                    <FieldError>
-                                        {form.errors.registration_number}
-                                    </FieldError>
-                                </Field>
+                                {request.status === 'rejected' && (
+                                    <Field
+                                        data-invalid={Boolean(
+                                            form.errors.registration_number,
+                                        )}
+                                    >
+                                        <FieldLabel htmlFor="join-registration-number">
+                                            Registration number
+                                        </FieldLabel>
+                                        <Input
+                                            id="join-registration-number"
+                                            value={
+                                                form.data.registration_number ??
+                                                ''
+                                            }
+                                            maxLength={255}
+                                            onChange={(event) =>
+                                                form.setData(
+                                                    'registration_number',
+                                                    event.target.value,
+                                                )
+                                            }
+                                            required
+                                        />
+                                        <FieldError>
+                                            {form.errors.registration_number}
+                                        </FieldError>
+                                    </Field>
+                                )}
                             </FieldGroup>
                             <div className="flex flex-wrap gap-3">
                                 <Button

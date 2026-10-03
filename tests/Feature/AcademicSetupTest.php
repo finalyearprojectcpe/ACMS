@@ -4,6 +4,9 @@ use App\Models\AcademicSession;
 use App\Models\AcademicSessionSemester;
 use App\Models\AcademicYear;
 use App\Models\AdvisorProfile;
+use App\Models\CourseRegistration;
+use App\Models\CourseRegistrationItem;
+use App\Models\Due;
 use App\Models\Semester;
 use App\Models\StudentProfile;
 use App\Models\StudentSet;
@@ -130,7 +133,7 @@ test('a set keeps a current semester after its first session is created', functi
         ->and($set->current_semester_id)->toBe($firstSemester->id);
 });
 
-test('the chosen current semester remains visible after course registration closes', function () {
+test('the chosen current semester remains visible to students until the adviser changes it', function () {
     $this->seed(AcademicStructureSeeder::class);
     $set = StudentSet::factory()->create();
     $student = StudentProfile::factory()->create([
@@ -146,7 +149,6 @@ test('the chosen current semester remains visible after course registration clos
     $first = AcademicSessionSemester::factory()->create([
         'academic_session_id' => $session->id,
         'semester_id' => Semester::query()->where('slug', 'first')->firstOrFail()->id,
-        'registration_enabled' => true,
     ]);
     $second = AcademicSessionSemester::factory()->create([
         'academic_session_id' => $session->id,
@@ -158,34 +160,25 @@ test('the chosen current semester remains visible after course registration clos
             'current_academic_year_id' => $session->academic_year_id,
             'current_semester_id' => $first->semester_id,
         ])->assertSessionHasNoErrors();
-    $this->patch(route('student-sets.semesters.registration.update', [
-        ...$set->routeParameters(),
-        'sessionYears' => $session->routeYears(),
-        'semester' => 'first',
-    ]), ['registration_enabled' => false])->assertSessionHasNoErrors();
-
     $this->actingAs($student->user)
         ->get(route('dashboard'))
         ->assertInertia(fn (Assert $page) => $page
             ->where('dashboard.studentHome.currentSemester.name', '1st Semester')
-            ->where('dashboard.studentHome.hasAvailableCourses', false)
-            ->where('dashboard.studentHome.registrationOpen', false));
+            ->where('dashboard.studentHome.courses', []));
     $this->get(route('dashboard.section', [
-        'section' => 'course-registration',
+        'section' => 'courses',
         'session' => $session->routeYears(),
         'semester' => 'first',
     ]))->assertInertia(fn (Assert $page) => $page
-        ->where('dashboard.studentCourseRegistration.registrationOpen', false)
-        ->where('dashboard.studentCourseRegistration.hasAvailableCourses', false)
-        ->where('dashboard.studentCourseRegistration.selectedSemesterId', $first->id));
+        ->where('dashboard.studentCourses.selectedCourses', [])
+        ->where('dashboard.studentCourses.selectedSemesterId', $first->id));
 
     $this->actingAs($set->advisorProfile->user)
         ->patch(route('student-sets.update', $set->routeParameters()), [
             'current_academic_year_id' => $session->academic_year_id,
             'current_semester_id' => $second->semester_id,
         ])->assertSessionHasNoErrors();
-    expect($set->refresh()->current_semester_id)->toBe($second->semester_id)
-        ->and($first->refresh()->registration_enabled)->toBeFalse();
+    expect($set->refresh()->current_semester_id)->toBe($second->semester_id);
 });
 
 test('an adviser creates a normalized student set from its department and entry year', function () {
@@ -218,6 +211,7 @@ test('a student set page is owned by its adviser and lists only that sets studen
     $user = User::factory()->student()->create(['name' => 'Adaeze Okoro']);
     StudentProfile::factory()->create([
         'user_id' => $user->id,
+        'official_name' => 'Adaeze Okoro',
         'advisor_profile_id' => $advisor->id,
         'student_set_id' => $studentSet->id,
     ]);
@@ -237,4 +231,75 @@ test('a student set page is owned by its adviser and lists only that sets studen
     $this->actingAs($otherAdvisor->user)
         ->get(route('student-sets.show', $studentSet->routeParameters()))
         ->assertNotFound();
+});
+
+test('an adviser cannot lower a semester limit below an existing course registration', function () {
+    $this->seed(AcademicStructureSeeder::class);
+    $set = StudentSet::factory()->create();
+    $session = AcademicSession::factory()->create([
+        'student_set_id' => $set->id,
+        'academic_year_id' => $set->current_academic_year_id,
+        'start_year' => $set->entry_start_year,
+        'end_year' => $set->entry_end_year,
+    ]);
+    $firstSemester = AcademicSessionSemester::factory()->create([
+        'academic_session_id' => $session->id,
+        'semester_id' => Semester::query()->where('slug', 'first')->firstOrFail()->id,
+        'maximum_course_units' => 24,
+    ]);
+    AcademicSessionSemester::factory()->create([
+        'academic_session_id' => $session->id,
+        'semester_id' => Semester::query()->where('slug', 'second')->firstOrFail()->id,
+        'maximum_course_units' => 24,
+    ]);
+    $student = StudentProfile::factory()->create([
+        'advisor_profile_id' => $set->advisor_profile_id,
+        'student_set_id' => $set->id,
+    ]);
+    $registration = CourseRegistration::factory()->create([
+        'student_profile_id' => $student->id,
+        'academic_session_semester_id' => $firstSemester->id,
+    ]);
+    CourseRegistrationItem::factory()->create([
+        'course_registration_id' => $registration->id,
+        'credit_units' => 3,
+    ]);
+
+    $this->actingAs($set->advisorProfile->user)
+        ->patch(route('student-sets.sessions.update', [
+            ...$set->routeParameters(),
+            'sessionYears' => $session->routeYears(),
+        ]), [
+            'academic_year_id' => $session->academic_year_id,
+            'start_year' => $session->start_year,
+            'first_semester_maximum_course_units' => 2,
+            'second_semester_maximum_course_units' => 24,
+        ])->assertSessionHasErrors('first_semester_maximum_course_units');
+
+    expect($firstSemester->refresh()->maximum_course_units)->toBe(24);
+});
+
+test('an adviser cannot remove a session containing dues', function () {
+    $this->seed(AcademicStructureSeeder::class);
+    $set = StudentSet::factory()->create();
+    $session = AcademicSession::factory()->create([
+        'student_set_id' => $set->id,
+        'start_year' => $set->entry_start_year + 1,
+        'end_year' => $set->entry_end_year + 1,
+        'academic_year_id' => AcademicYear::query()->where('year_number', 2)->firstOrFail()->id,
+    ]);
+    Due::factory()->create([
+        'advisor_profile_id' => $set->advisor_profile_id,
+        'student_set_id' => $set->id,
+        'academic_session_id' => $session->id,
+    ]);
+
+    $this->actingAs($set->advisorProfile->user)
+        ->delete(route('student-sets.sessions.destroy', [
+            ...$set->routeParameters(),
+            'sessionYears' => $session->routeYears(),
+        ]))
+        ->assertSessionHas('error');
+
+    expect($session->fresh())->not->toBeNull();
 });

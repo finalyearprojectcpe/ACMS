@@ -1,12 +1,12 @@
 import { cn } from '@/lib/utils';
 
 const colors: Record<string, string> = {
-    A: 'bg-green-500/15 text-green-800 dark:text-green-300',
-    B: 'bg-green-700/15 text-green-900 dark:text-green-200',
-    C: 'bg-yellow-500/15 text-yellow-900 dark:text-yellow-200',
-    D: 'bg-red-800/15 text-red-900 dark:text-red-200',
-    E: 'bg-red-700/15 text-red-800 dark:text-red-200',
-    F: 'bg-red-500/15 text-red-800 dark:text-red-200',
+    A: 'bg-green-500/20 text-green-700 dark:text-green-300',
+    B: 'bg-green-700/15 text-green-900 dark:text-green-400',
+    C: 'bg-yellow-400/25 text-yellow-800 dark:text-yellow-200',
+    D: 'bg-amber-600/15 text-amber-900 dark:text-amber-300',
+    E: 'bg-red-500/20 text-red-800 dark:text-red-300',
+    F: 'bg-red-800/15 text-red-900 dark:text-red-400',
 };
 
 export function GradeLetter({

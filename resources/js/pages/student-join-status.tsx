@@ -1,6 +1,7 @@
 import { Head, Link } from '@inertiajs/react';
 
 import { AuthCard, AuthFormHeader } from '@/components/auth-card';
+import { CopyableValue } from '@/components/copyable-value';
 import { FlashToasts } from '@/components/flash-toasts';
 import { Button } from '@/components/ui/button';
 import { logout } from '@/routes';
@@ -42,15 +43,17 @@ export default function StudentJoinStatusPage({
                                 description={request.set}
                             />
                             {needsEmail ? (
-                                <p className="text-sm leading-6 text-muted-foreground">
-                                    Check{' '}
-                                    <strong className="font-semibold break-all text-foreground">
-                                        {request.email}
-                                    </strong>{' '}
-                                    for a verification link. Your course adviser
-                                    can review your request after you confirm
-                                    this address.
-                                </p>
+                                <div className="grid gap-2 text-sm text-muted-foreground">
+                                    <p>
+                                        Check this address for a verification
+                                        link:
+                                    </p>
+                                    <CopyableValue value={request.email} />
+                                    <p>
+                                        Your course adviser can review your
+                                        request after you confirm it.
+                                    </p>
+                                </div>
                             ) : rejected ? (
                                 <div className="border-l-2 border-destructive bg-destructive/5 px-4 py-3 text-sm">
                                     <p className="font-medium text-destructive">

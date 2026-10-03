@@ -33,7 +33,6 @@ class DueFactory extends Factory
             'description' => 'Set levy.',
             'amount_kobo' => 1500000,
             'currency' => 'NGN',
-            'due_on' => now()->addMonth()->toDateString(),
             'status' => Due::StatusPublished,
             'published_at' => now(),
         ];

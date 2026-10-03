@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\AcademicSession;
 use App\Models\AcademicSessionSemester;
 use App\Models\AcademicYear;
-use App\Models\AdvisorProfile;
 use App\Models\Course;
 use App\Models\CourseOffering;
 use App\Models\CourseRegistration;
@@ -178,6 +177,17 @@ class CourseDashboardData
                 'prerequisiteCourseIds' => $offering->prerequisiteCourses
                     ->pluck('id')->map(fn ($id): int => (int) $id)->all(),
             ] : null,
+            'catalogCourses' => $offering instanceof CourseOffering ? [] : $set->courses()
+                ->whereDoesntHave('offerings', fn ($query) => $query->where('academic_session_semester_id', $semester->id))
+                ->orderBy('code')->get()
+                ->map(fn (Course $course): array => [
+                    'id' => (int) $course->id,
+                    'code' => $course->code,
+                    'title' => $course->title,
+                    'units' => (int) $course->credit_units,
+                    'isElective' => (bool) $course->is_elective,
+                ])->all(),
+            'catalogUrl' => route('student-sets.catalog.show', $set->routeParameters()),
             'prerequisiteOptions' => $previous->map(fn (CourseOffering $item): array => [
                 'id' => (int) $item->course_id,
                 'code' => $item->course->code,
@@ -189,18 +199,96 @@ class CourseDashboardData
         ];
     }
 
+    public function catalog(StudentSet $set, ?Course $editing = null): array
+    {
+        return [
+            'set' => $this->presenter->studentSet($set),
+            'courses' => $set->courses()->withCount('offerings')->orderBy('code')->get()
+                ->map(fn (Course $course): array => [
+                    'code' => $course->code,
+                    'urlCode' => $course->urlCode(),
+                    'title' => $course->title,
+                    'units' => (int) $course->credit_units,
+                    'isElective' => (bool) $course->is_elective,
+                    'scheduledCount' => (int) $course->offerings_count,
+                ])->all(),
+            'editingCode' => $editing?->urlCode(),
+        ];
+    }
+
+    public function assignment(StudentSet $set, StudentProfile $student, AcademicSessionSemester $period): array
+    {
+        $period->loadMissing(['academicSession.academicYear', 'semester']);
+        $student->loadMissing('user');
+        $registration = $student->courseRegistrations()->with('items.courseOffering')
+            ->where('academic_session_semester_id', $period->id)->first();
+        $plan = $this->registrationPlanner->plan($student, $period);
+
+        return [
+            'set' => $this->presenter->studentSet($set),
+            'student' => [
+                'name' => $student->official_name,
+                'avatar' => $student->user?->profilePhotoUrl(),
+                'registrationNumber' => $student->registration_number,
+                'profileUrl' => route('dashboard.students.show', ['registrationNumber' => $student->routeRegistrationNumber()]),
+            ],
+            'period' => [
+                'level' => $period->academicSession->academicYear->name,
+                'session' => $period->academicSession->label(),
+                'semester' => $period->semester->name,
+                'sessionYears' => $period->academicSession->routeYears(),
+                'slug' => $period->semester->slug,
+            ],
+            'maximumUnits' => (int) $period->maximum_course_units,
+            'status' => $registration?->status ?? 'unassigned',
+            'selectedCourses' => $registration?->items->map(fn (CourseRegistrationItem $item): array => $this->registrationItem($item))->all() ?? [],
+            'courseGroups' => $plan['courseGroups'],
+        ];
+    }
+
+    public function studentAssignments(StudentProfile $student): array
+    {
+        $set = $student->studentSet;
+        $sessions = $set->academicSessions()->with(['academicYear', 'semesterInstances.semester'])
+            ->orderBy('start_year')->get();
+        $semesterIds = $sessions->flatMap(fn (AcademicSession $session) => $session->semesterInstances->pluck('id'));
+        $registrations = $student->courseRegistrations()
+            ->whereIn('academic_session_semester_id', $semesterIds)
+            ->withCount('items')->withSum('items', 'credit_units')
+            ->get()->keyBy('academic_session_semester_id');
+
+        return $sessions->flatMap(fn (AcademicSession $session) => $session->semesterInstances
+            ->sortBy('semester.sort_order')->map(function (AcademicSessionSemester $semester) use ($set, $student, $session, $registrations): array {
+                $registration = $registrations->get($semester->id);
+
+                return [
+                    'level' => $session->academicYear->name,
+                    'session' => $session->label(),
+                    'semester' => $semester->semester->name,
+                    'status' => $registration?->status ?? 'unassigned',
+                    'courseCount' => (int) ($registration?->items_count ?? 0),
+                    'units' => (int) ($registration?->items_sum_credit_units ?? 0),
+                    'maximumUnits' => (int) $semester->maximum_course_units,
+                    'url' => route('student-sets.assignments.show', [
+                        ...$set->routeParameters(),
+                        'sessionYears' => $session->routeYears(),
+                        'semester' => $semester->semester->slug,
+                        'registrationNumber' => $student->routeRegistrationNumber(),
+                        'from' => 'profile',
+                    ]),
+                ];
+            }))->values()->all();
+    }
+
     public function studentHome(StudentProfile $student): array
     {
         $semester = $this->academicContext->currentSemesterForStudent($student);
         $registration = $semester === null ? null : CourseRegistration::query()
-            ->with('items')
+            ->with('items.courseOffering')
             ->where('student_profile_id', $student->id)
             ->where('academic_session_semester_id', $semester->id)
             ->first();
-        $courses = $registration !== null && in_array($registration->status, [
-            CourseRegistration::StatusSubmitted,
-            CourseRegistration::StatusApproved,
-        ], true) ? $registration->items : collect();
+        $courses = $registration?->status === CourseRegistration::StatusAssigned ? $registration->items : collect();
         $student->loadMissing(['user', 'studentSet', 'advisorProfile.user']);
 
         return [
@@ -217,19 +305,18 @@ class CourseDashboardData
                 'session' => $semester->academicSession->label(),
             ],
             'courseAdvisor' => $student->advisorProfile->user->displayName(),
-            'registrationOpen' => (bool) $semester?->registration_enabled,
-            'hasAvailableCourses' => $semester !== null && $this->hasAvailableCourses($student, $semester),
-            'registrationStatus' => $registration === null ? null : $this->statusLabel($registration->status),
             'totalCourseUnits' => (int) $courses->sum('credit_units'),
             'courses' => $courses->map(fn (CourseRegistrationItem $item): array => [
                 'code' => $item->course_code,
                 'title' => $item->course_title,
                 'units' => (int) $item->credit_units,
+                'assignmentOrigin' => $item->assignment_origin,
+                'isElective' => (bool) $item->is_elective,
             ])->all(),
         ];
     }
 
-    public function studentRegistration(StudentProfile $student, ?string $requestedSession, ?string $requestedSemester): array
+    public function studentCourses(StudentProfile $student, ?string $requestedSession, ?string $requestedSemester): array
     {
         abort_unless(($requestedSession === null) === ($requestedSemester === null), 404);
         $sessions = $student->studentSet->academicSessions()
@@ -255,38 +342,27 @@ class CourseDashboardData
                     'id' => (int) $item->id,
                     'publicId' => $item->semester->slug,
                     'name' => $item->semester->name,
+                    'slug' => $item->semester->slug,
                 ])->values()->all(),
         ])->all();
 
         if (! $selectedSemester instanceof AcademicSessionSemester) {
             return [
-                'registrationOpen' => false,
-                'hasAvailableCourses' => false,
                 'currentSemester' => null,
                 'selectedSemesterId' => null,
                 'sessions' => $navigation,
-                'maximumCourseUnits' => 0,
-                'reviewStatus' => 'Not submitted',
-                'feedbackNote' => null,
                 'selectedCourses' => [],
-                'courseGroups' => [],
             ];
         }
 
         $semester = $selectedSemester;
-        $registrationOpen = (bool) $semester->registration_enabled;
-        $plan = $registrationOpen ? $this->registrationPlanner->plan($student, $semester) : null;
         $registration = CourseRegistration::query()
-            ->with('items')
+            ->with('items.courseOffering')
             ->where('student_profile_id', $student->id)
             ->where('academic_session_semester_id', $semester->id)
             ->first();
 
         return [
-            'registrationOpen' => $registrationOpen,
-            'hasAvailableCourses' => $plan !== null
-                ? $plan['availableCourses'] !== []
-                : $this->hasAvailableCourses($student, $semester),
             'currentSemester' => [
                 'name' => $semester->semester->name,
                 'level' => $semester->academicSession->academicYear->name,
@@ -296,81 +372,8 @@ class CourseDashboardData
             ],
             'selectedSemesterId' => (int) $semester->id,
             'sessions' => $navigation,
-            'maximumCourseUnits' => (int) $semester->maximum_course_units,
-            'reviewStatus' => $registration === null ? 'Not submitted' : $this->statusLabel($registration->status),
-            'feedbackNote' => $registration?->feedback_note,
-            'selectedCourses' => $registration?->items
-                ->map(fn (CourseRegistrationItem $item): array => $this->registrationItem($item))->all() ?? [],
-            'courseGroups' => $plan['courseGroups'] ?? [],
-        ];
-    }
-
-    private function hasAvailableCourses(StudentProfile $student, AcademicSessionSemester $semester): bool
-    {
-        return CourseOffering::query()
-            ->whereBelongsTo($semester, 'academicSessionSemester')
-            ->whereHas('course', fn ($query) => $query->where('student_set_id', $student->student_set_id))
-            ->exists();
-    }
-
-    public function adviserRegistrations(
-        AdvisorProfile $advisor,
-        ?CourseRegistration $review = null,
-        ?StudentSet $selectedSet = null,
-        ?string $selectedSessionPublicId = null,
-        ?string $selectedSemesterPublicId = null,
-        string $status = 'submitted',
-    ): array {
-        $status = in_array($status, ['submitted', 'approved', 'returned', 'all'], true) ? $status : 'submitted';
-        $sets = $advisor->studentSets()->orderByDesc('entry_start_year')->get();
-        $selectedSet ??= $sets->first();
-        $sessions = $selectedSet instanceof StudentSet
-            ? $selectedSet->academicSessions()
-                ->with([
-                    'academicYear',
-                    'semesterInstances.semester',
-                    'semesterInstances.courseOfferings',
-                ])
-                ->orderBy('start_year')
-                ->get()
-            : collect();
-        $selectedSession = $sessions->firstWhere('public_id', $selectedSessionPublicId)
-            ?? $sessions->firstWhere('academic_year_id', $selectedSet?->current_academic_year_id)
-            ?? $sessions->last();
-        $selectedSemester = $selectedSession?->semesterInstances
-            ->firstWhere('public_id', $selectedSemesterPublicId)
-            ?? $selectedSession?->semesterInstances->sortBy('semester.sort_order')->first();
-        $registrations = CourseRegistration::query()
-            ->with([
-                'items',
-                'studentProfile.user',
-                'studentProfile.studentSet',
-                'academicSessionSemester.academicSession.academicYear',
-                'academicSessionSemester.semester',
-            ])
-            ->whereHas('studentProfile', fn ($query) => $query
-                ->where('advisor_profile_id', $advisor->id)
-                ->when($selectedSet instanceof StudentSet, fn ($query) => $query
-                    ->where('student_set_id', $selectedSet->id)))
-            ->when(
-                $selectedSemester instanceof AcademicSessionSemester,
-                fn ($query) => $query->where('academic_session_semester_id', $selectedSemester->id),
-                fn ($query) => $query->whereRaw('1 = 0'),
-            )
-            ->where('status', '!=', CourseRegistration::StatusDraft)
-            ->when($status !== 'all', fn ($query) => $query->where('status', $status))
-            ->latest('submitted_at')
-            ->get();
-
-        return [
-            'selectedSet' => $selectedSet instanceof StudentSet ? $this->presenter->studentSet($selectedSet) : null,
-            'sessions' => $sessions->map(fn (AcademicSession $session): array => $this->sessionSummary($session))->all(),
-            'selectedSessionId' => $selectedSession?->id,
-            'selectedSemesterId' => $selectedSemester?->id,
-            'status' => $status,
-            'registrations' => $registrations
-                ->map(fn (CourseRegistration $item): array => $this->registrationSummary($item, true))->all(),
-            'review' => $review instanceof CourseRegistration ? $this->registrationReview($review) : null,
+            'selectedCourses' => ($registration?->status === CourseRegistration::StatusAssigned ? $registration->items : collect())
+                ->map(fn (CourseRegistrationItem $item): array => $this->registrationItem($item))->all(),
         ];
     }
 
@@ -386,7 +389,6 @@ class CourseDashboardData
                     'name' => $semester->semester->name,
                     'slug' => $semester->semester->slug,
                     'maximumCourseUnits' => (int) $semester->maximum_course_units,
-                    'registrationEnabled' => (bool) $semester->registration_enabled,
                     'resultsPublishedAt' => $semester->courseOfferings->first(fn (CourseOffering $offering): bool => $offering->results_published_at !== null)?->results_published_at?->toIso8601String(),
                     'courseCount' => $semester->courseOfferings->count(),
                 ])->values()->all(),
@@ -414,6 +416,14 @@ class CourseDashboardData
         $offerings = $semester->courseOfferings
             ->sortBy('course.code')
             ->values();
+        $set = $semester->academicSession->studentSet;
+        $registrations = CourseRegistration::query()
+            ->where('academic_session_semester_id', $semester->id)
+            ->where('status', CourseRegistration::StatusAssigned)
+            ->whereHas('studentProfile', fn ($query) => $query->where('student_set_id', $set->id))
+            ->with('items')->get()->keyBy('student_profile_id');
+        $offeringItems = $registrations->flatMap(fn (CourseRegistration $registration) => $registration->items)
+            ->groupBy('course_offering_id');
 
         return [
             'id' => (int) $semester->id,
@@ -422,7 +432,6 @@ class CourseDashboardData
             'slug' => $semester->semester->slug,
             'session' => $this->sessionPayload($semester->academicSession),
             'maximumCourseUnits' => (int) $semester->maximum_course_units,
-            'registrationEnabled' => (bool) $semester->registration_enabled,
             'resultsPublishedAt' => $offerings->first(fn (CourseOffering $offering): bool => $offering->results_published_at !== null)?->results_published_at?->toIso8601String(),
             'totalUnits' => (int) $offerings->sum('credit_units'),
             'offerings' => $offerings->map(fn (CourseOffering $offering): array => [
@@ -434,63 +443,42 @@ class CourseDashboardData
                 'title' => $offering->course_title,
                 'units' => (int) $offering->credit_units,
                 'category' => $offering->is_elective ? 'elective' : 'normal',
+                'retakeOnly' => (bool) $offering->is_retake_only,
+                'assignedCount' => $offeringItems->get($offering->id, collect())->count(),
+                'enteredCount' => $offeringItems->get($offering->id, collect())
+                    ->filter(fn (CourseRegistrationItem $item): bool => $item->grade !== null || $item->missing_script)->count(),
+                'publishedAt' => $offering->results_published_at?->toIso8601String(),
+                'gradeUrl' => route('student-sets.results.course', [
+                    ...$set->routeParameters(),
+                    'sessionYears' => $semester->academicSession->routeYears(),
+                    'semester' => $semester->semester->slug,
+                    'courseCode' => $offering->course->urlCode(),
+                ]),
                 'prerequisites' => $offering->prerequisiteCourses->map(fn (Course $course): array => [
                     'id' => (int) $course->id,
                     'code' => $course->code,
                     'title' => $course->title,
                 ])->all(),
             ])->all(),
-        ];
-    }
+            'students' => $set->students()->with('user')->orderBy('official_name')->get()
+                ->map(function (StudentProfile $student) use ($registrations, $set, $semester): array {
+                    $registration = $registrations->get($student->id);
 
-    private function registrationSummary(CourseRegistration $registration, bool $includeStudent): array
-    {
-        $registration->loadMissing([
-            'items',
-            'studentProfile.user',
-            'academicSessionSemester.academicSession.academicYear',
-            'academicSessionSemester.semester',
-        ]);
-        $semester = $registration->academicSessionSemester;
-        $payload = [
-            'id' => (int) $registration->id,
-            'status' => $this->statusLabel($registration->status),
-            'semester' => [
-                'level' => $semester->academicSession->academicYear->name,
-                'name' => $semester->semester->name,
-                'session' => $semester->academicSession->label(),
-            ],
-            'totalUnits' => (int) $registration->items->sum('credit_units'),
-            'courses' => $registration->items
-                ->map(fn (CourseRegistrationItem $item): array => $this->registrationItem($item))->all(),
-            'reviewUrl' => route('dashboard.course-registration.show', $registration->reviewRouteParameters()),
-        ];
-
-        if ($includeStudent) {
-            $payload['student'] = [
-                'name' => $registration->studentProfile->user->name,
-                'avatar' => $registration->studentProfile->user->profilePhotoUrl(),
-                'registrationNumber' => $registration->studentProfile->registration_number,
-                'profileUrl' => route('dashboard.students.show', [
-                    'registrationNumber' => $registration->studentProfile->routeRegistrationNumber(),
-                ]),
-            ];
-            $payload['submittedAt'] = $registration->submitted_at?->toFormattedDateString();
-        }
-
-        return $payload;
-    }
-
-    private function registrationReview(CourseRegistration $registration): array
-    {
-        $registration->loadMissing(['studentProfile.studentSet', 'items']);
-
-        return [
-            ...$this->registrationSummary($registration, true),
-            'routeParameters' => $registration->reviewRouteParameters(),
-            'set' => $this->presenter->studentSet($registration->studentProfile->studentSet),
-            'feedbackNote' => $registration->feedback_note,
-            'canReview' => $registration->status === CourseRegistration::StatusSubmitted,
+                    return [
+                        'name' => $student->official_name,
+                        'avatar' => $student->user?->profilePhotoUrl(),
+                        'registrationNumber' => $student->registration_number,
+                        'courseCount' => $registration?->items->count() ?? 0,
+                        'units' => (int) ($registration?->items->sum('credit_units') ?? 0),
+                        'assignmentUrl' => route('student-sets.assignments.show', [
+                            ...$set->routeParameters(),
+                            'sessionYears' => $semester->academicSession->routeYears(),
+                            'semester' => $semester->semester->slug,
+                            'registrationNumber' => $student->routeRegistrationNumber(),
+                        ]),
+                        'profileUrl' => route('dashboard.students.show', ['registrationNumber' => $student->routeRegistrationNumber()]),
+                    ];
+                })->all(),
         ];
     }
 
@@ -498,24 +486,17 @@ class CourseDashboardData
     {
         return [
             'courseOfferingId' => (int) $item->course_offering_id,
+            'courseId' => (int) $item->courseOffering->course_id,
+            'assignmentOrigin' => $item->assignment_origin,
             'code' => $item->course_code,
             'title' => $item->course_title,
             'units' => (int) $item->credit_units,
             'category' => $item->is_elective ? 'Elective Course' : 'Normal Course',
-            'categoryValue' => $item->is_elective ? 'elective' : 'normal',
+            'categoryValue' => $item->assignment_origin !== 'scheduled'
+                ? $item->assignment_origin : ($item->is_elective ? 'elective' : 'normal'),
             'isElective' => (bool) $item->is_elective,
             'prerequisites' => [],
             'missingPrerequisites' => [],
         ];
-    }
-
-    private function statusLabel(string $status): string
-    {
-        return match ($status) {
-            CourseRegistration::StatusSubmitted => 'In review',
-            CourseRegistration::StatusApproved => 'Approved',
-            CourseRegistration::StatusReturned => 'Changes requested',
-            default => 'Draft',
-        };
     }
 }

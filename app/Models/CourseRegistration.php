@@ -9,16 +9,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['student_profile_id', 'academic_session_semester_id', 'status', 'feedback_note', 'submitted_at', 'reviewed_at'])]
+#[Fillable(['student_profile_id', 'academic_session_semester_id', 'status', 'assigned_by_user_id', 'assigned_at'])]
 class CourseRegistration extends Model
 {
     public const string StatusDraft = 'draft';
 
-    public const string StatusSubmitted = 'submitted';
-
-    public const string StatusApproved = 'approved';
-
-    public const string StatusReturned = 'returned';
+    public const string StatusAssigned = 'assigned';
 
     /** @use HasFactory<CourseRegistrationFactory> */
     use HasFactory;
@@ -51,32 +47,13 @@ class CourseRegistration extends Model
         return $this->hasMany(CourseRegistrationItem::class);
     }
 
-    public function isEditableByStudent(): bool
-    {
-        return in_array($this->status, [self::StatusDraft, self::StatusReturned], true);
-    }
-
-    /** @return array{registrationNumber: string, sessionYears: string, semester: string} */
-    public function reviewRouteParameters(): array
-    {
-        $this->loadMissing(['studentProfile', 'academicSessionSemester.academicSession', 'academicSessionSemester.semester']);
-        $session = $this->academicSessionSemester->academicSession;
-
-        return [
-            'registrationNumber' => $this->studentProfile->routeRegistrationNumber(),
-            'sessionYears' => $session->start_year.$session->end_year,
-            'semester' => $this->academicSessionSemester->semester->slug,
-        ];
-    }
-
     /**
      * @return array<string, string>
      */
     protected function casts(): array
     {
         return [
-            'submitted_at' => 'datetime',
-            'reviewed_at' => 'datetime',
+            'assigned_at' => 'datetime',
         ];
     }
 }

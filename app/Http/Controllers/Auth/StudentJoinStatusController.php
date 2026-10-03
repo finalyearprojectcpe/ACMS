@@ -24,16 +24,16 @@ class StudentJoinStatusController extends Controller
             return to_route('dashboard');
         }
 
-        $join = $user->studentJoinRequest()->with('studentSet')->firstOrFail();
+        $join = $user->studentJoinRequest()->with('studentProfile.studentSet')->firstOrFail();
 
         return Inertia::render('student-join-status', [
             'request' => [
-                'set' => $join->studentSet->label(),
+                'set' => $join->studentProfile->studentSet->label(),
                 'status' => $join->status,
                 'emailVerified' => $user->email_verified_at !== null,
                 'email' => $user->email,
                 'reason' => $join->review_note,
-                'canResubmit' => $join->studentSet->student_signup_enabled
+                'canResubmit' => $join->studentProfile->studentSet->student_signup_enabled
                     && ($join->status === StudentJoinRequest::StatusRejected
                         || ($join->status === StudentJoinRequest::StatusPending && $user->email_verified_at === null)),
             ],
@@ -42,19 +42,16 @@ class StudentJoinStatusController extends Controller
 
     public function edit(Request $request): InertiaResponse
     {
-        $join = $request->user()->studentJoinRequest()->with('studentSet')->firstOrFail();
-        abort_unless($join->studentSet->student_signup_enabled
+        $join = $request->user()->studentJoinRequest()->with('studentProfile.studentSet')->firstOrFail();
+        abort_unless($join->studentProfile->studentSet->student_signup_enabled
             && ($join->status === StudentJoinRequest::StatusRejected
                 || ($join->status === StudentJoinRequest::StatusPending && $request->user()->email_verified_at === null)), 404);
 
-        $name = explode(' ', $request->user()->name, 2);
-
         return Inertia::render('student-join-edit', [
             'request' => [
-                'set' => $join->studentSet->label(),
-                'surname' => $name[0],
-                'otherNames' => $name[1] ?? '',
-                'registrationNumber' => $join->registration_number,
+                'set' => $join->studentProfile->studentSet->label(),
+                'officialName' => $join->studentProfile->official_name,
+                'registrationNumber' => $join->studentProfile->registration_number,
                 'email' => $request->user()->email,
                 'status' => $join->status,
                 'reason' => $join->review_note,
@@ -66,11 +63,7 @@ class StudentJoinStatusController extends Controller
     {
         $join = $request->user()->studentJoinRequest()->firstOrFail();
         $data = $request->validated();
-        $this->joins->resubmit($join, [
-            'name' => $data['surname'].' '.$data['other_names'],
-            'email' => $data['email'],
-            'registration_number' => $data['registration_number'],
-        ]);
+        $this->joins->resubmit($join, $data);
 
         return to_route('student-joins.status')->with('success', $request->user()->refresh()->email_verified_at === null
             ? 'Check your email to verify your updated request.'
@@ -87,12 +80,19 @@ class StudentJoinStatusController extends Controller
         return to_route('student-joins.status')->with('success', 'A new verification email is on its way.');
     }
 
-    public function verify(Request $request, User $user, string $hash): RedirectResponse
+    public function verify(Request $request, User $user, string $hash): InertiaResponse|RedirectResponse
     {
-        abort_unless($request->user()->is($user) && hash_equals(sha1($user->email), $hash), 403);
+        abort_unless($user->studentJoinRequest()->exists() && hash_equals(sha1($user->email), $hash), 403);
 
         $this->joins->verify($user);
 
-        return to_route('student-joins.status')->with('success', 'Email verified. Your course adviser can now review your request.');
+        if ($request->user()?->is($user)) {
+            return to_route('student-joins.status')->with('success', 'Email verified. Your course adviser can now review your request.');
+        }
+
+        return Inertia::render('student-email-verification', [
+            'status' => 'verified',
+            'signedInAsAnotherAccount' => $request->user() !== null,
+        ]);
     }
 }

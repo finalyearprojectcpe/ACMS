@@ -1,9 +1,7 @@
-import { RiDownloadLine } from '@remixicon/react';
-
 import { ActionLink } from '@/components/action-link';
 import { CopyableValue } from '@/components/copyable-value';
+import { DownloadButton } from '@/components/download-button';
 import { GradeLetter } from '@/components/grade-letter';
-import { Button } from '@/components/ui/button';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import {
     Table,
@@ -28,45 +26,30 @@ export function StudentResultStatementDashboard({
                 <ActionLink
                     href={showStudent(statement.student.registrationRouteValue)}
                 >
-                    Student profile
+                    Go to Student Profile
                 </ActionLink>
                 {statement.periods.length > 0 ? (
-                    <Button asChild>
-                        <a
-                            href={
-                                download(
-                                    statement.student.registrationRouteValue,
-                                ).url
-                            }
-                            download
-                        >
-                            <RiDownloadLine /> Download Word document
-                        </a>
-                    </Button>
+                    <DownloadButton
+                        variant="default"
+                        size="default"
+                        href={
+                            download(statement.student.registrationRouteValue)
+                                .url
+                        }
+                    >
+                        Download as DOCX
+                    </DownloadButton>
                 ) : null}
             </div>
             <header className="border-b border-border pb-6">
                 <div className="flex flex-wrap items-baseline justify-between gap-3">
                     <div>
                         <h1 className="text-xl font-semibold sm:text-2xl">
-                            Student Results to Date
+                            Statement of Results for {statement.student.name}
                         </h1>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                            Editable result statement · Not an official
-                            transcript
-                        </p>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                        As of {statement.asOf}
-                    </p>
                 </div>
                 <div className="mt-6 grid gap-x-8 gap-y-4 text-sm sm:grid-cols-2">
-                    <div>
-                        <p className="text-xs text-muted-foreground">Student</p>
-                        <p className="mt-1 font-semibold">
-                            {statement.student.name}
-                        </p>
-                    </div>
                     <div>
                         <p className="text-xs text-muted-foreground">
                             Registration number
@@ -78,7 +61,7 @@ export function StudentResultStatementDashboard({
                     </div>
                     <div>
                         <p className="text-xs text-muted-foreground">
-                            Department and set
+                            Student set
                         </p>
                         <p className="mt-1">{statement.student.set}</p>
                     </div>
@@ -87,6 +70,10 @@ export function StudentResultStatementDashboard({
                             Course adviser
                         </p>
                         <p className="mt-1">{statement.student.adviser}</p>
+                    </div>
+                    <div>
+                        <p className="text-xs text-muted-foreground">As of</p>
+                        <p className="mt-1">{statement.asOf}</p>
                     </div>
                 </div>
             </header>
@@ -149,10 +136,10 @@ export function StudentResultStatementDashboard({
                                     ))}
                                     <TableRow className="bg-muted/30 font-medium">
                                         <TableCell colSpan={2}>
-                                            Published units
+                                            Total Units
                                         </TableCell>
                                         <TableCell className="text-right tabular-nums">
-                                            {period.publishedUnits}
+                                            {period.totalUnits}
                                         </TableCell>
                                         <TableCell />
                                     </TableRow>
@@ -176,7 +163,7 @@ export function StudentResultStatementDashboard({
             )}
             {statement.periods.length > 0 ? (
                 <div className="border-t border-border pt-5 text-right text-sm font-semibold tabular-nums">
-                    Current official CGPA:{' '}
+                    Cumulative GPA:{' '}
                     {statement.cgpa?.toFixed(2) ?? 'Not available'}
                 </div>
             ) : null}

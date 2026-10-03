@@ -30,7 +30,6 @@ class StoreAdviserDueRequest extends FormRequest
             'title' => ['required', 'string', 'max:120'],
             'description' => ['nullable', 'string', 'max:160'],
             'amount_naira' => ['required', 'integer', 'min:100', 'max:1000000'],
-            'due_on' => ['nullable', 'date'],
             'action' => ['required', Rule::in(['draft', 'publish'])],
         ];
     }

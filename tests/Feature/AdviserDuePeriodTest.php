@@ -6,6 +6,8 @@ use App\Models\AcademicYear;
 use App\Models\AdvisorProfile;
 use App\Models\Due;
 use App\Models\Semester;
+use App\Models\StudentDueAssignment;
+use App\Models\StudentProfile;
 use App\Models\StudentSet;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -117,6 +119,66 @@ test('whole-session dues have their own view and do not appear in semester views
         'sessionYears' => $otherSetSession->routeYears(),
         'semester' => $otherSetSemester->semester->slug,
     ]))->assertNotFound();
+});
+
+test('due summaries count and total each payment state without mixing drafts', function () {
+    $advisor = AdvisorProfile::factory()->create();
+    $set = StudentSet::factory()->create(['advisor_profile_id' => $advisor->id]);
+    $session = AcademicSession::factory()->create(['student_set_id' => $set->id]);
+    $published = Due::query()->create([
+        'advisor_profile_id' => $advisor->id,
+        'student_set_id' => $set->id,
+        'academic_session_id' => $session->id,
+        'title' => 'Class Dues',
+        'amount_kobo' => 10000,
+        'status' => Due::StatusPublished,
+    ]);
+    $draft = Due::query()->create([
+        'advisor_profile_id' => $advisor->id,
+        'student_set_id' => $set->id,
+        'academic_session_id' => $session->id,
+        'title' => 'Draft Dues',
+        'amount_kobo' => 10000,
+        'status' => Due::StatusDraft,
+    ]);
+    $draft->forceFill(['created_at' => now()->subDay()])->save();
+
+    foreach ([
+        [StudentDueAssignment::StatusPending, 10000],
+        [StudentDueAssignment::StatusPaid, 20000],
+        [StudentDueAssignment::StatusWaived, 30000],
+    ] as [$status, $amount]) {
+        $student = StudentProfile::factory()->create([
+            'advisor_profile_id' => $advisor->id,
+            'student_set_id' => $set->id,
+        ]);
+        StudentDueAssignment::query()->create([
+            'due_id' => $published->id,
+            'student_profile_id' => $student->id,
+            'amount_kobo' => $amount,
+            'status' => $status,
+        ]);
+    }
+
+    $student = StudentProfile::factory()->create([
+        'advisor_profile_id' => $advisor->id,
+        'student_set_id' => $set->id,
+    ]);
+    StudentDueAssignment::query()->create([
+        'due_id' => $draft->id,
+        'student_profile_id' => $student->id,
+        'amount_kobo' => 40000,
+        'status' => StudentDueAssignment::StatusPending,
+    ]);
+
+    $this->actingAs($advisor->user)->get(route('student-sets.dues.show', $set->routeParameters()))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('dashboard.adviserDues.collectedAmount', '₦200.00')
+            ->where('dashboard.adviserDues.outstandingAmount', '₦100.00')
+            ->where('dashboard.adviserDues.dues.0.paidCount', 1)
+            ->where('dashboard.adviserDues.dues.0.pendingCount', 1)
+            ->where('dashboard.adviserDues.dues.0.waivedCount', 1));
 });
 
 test('a due cannot point to another set session or an unrelated semester', function () {

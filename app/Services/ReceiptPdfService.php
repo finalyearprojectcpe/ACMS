@@ -7,6 +7,7 @@ use Endroid\QrCode\Builder\Builder;
 use Endroid\QrCode\Encoding\Encoding;
 use Endroid\QrCode\ErrorCorrectionLevel;
 use Endroid\QrCode\Writer\PngWriter;
+use Illuminate\Support\Facades\Storage;
 use LaravelDaily\Invoices\Classes\InvoiceItem;
 use LaravelDaily\Invoices\Classes\Party;
 use LaravelDaily\Invoices\Invoice;
@@ -21,7 +22,7 @@ class ReceiptPdfService
     public function generate(DuePayment $payment): string
     {
         $payment->loadMissing([
-            'assignment.due',
+            'assignment.due.studentSet',
             'advisorProfile.user',
             'studentProfile.user',
         ]);
@@ -29,6 +30,11 @@ class ReceiptPdfService
         $due = $payment->assignment->due;
         $student = $payment->studentProfile;
         $verificationUrl = $this->receiptUrls->verificationUrl($payment);
+        $logo = null;
+        if ($payment->receipt_logo_path && Storage::disk('local')->exists($payment->receipt_logo_path)) {
+            $mime = str_ends_with(strtolower($payment->receipt_logo_path), '.png') ? 'image/png' : 'image/jpeg';
+            $logo = 'data:'.$mime.';base64,'.base64_encode(Storage::disk('local')->get($payment->receipt_logo_path));
+        }
         $qrCode = (new Builder(
             writer: new PngWriter,
             data: $verificationUrl,
@@ -65,7 +71,7 @@ class ReceiptPdfService
             ->setCustomData([
                 'payment' => $payment,
                 'amount' => $this->currency->nairaFromKobo((int) $payment->amount_kobo),
-                'logo' => 'data:image/png;base64,'.base64_encode((string) file_get_contents(public_path('logo.png'))),
+                'logo' => $logo,
                 'qrCode' => $qrCode,
                 'verificationUrl' => $verificationUrl,
             ]);

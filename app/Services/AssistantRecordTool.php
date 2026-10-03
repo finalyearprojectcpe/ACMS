@@ -21,27 +21,27 @@ class AssistantRecordTool implements Tool
 
     public function description(): Stringable|string
     {
-        return 'Search this course adviser\'s student sets, students, course registrations, course offerings, dues, and completed payments. Use this before answering questions about records.';
+        return 'Look up individual adviser records and their source links: sets, students, join requests, course plans, grades, dues, and payments. For roster-wide counts, rankings, comparisons, or grouped questions, use the reporting tool instead.';
     }
 
     /** @return array<string, Type> */
     public function schema(JsonSchema $schema): array
     {
         return [
-            'category' => $schema->string()->enum(['sets', 'students', 'registrations', 'courses', 'dues', 'payments'])->required(),
-            'term' => $schema->string()->required(),
-            'status' => $schema->string()->enum(['any', 'submitted', 'approved', 'returned'])->required(),
+            'category' => $schema->string()->enum(['sets', 'students', 'join_requests', 'registrations', 'catalog', 'courses', 'results', 'performance', 'dues', 'due_assignments', 'payments'])->required(),
+            'term' => $schema->string(),
+            'status' => $schema->string()->enum(['any', 'draft', 'assigned', 'pending', 'approved', 'rejected', 'paid', 'unpaid', 'waived', 'published', 'unpublished', 'initialized', 'success', 'failed', 'abandoned', 'reversed']),
+            'set' => $schema->string(),
+            'session' => $schema->string(),
+            'semester' => $schema->string()->enum(['first', 'second']),
+            'grade' => $schema->string()->enum(['A', 'B', 'C', 'D', 'E', 'F', 'missing']),
+            'page' => $schema->integer()->min(1),
         ];
     }
 
     public function handle(Request $request): Stringable|string
     {
-        $result = $this->records->search(
-            $this->advisor,
-            (string) ($request['category'] ?? ''),
-            (string) ($request['term'] ?? ''),
-            (string) ($request['status'] ?? 'any'),
-        );
+        $result = $this->records->search($this->advisor, $request->all());
 
         foreach ($result['records'] as $record) {
             $this->sources[$record['url']] = ['title' => $record['title'], 'url' => $record['url']];
@@ -53,6 +53,6 @@ class AssistantRecordTool implements Tool
     /** @return list<array{title: string, url: string}> */
     public function sources(): array
     {
-        return array_slice(array_values($this->sources), 0, 6);
+        return array_values($this->sources);
     }
 }

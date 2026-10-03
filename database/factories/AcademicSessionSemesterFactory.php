@@ -24,7 +24,6 @@ class AcademicSessionSemesterFactory extends Factory
             'semester_id' => fn (): int => Semester::query()->orderBy('sort_order')->value('id')
                 ?? Semester::factory()->create()->id,
             'maximum_course_units' => 24,
-            'registration_enabled' => false,
         ];
     }
 }

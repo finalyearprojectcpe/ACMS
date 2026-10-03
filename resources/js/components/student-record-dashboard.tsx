@@ -4,6 +4,8 @@ import { ActionLink } from '@/components/action-link';
 import { CopyableValue } from '@/components/copyable-value';
 import { StudentPortrait } from '@/components/student-portrait';
 import { StudentResultsView } from '@/components/student-results-view';
+import { TableEmptyRow } from '@/components/table-empty-row';
+import { Badge } from '@/components/ui/badge';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import {
     Table,
@@ -71,22 +73,111 @@ export function StudentRecordDashboard({
                         </span>
                     </div>
                 </div>
-                {record.pendingRegistrations.length > 0 ? (
-                    <div className="mt-5 border-t pt-4 text-sm">
-                        <p className="font-medium">Registrations to review</p>
-                        <div className="mt-2 flex flex-wrap gap-x-6 gap-y-2">
-                            {record.pendingRegistrations.map((registration) => (
-                                <ActionLink
-                                    key={registration.url}
-                                    href={registration.url}
-                                >
-                                    {registration.label}
-                                </ActionLink>
-                            ))}
-                        </div>
-                    </div>
-                ) : null}
             </header>
+            <section className="min-w-0">
+                <h2 className="mb-3 text-base font-semibold">
+                    Course Assignments
+                </h2>
+                <div className="mx-auto w-full max-w-4xl min-w-0">
+                    <ScrollArea
+                        className={`w-full border-y ${record.courseAssignments.length > 6 ? 'h-[25rem]' : ''}`}
+                    >
+                        <div className="min-w-[640px]">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Semester</TableHead>
+                                        <TableHead className="text-right">
+                                            Courses
+                                        </TableHead>
+                                        <TableHead className="text-right">
+                                            Units
+                                        </TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead className="text-right">
+                                            Action
+                                        </TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {record.courseAssignments.length === 0 ? (
+                                        <TableEmptyRow colSpan={5}>
+                                            No academic sessions have been added
+                                            to this set.
+                                        </TableEmptyRow>
+                                    ) : (
+                                        record.courseAssignments.map(
+                                            (assignment) => (
+                                                <TableRow key={assignment.url}>
+                                                    <TableCell>
+                                                        <span className="block font-medium">
+                                                            {assignment.level} ·{' '}
+                                                            {
+                                                                assignment.semester
+                                                            }
+                                                        </span>
+                                                        <span className="block text-xs text-muted-foreground">
+                                                            {assignment.session}{' '}
+                                                            Session
+                                                        </span>
+                                                    </TableCell>
+                                                    <TableCell className="text-right tabular-nums">
+                                                        {assignment.courseCount}
+                                                    </TableCell>
+                                                    <TableCell className="text-right tabular-nums">
+                                                        {assignment.units} /{' '}
+                                                        {
+                                                            assignment.maximumUnits
+                                                        }
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge
+                                                            variant="outline"
+                                                            className={
+                                                                assignment.status ===
+                                                                'assigned'
+                                                                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                                                                    : assignment.status ===
+                                                                        'draft'
+                                                                      ? 'border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300'
+                                                                      : 'text-muted-foreground'
+                                                            }
+                                                        >
+                                                            {assignment.status ===
+                                                            'assigned'
+                                                                ? 'Assigned'
+                                                                : assignment.status ===
+                                                                    'draft'
+                                                                  ? 'Draft'
+                                                                  : 'Not assigned'}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <ActionLink
+                                                            href={
+                                                                assignment.url
+                                                            }
+                                                        >
+                                                            {assignment.status ===
+                                                            'assigned'
+                                                                ? 'Edit Courses'
+                                                                : assignment.status ===
+                                                                    'draft'
+                                                                  ? 'Continue Draft'
+                                                                  : 'Assign Courses'}
+                                                        </ActionLink>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ),
+                                        )
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                        <ScrollBar orientation="horizontal" />
+                    </ScrollArea>
+                </div>
+            </section>
             <section className="min-w-0">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                     <h2 className="text-base font-semibold">Results</h2>
@@ -295,7 +386,12 @@ function DueTable({
                                 {rows.map((row, index) => (
                                     <TableRow key={`${row.name}-${index}`}>
                                         <TableCell className="font-medium">
-                                            {row.name}
+                                            <Link
+                                                href={row.url}
+                                                className="text-link hover:underline"
+                                            >
+                                                {row.name}
+                                            </Link>
                                             {kind === 'waived' &&
                                             row.waiverReason ? (
                                                 <span className="block text-xs text-muted-foreground">
@@ -354,7 +450,7 @@ export function StudentRecordResultsDashboard({
         <div className="flex min-h-0 w-full flex-1 flex-col">
             <div className="mb-5">
                 <ActionLink href={record.studentProfileUrl}>
-                    Student Profile
+                    Go to Student Profile
                 </ActionLink>
             </div>
             <div className="mb-5 flex min-w-0 items-center gap-4 border-b pb-5 sm:gap-6">

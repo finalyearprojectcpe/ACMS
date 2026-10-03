@@ -35,9 +35,8 @@ class CourseRegistrationFactory extends Factory
                 ])->id,
             ])->id,
             'status' => CourseRegistration::StatusDraft,
-            'feedback_note' => null,
-            'submitted_at' => null,
-            'reviewed_at' => null,
+            'assigned_by_user_id' => null,
+            'assigned_at' => null,
         ];
     }
 }

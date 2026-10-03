@@ -30,6 +30,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'reversed_at',
     'reversal_reason',
     'receipt_number',
+    'receipt_logo_path',
     'receipt_status',
     'receipt_disk',
     'receipt_path',

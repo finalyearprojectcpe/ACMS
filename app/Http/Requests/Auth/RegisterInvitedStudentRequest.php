@@ -24,9 +24,6 @@ class RegisterInvitedStudentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'surname' => ['required', 'string', 'max:80'],
-            'other_names' => ['required', 'string', 'max:160'],
-            'registration_number' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique(User::class, 'email')],
             'password' => ['required', 'confirmed', Password::defaults()],
         ];
@@ -35,9 +32,6 @@ class RegisterInvitedStudentRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         $this->merge([
-            'surname' => Str::squish((string) $this->input('surname')),
-            'other_names' => Str::squish((string) $this->input('other_names')),
-            'registration_number' => trim((string) $this->input('registration_number')),
             'email' => Str::lower(trim((string) $this->input('email'))),
         ]);
     }

@@ -28,6 +28,8 @@ class CourseFactory extends Factory
             'student_set_id' => StudentSet::factory(),
             'code' => $code,
             'title' => $title,
+            'credit_units' => 3,
+            'is_elective' => false,
         ];
     }
 }

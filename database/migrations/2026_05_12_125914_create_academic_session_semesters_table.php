@@ -18,11 +18,9 @@ return new class extends Migration
             $table->foreignId('academic_session_id')->constrained()->cascadeOnDelete();
             $table->foreignId('semester_id')->constrained()->restrictOnDelete();
             $table->unsignedTinyInteger('maximum_course_units');
-            $table->boolean('registration_enabled')->default(false);
             $table->timestamps();
 
             $table->unique(['academic_session_id', 'semester_id']);
-            $table->index(['academic_session_id', 'registration_enabled']);
         });
     }
 

@@ -79,7 +79,7 @@ export function AdviserGradeRoster({
             <header className="shrink-0 border-b px-4 py-5 sm:px-6">
                 <div className="mx-auto w-full max-w-3xl">
                     <ActionLink href={roster.semesterResultsUrl}>
-                        Semester Results
+                        Go to Semester Results
                     </ActionLink>
                     <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
                         <div>
@@ -101,6 +101,9 @@ export function AdviserGradeRoster({
                     <Table>
                         <TableHeader>
                             <TableRow>
+                                <TableHead className="w-12 text-center">
+                                    S/N
+                                </TableHead>
                                 <TableHead>Student</TableHead>
                                 <TableHead>Registration number</TableHead>
                                 <TableHead className="text-right">
@@ -111,7 +114,7 @@ export function AdviserGradeRoster({
                         <TableBody>
                             <TableRow>
                                 <TableCell
-                                    colSpan={3}
+                                    colSpan={4}
                                     className="py-8 text-center text-muted-foreground"
                                 >
                                     No approved students for this course.
@@ -127,8 +130,8 @@ export function AdviserGradeRoster({
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead className="w-12 pl-4 sm:pl-6">
-                                            #
+                                        <TableHead className="w-12 text-center">
+                                            S/N
                                         </TableHead>
                                         <TableHead>Student</TableHead>
                                         <TableHead>
@@ -142,14 +145,26 @@ export function AdviserGradeRoster({
                                 <TableBody>
                                     {roster.students.map((student, index) => (
                                         <TableRow key={student.itemId}>
-                                            <TableCell className="pl-4 text-muted-foreground tabular-nums sm:pl-6">
+                                            <TableCell className="text-center text-muted-foreground tabular-nums">
                                                 {index + 1}
                                             </TableCell>
                                             <TableCell>
                                                 <PersonCell
                                                     name={student.name}
                                                     avatar={student.avatar}
-                                                    href={student.profileUrl}
+                                                    secondary={
+                                                        student.assignmentOrigin ===
+                                                        'carryover'
+                                                            ? 'Carryover'
+                                                            : student.assignmentOrigin ===
+                                                                'deferred'
+                                                              ? 'Deferred course'
+                                                              : undefined
+                                                    }
+                                                    href={
+                                                        student.profileUrl ??
+                                                        undefined
+                                                    }
                                                 />
                                             </TableCell>
                                             <TableCell>

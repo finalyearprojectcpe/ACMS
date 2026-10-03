@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Course;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Str;
@@ -24,7 +25,7 @@ class AdviserCourseOfferingRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'code' => ['required', 'string', 'max:20', 'regex:/^[A-Z]{2,10} [0-9]{2,4}[A-Z]?$/'],
+            'code' => ['required', 'string', 'max:32', 'regex:/^(?:[A-Z]{2,10}-)?[A-Z]{2,10} [0-9]{2,4}[A-Z]?$/'],
             'title' => ['required', 'string', 'max:255'],
             'credit_units' => ['required', 'integer', 'min:1', 'max:10'],
             'is_elective' => ['required', 'boolean'],
@@ -35,9 +36,8 @@ class AdviserCourseOfferingRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        $code = Str::of((string) $this->input('code'))->squish()->upper()->toString();
         $this->merge([
-            'code' => preg_replace('/^([A-Z]{2,10})[- ]?([0-9]{2,4}[A-Z]?)$/', '$1 $2', $code),
+            'code' => Course::normalizeCode((string) $this->input('code')),
             'title' => Str::of((string) $this->input('title'))->squish()->toString(),
             'is_elective' => filter_var($this->input('is_elective'), FILTER_VALIDATE_BOOL),
         ]);

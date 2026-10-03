@@ -144,8 +144,12 @@ class DuePaymentService
         $verificationError = null;
         $shouldQueueReceipt = false;
         $verifiedPayment = DB::transaction(function () use ($payment, $data, &$verificationError, &$shouldQueueReceipt): DuePayment {
+            $assignment = StudentDueAssignment::query()
+                ->whereKey($payment->student_due_assignment_id)
+                ->lockForUpdate()
+                ->firstOrFail();
             $payment = DuePayment::query()
-                ->with('assignment')
+                ->with('assignment.due.studentSet')
                 ->whereKey($payment->id)
                 ->lockForUpdate()
                 ->firstOrFail();
@@ -220,19 +224,38 @@ class DuePaymentService
 
             if ($normalizedStatus === DuePayment::StatusSuccess) {
                 $receiptNumber = $payment->receipt_number
-                    ?? sprintf('GM-%s-%06d', now()->format('Ymd'), $payment->id);
+                    ?? $payment->paystack_transaction_id
+                    ?? 'R-'.Str::upper(Str::random(16));
 
                 $payment->forceFill([
                     'receipt_number' => $receiptNumber,
+                    'receipt_logo_path' => $payment->assignment->due->studentSet?->logo_path,
                     'paid_at' => $payment->paid_at ?? now(),
                 ])->save();
 
-                $payment->assignment->forceFill([
-                    'status' => StudentDueAssignment::StatusPaid,
-                    'amount_kobo' => $payment->amount_kobo,
-                    'paid_at' => $payment->paid_at,
-                    'latest_due_payment_id' => $payment->id,
-                ])->save();
+                if ($assignment->status === StudentDueAssignment::StatusPending) {
+                    $settlement = $assignment->payments()
+                        ->whereKeyNot($payment->id)
+                        ->where('status', DuePayment::StatusSuccess)
+                        ->orderByDesc('paid_at')
+                        ->first() ?? $payment;
+
+                    $assignment->forceFill([
+                        'status' => StudentDueAssignment::StatusPaid,
+                        'amount_kobo' => $settlement->amount_kobo,
+                        'paid_at' => $settlement->paid_at,
+                        'latest_due_payment_id' => $settlement->id,
+                    ])->save();
+                }
+                $assignment->payments()
+                    ->whereKeyNot($payment->id)
+                    ->where('status', DuePayment::StatusInitialized)
+                    ->update([
+                        'status' => DuePayment::StatusAbandoned,
+                        'active_marker' => null,
+                        'gateway_response' => 'Another checkout settled this due.',
+                        'updated_at' => now(),
+                    ]);
                 $shouldQueueReceipt = true;
             }
 
@@ -256,8 +279,11 @@ class DuePaymentService
     public function reversePayment(DuePayment $payment, array $data, string $reason): DuePayment
     {
         $reversedPayment = DB::transaction(function () use ($payment, $data, $reason): DuePayment {
+            $assignment = StudentDueAssignment::query()
+                ->whereKey($payment->student_due_assignment_id)
+                ->lockForUpdate()
+                ->firstOrFail();
             $payment = DuePayment::query()
-                ->with('assignment')
                 ->whereKey($payment->id)
                 ->lockForUpdate()
                 ->firstOrFail();
@@ -277,14 +303,14 @@ class DuePaymentService
                 'provider_payload' => $this->providerPayload($payment, $data),
             ])->save();
 
-            if ((int) $payment->assignment->latest_due_payment_id === (int) $payment->id) {
-                $replacementPayment = $payment->assignment->payments()
+            if ((int) $assignment->latest_due_payment_id === (int) $payment->id) {
+                $replacementPayment = $assignment->payments()
                     ->where('id', '!=', $payment->id)
                     ->where('status', DuePayment::StatusSuccess)
                     ->latest('paid_at')
                     ->first();
 
-                $payment->assignment->forceFill([
+                $assignment->forceFill([
                     'status' => $replacementPayment instanceof DuePayment
                         ? StudentDueAssignment::StatusPaid
                         : StudentDueAssignment::StatusPending,
@@ -355,6 +381,6 @@ class DuePaymentService
 
     private function newReference(): string
     {
-        return 'GM-'.Str::upper(Str::random(24));
+        return 'PAY-'.Str::upper(Str::random(24));
     }
 }

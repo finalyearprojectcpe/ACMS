@@ -15,8 +15,8 @@ return new class extends Migration
             $table->id();
             $table->ulid('public_id')->unique();
             $table->foreignId('user_id')->unique()->constrained()->cascadeOnDelete();
-            $table->foreignId('student_set_id')->constrained()->cascadeOnDelete();
-            $table->string('registration_number');
+            $table->foreignId('student_profile_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('active_claim_profile_id')->nullable()->unique()->constrained('student_profiles')->nullOnDelete();
             $table->string('status')->default('pending');
             $table->unsignedInteger('submission_number')->default(1);
             $table->foreignId('reviewed_by_user_id')->nullable()->constrained('users')->nullOnDelete();
@@ -24,7 +24,7 @@ return new class extends Migration
             $table->text('review_note')->nullable();
             $table->timestamps();
 
-            $table->index(['student_set_id', 'status', 'created_at']);
+            $table->index(['student_profile_id', 'status', 'created_at']);
         });
     }
 

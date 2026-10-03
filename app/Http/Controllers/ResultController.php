@@ -29,7 +29,12 @@ class ResultController extends Controller
         $courseOffering = $this->access->courseOfferingByRoute($set, $period, $courseCode);
         $this->results->saveGrades($period, $courseOffering, $request->user()->id, $request->validated('grades'), $request->validated('reason'));
 
-        return back()->with('success', $courseOffering->results_published_at === null
+        return to_route('student-sets.results.course', [
+            ...$set->routeParameters(),
+            'sessionYears' => $sessionYears,
+            'semester' => $semester,
+            'courseCode' => $courseCode,
+        ])->with('success', $courseOffering->results_published_at === null
             ? 'Grades saved.'
             : 'Published grades corrected. Students can see the updated results.');
     }
@@ -46,10 +51,11 @@ class ResultController extends Controller
         $offering = $this->access->courseOfferingByRoute($set, $period, $courseCode);
         $this->results->publish($period, $offering, $request->user()->id);
 
-        return to_route('student-sets.results.semester', [
+        return to_route('student-sets.results.course', [
             ...$set->routeParameters(),
             'sessionYears' => $sessionYears,
             'semester' => $semester,
+            'courseCode' => $courseCode,
         ])->with('success', $offering->course->code.' results published. Students can now see their grades.');
     }
 

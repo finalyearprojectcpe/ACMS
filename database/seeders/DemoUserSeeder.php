@@ -20,6 +20,7 @@ use App\Models\StudentSet;
 use App\Models\User;
 use App\Services\DueAssignmentService;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
 class DemoUserSeeder extends Seeder
@@ -27,31 +28,159 @@ class DemoUserSeeder extends Seeder
     private const string PASSWORD = 'password';
 
     private const array DEMO_COURSES = [
-        ['code' => 'CPE 101', 'title' => 'Introduction to Computer Engineering', 'year' => 1, 'semester' => 'first', 'units' => 3],
-        ['code' => 'CPE 103', 'title' => 'Computer Programming I', 'year' => 1, 'semester' => 'first', 'units' => 3],
-        ['code' => 'MTH 101', 'title' => 'Engineering Mathematics I', 'year' => 1, 'semester' => 'first', 'units' => 3],
-        ['code' => 'CPE 102', 'title' => 'Computer Programming II', 'year' => 1, 'semester' => 'second', 'units' => 3],
-        ['code' => 'CPE 104', 'title' => 'Logic Circuits', 'year' => 1, 'semester' => 'second', 'units' => 3],
-        ['code' => 'GSS 102', 'title' => 'Communication in English', 'year' => 1, 'semester' => 'second', 'units' => 2, 'elective' => true],
-        ['code' => 'CPE 201', 'title' => 'Digital Systems', 'year' => 2, 'semester' => 'first', 'units' => 3],
-        ['code' => 'CPE 203', 'title' => 'Data Structures', 'year' => 2, 'semester' => 'first', 'units' => 3],
-        ['code' => 'MTH 201', 'title' => 'Engineering Mathematics II', 'year' => 2, 'semester' => 'first', 'units' => 3],
-        ['code' => 'CPE 202', 'title' => 'Computer Architecture', 'year' => 2, 'semester' => 'second', 'units' => 3],
-        ['code' => 'CPE 204', 'title' => 'Signals and Systems', 'year' => 2, 'semester' => 'second', 'units' => 3],
-        ['code' => 'GSS 202', 'title' => 'Entrepreneurship Studies', 'year' => 2, 'semester' => 'second', 'units' => 2, 'elective' => true],
-        ['code' => 'CPE 301', 'title' => 'Microprocessor Systems', 'year' => 3, 'semester' => 'first', 'units' => 3],
-        ['code' => 'CPE 303', 'title' => 'Computer Networks', 'year' => 3, 'semester' => 'first', 'units' => 3],
-        ['code' => 'CPE 305', 'title' => 'Embedded Systems', 'year' => 3, 'semester' => 'first', 'units' => 3],
-        ['code' => 'CPE 307', 'title' => 'Digital Signal Processing', 'year' => 3, 'semester' => 'first', 'units' => 2, 'elective' => true],
-        ['code' => 'CPE 302', 'title' => 'Operating Systems', 'year' => 3, 'semester' => 'second', 'units' => 3],
-        ['code' => 'CPE 304', 'title' => 'Software Engineering', 'year' => 3, 'semester' => 'second', 'units' => 3],
-        ['code' => 'CPE 306', 'title' => 'Industrial Electronics', 'year' => 3, 'semester' => 'second', 'units' => 2, 'elective' => true],
+        1 => [
+            'first' => [
+                ['GST 111', 'Communications in English', 2],
+                ['MTH 101', 'Elementary Mathematics I: Algebra and Trigonometry', 2],
+                ['MTH 103', 'Elementary Mathematics III', 2],
+                ['PHY 101', 'General Physics I: Mechanics', 2],
+                ['PHY 107', 'General Practical Physics I', 1],
+                ['GET 101', 'Engineer in Society', 1],
+                ['CPE 111', 'Introduction to Computer Engineering', 2],
+                ['CHM 101', 'General Chemistry I', 2],
+                ['CHM 107', 'General Practical Chemistry I', 1],
+                ['BIO 101', 'General Biology', 2],
+                ['BIO 107', 'General Practical Biology', 1],
+            ],
+            'second' => [
+                ['GST 112', 'Nigerian Peoples and Culture', 2],
+                ['MTH 102', 'Elementary Mathematics II: Calculus', 2],
+                ['PHY 102', 'General Physics II: Behaviour of Matter', 2],
+                ['PHY 108', 'General Practical Physics II', 1],
+                ['GET 102', 'Engineering Graphics & Solid Modeling I', 2],
+                ['CHM 102', 'General Chemistry II', 2],
+                ['CHM 108', 'General Practical Chemistry II', 1],
+                ['PHY 104', 'General Physics IV', 2],
+                ['STA 112', 'Probability I', 3],
+                ['FUTO-CPE 102', 'Introduction to Computer Engineering Softwares', 2],
+            ],
+        ],
+        2 => [
+            'first' => [
+                ['ENT 211', 'Entrepreneurship and Innovation', 2],
+                ['GET 201', 'Applied Electricity I', 3],
+                ['GET 203', 'Engineering Graphics and Solid Modeling II', 2],
+                ['GET 205', 'Fundamentals of Fluid Mechanics', 3],
+                ['GET 207', 'Applied Mechanics', 3],
+                ['GET 209', 'Engineering Mathematics I', 3],
+                ['GET 211', 'Computing and Software Engineering', 3],
+                ['FUTO-EPE 201', 'Electrical and Electronic Engineering Studio', 1],
+                ['FUTO-CPE 201', 'Introduction to Programming Languages', 1],
+            ],
+            'second' => [
+                ['GST 212', 'Philosophy, Logic and Human Existence', 2],
+                ['GET 202', 'Engineering Materials', 3],
+                ['GET 204', 'Students Workshop Practice', 2],
+                ['GET 206', 'Fundamentals of Thermodynamics', 3],
+                ['GET 208', 'Strength of Materials', 3],
+                ['GET 210', 'Engineering Mathematics II', 3],
+                ['CET 202', 'Basic Electronics', 3],
+                ['FUTO-MCE 202', 'Modeling and Simulation of Physical Systems', 1],
+                ['FUTO-CPE 204', 'Digital Logic Technique and Systems', 1],
+            ],
+        ],
+        3 => [
+            'first' => [
+                ['GET 301', 'Engineering Mathematics III', 3],
+                ['GET 305', 'Engineering Statistics and Data Analytics', 3],
+                ['GET 307', 'Introduction to Artificial Intelligence, Machine Learning and Convergent Technologies', 3],
+                ['CPE 301', 'Computer Organization and Architecture', 2],
+                ['EEE 321', 'Analogue Electronic Circuits', 2],
+                ['TEL 303', 'Electric Circuit Theory', 2],
+                ['CPE 307', 'Assembly Language Programming', 2],
+                ['TEE 301', 'Communication Principles', 1],
+                ['FUTO-CPE 301', 'Computer Engineering Studio I', 1],
+                ['FUT-GET 317', 'Engineering Economics', 2],
+            ],
+            'second' => [
+                ['GST 312', 'Peace and Conflict Resolution', 2],
+                ['ENT 312', 'Venture Creation', 2],
+                ['GET 302', 'Engineering Mathematics IV', 3],
+                ['GET 304', 'Engineering Communications, Technical Writing and Presentation', 3],
+                ['GET 306', 'Renewable Energy Systems and Technologies', 3],
+                ['CPE 302', 'Measurement and Instrumentation', 3],
+                ['EEE 322', 'Digital Electronic Circuits', 2],
+                ['FUTO-MCE 302', 'Design and Development of Physical Products Studio', 1],
+                ['FUTO-ENT 316', 'Human Skills for the 21st Century', 1],
+                ['FUTO-CPE 310', 'Introduction to Operating System and Database Development', 1],
+            ],
+        ],
+        4 => [
+            'first' => [
+                ['CPE 401', 'Microprocessor and Embedded Systems', 3],
+                ['CPE 403', 'Control Systems', 2],
+                ['CPE 405', 'Fundamentals of Software Engineering', 2],
+                ['CPE 411', 'Hardware Design Techniques & Verification', 2],
+                ['CPE 413', 'Research Methods', 2],
+                ['ELE 405', 'Engineering Systems Modeling & Simulations', 2],
+                ['ELE 407', 'Data Communications and Networking', 2],
+                ['FUTO-CPE 417', 'Emerging Technologies', 1],
+                ['FUTO-CPE 409', 'Introduction to Robotics', 1],
+                ['FUTO-CPE 415', 'Computer Engineering Studio II', 2],
+                ['FUTO-CPE 407', 'Cybersecurity Fundamentals', 1],
+                ['FUTO-EMV 421', 'Health, Safety & Environment', 1],
+            ],
+            'second' => [
+                ['GET 299', 'SIWES I: SWEP', 3],
+                ['GET 399', 'SIWES II', 4],
+                ['GET 499', 'SIWES III', 8],
+                ['GET 402', 'Engineering Project', 2],
+                ['GET 404', 'Engineering Evaluation and Costing', 2],
+            ],
+        ],
+        5 => [
+            'first' => [
+                ['GET 501', 'Engineering Project Management', 3],
+                ['CPE 501', 'Testing, Reliability and Maintainability', 2],
+                ['CPE 505', 'Digital Systems Design with VHDL', 2],
+                ['CPE 511', 'Machine Learning and Applications', 3],
+                ['FUTO-CPE 503', 'Cybersecurity & Law', 2],
+                ['FUTO-CPE 507', 'Multimedia & Operating Systems', 2],
+                ['FUTO-CPE 515', 'Computer Engineering Studio II', 1],
+                ['FUTO-CPE 513', 'Advanced Embedded System and Programming', 2],
+                ['GET 599', 'B.Eng. Project I', 3],
+            ],
+            'second' => [
+                ['GET 502', 'Engineering Law', 2],
+                ['CPE 502', 'Digital Signal Processing and Applications', 3],
+                ['CPE 514', 'Professional Practice and Ethics', 3],
+                ['FUTO-CPE 504', 'Big Data and AI', 2],
+                ['FUTO-CPE 506', 'Data Structures & Algorithms', 2],
+                ['FUTO-CPE 508', 'Cryptography Principles & Applications', 1],
+                ['FUTO-CPE 510', 'Embedded System Miniaturization and Applications', 2],
+                ['FUTO-CPE 502', 'Recruitment Strategies and Interview Methods', 2],
+                ['GET 599', 'B.Eng. Project II', 3],
+            ],
+        ],
+    ];
+
+    private const array DEMO_ELECTIVES = [
+        1 => [
+            'first' => [
+                ['FUTO-FRN 101', 'Introduction to French Language I', 1],
+                ['FUTO-IGB 101', 'Igbo Grammar, Composition and Comprehension', 1],
+                ['FUTO-GST 103', 'Humanities', 1],
+            ],
+            'second' => [
+                ['FUTO-EGL 102', 'Advanced Communication in English', 1],
+                ['FUTO-IGB 102', 'Introduction to Igbo History, Culture and Literature', 1],
+                ['FUTO-FRN 102', 'French Language II', 1],
+            ],
+        ],
+        5 => ['second' => [
+            ['FUTO-GET 502', 'Engineering Management', 2],
+        ]],
     ];
 
     public function run(): void
     {
+        DB::transaction(fn () => $this->seedDemo());
+    }
+
+    private function seedDemo(): void
+    {
         $adviser = User::query()->updateOrCreate(
-            ['email' => 'staff1@futo.edu'],
+            ['email' => 'staff1@futo.edu.ng'],
             [
                 'account_type' => AccountType::Adviser,
                 'title' => Honorific::Dr,
@@ -78,22 +207,43 @@ class DemoUserSeeder extends Seeder
         );
 
         $students = collect([
-            $this->student($set, 'student1@futo.edu', '2024000001', 'Adaeze Nwosu'),
-            $this->student($set, 'student2@futo.edu', '2024000002', 'Ikenna Obi'),
-            $this->student($set, 'student3@futo.edu', '2024000003', 'Chiamaka Eze'),
-            $this->student($set, 'student4@futo.edu', '2024000004', 'Somto Okafor'),
-            $this->student($set, 'student5@futo.edu', '2024000005', 'Nneka Umeh'),
+            $this->student($set, 'student1@futo.edu.ng', '2024000001', 'Adaeze Nwosu'),
+            $this->student($set, 'student2@futo.edu.ng', '2024000002', 'Ikenna Obi'),
+            $this->student($set, 'student3@futo.edu.ng', '2024000003', 'Chiamaka Eze'),
+            $this->student($set, 'student4@futo.edu.ng', '2024000004', 'Somto Okafor'),
+            $this->student($set, 'student5@futo.edu.ng', '2024000005', 'Nneka Umeh'),
         ]);
+        $givenNames = ['Amaka', 'Emeka', 'Chidera', 'Tobi', 'Kamsi', 'Ifeanyi', 'Zara', 'Uche', 'Chisom'];
+        $surnames = ['Adebayo', 'Okafor', 'Nwankwo', 'Eze', 'Bello', 'Obi', 'Akinola', 'Ibrahim', 'Umeh', 'Nwosu'];
+        for ($number = 7; $number <= 90; $number++) {
+            $offset = $number - 7;
+            $students->push($this->student(
+                $set,
+                "student{$number}@futo.edu.ng",
+                sprintf('2024%06d', $number),
+                $givenNames[$offset % count($givenNames)].' '.$surnames[intdiv($offset, count($givenNames)) % count($surnames)],
+            ));
+        }
+        $set->students()->updateOrCreate(
+            ['registration_number_key' => StudentProfile::registrationKey('2024000006')],
+            [
+                'advisor_profile_id' => $advisorProfile->id,
+                'official_name' => 'Kelechi Okeke',
+                'registration_number' => '2024000006',
+                'user_id' => null,
+            ],
+        );
         $sessions = collect([
             1 => $this->session($set, 1, 2024),
             2 => $this->session($set, 2, 2025),
             3 => $this->session($set, 3, 2026),
+            4 => $this->session($set, 4, 2027),
+            5 => $this->session($set, 5, 2028),
         ]);
-        $offerings = $this->seedCourses($set, $sessions->all());
+        $this->seedCourses($set, $sessions->all());
         $openSemester = $sessions->get(3)?->semesterInstances()
             ->whereHas('semester', fn ($query) => $query->where('slug', 'first'))
             ->firstOrFail();
-        $openSemester->update(['registration_enabled' => true]);
 
         foreach ([1, 2] as $year) {
             foreach (['first', 'second'] as $semesterSlug) {
@@ -102,11 +252,12 @@ class DemoUserSeeder extends Seeder
                     ->firstOrFail();
 
                 foreach ($students as $studentIndex => $student) {
-                    $registration = $this->seedRegistration($student, $period, $offerings, CourseRegistration::StatusApproved);
+                    $registration = $this->seedRegistration($student, $period, CourseRegistration::StatusAssigned, $adviser->id, $studentIndex);
                     foreach ($registration->items as $courseIndex => $item) {
                         $grades = ['A', 'B', 'C', 'B', 'A', 'D', 'C', 'F'];
                         $item->update([
-                            'grade' => $grades[($studentIndex + $courseIndex + $year + ($semesterSlug === 'second' ? 1 : 0)) % count($grades)],
+                            'grade' => $year === 2 && $semesterSlug === 'first' && $item->course_code === 'GET 201' && $studentIndex % 4 === 1
+                                ? 'F' : $grades[($studentIndex + $courseIndex + $year + ($semesterSlug === 'second' ? 1 : 0)) % count($grades)],
                             'graded_at' => now(),
                         ]);
                     }
@@ -124,10 +275,37 @@ class DemoUserSeeder extends Seeder
             }
         }
 
-        $this->seedRegistration($students->get(0), $openSemester, $offerings, CourseRegistration::StatusDraft);
-        $this->seedRegistration($students->get(1), $openSemester, $offerings, CourseRegistration::StatusSubmitted);
-        $currentRegistration = $this->seedRegistration($students->get(2), $openSemester, $offerings, CourseRegistration::StatusApproved);
-        $currentRegistration->items->first()?->update(['grade' => 'B', 'graded_at' => now()]);
+        $retakeSources = CourseOffering::query()->with('course')
+            ->whereHas('academicSessionSemester.academicSession', fn ($query) => $query->where('student_set_id', $set->id))
+            ->whereHas('course', fn ($query) => $query->whereIn('code', ['GET 201', 'GET 203']))
+            ->whereHas('academicSessionSemester.academicSession', fn ($query) => $query->where('start_year', 2025))
+            ->get()->keyBy('course.code');
+        foreach ($students as $studentIndex => $student) {
+            if ($studentIndex % 4 === 3) {
+                continue;
+            }
+            $status = $studentIndex % 4 === 0 ? CourseRegistration::StatusDraft : CourseRegistration::StatusAssigned;
+            $currentRegistration = $this->seedRegistration($student, $openSemester, $status, $adviser->id, $studentIndex);
+            $sourceCode = $studentIndex % 4 === 1 ? 'GET 201' : ($studentIndex % 5 === 0 ? 'GET 203' : null);
+            $source = $sourceCode === null ? null : $retakeSources->get($sourceCode);
+            if ($source instanceof CourseOffering) {
+                $target = $openSemester->courseOfferings()->firstOrCreate(
+                    ['course_id' => $source->course_id],
+                    ['course_title' => $source->course_title, 'credit_units' => $source->credit_units, 'is_elective' => false, 'is_retake_only' => true],
+                );
+                $currentRegistration->items()->create([
+                    'course_offering_id' => $target->id,
+                    'course_code' => $source->course->code,
+                    'course_title' => $source->course_title,
+                    'credit_units' => $source->credit_units,
+                    'is_elective' => false,
+                    'assignment_origin' => $sourceCode === 'GET 201' ? 'carryover' : 'deferred',
+                ]);
+            }
+            if ($studentIndex === 2) {
+                $currentRegistration->items->first()?->update(['grade' => 'B', 'graded_at' => now()]);
+            }
+        }
         $this->seedDues($advisorProfile, $set, $sessions->all(), $students->get(4));
     }
 
@@ -144,7 +322,7 @@ class DemoUserSeeder extends Seeder
         Semester::query()->orderBy('sort_order')->each(function (Semester $semester) use ($session): void {
             $session->semesterInstances()->updateOrCreate(
                 ['semester_id' => $semester->id],
-                ['maximum_course_units' => 24, 'registration_enabled' => false],
+                ['maximum_course_units' => 24],
             );
         });
 
@@ -172,66 +350,56 @@ class DemoUserSeeder extends Seeder
                 'advisor_profile_id' => $set->advisor_profile_id,
                 'registration_number' => $registrationNumber,
             ],
-            ['user_id' => $user->id, 'student_set_id' => $set->id, 'status' => 'active'],
+            ['user_id' => $user->id, 'student_set_id' => $set->id, 'official_name' => $name, 'status' => 'active'],
         );
     }
 
     /**
      * @param  array<int, AcademicSession>  $sessionsByYear
-     * @return array<string, CourseOffering>
+     * @return array<int, CourseOffering>
      */
     private function seedCourses(StudentSet $set, array $sessionsByYear): array
     {
-        $courses = [];
         $offerings = [];
 
-        foreach (self::DEMO_COURSES as $courseData) {
-            $session = $sessionsByYear[$courseData['year']] ?? null;
-
-            if (! $session instanceof AcademicSession) {
-                continue;
+        foreach (self::DEMO_COURSES as $year => $semesters) {
+            $session = $sessionsByYear[$year];
+            foreach ($semesters as $semesterSlug => $normalRows) {
+                $semester = $session->semesterInstances()
+                    ->whereHas('semester', fn ($query) => $query->where('slug', $semesterSlug))
+                    ->firstOrFail();
+                foreach ([...$normalRows, ...(self::DEMO_ELECTIVES[$year][$semesterSlug] ?? [])] as [$code, $title, $units]) {
+                    $code = Course::normalizeCode($code);
+                    $isElective = in_array($code, array_map(fn (array $row): string => Course::normalizeCode($row[0]), self::DEMO_ELECTIVES[$year][$semesterSlug] ?? []), true);
+                    $course = Course::query()->firstOrCreate(
+                        ['student_set_id' => $set->id, 'code' => $code],
+                        ['title' => $title, 'credit_units' => $units, 'is_elective' => $isElective],
+                    );
+                    $offerings[] = CourseOffering::query()->updateOrCreate(
+                        ['course_id' => $course->id, 'academic_session_semester_id' => $semester->id],
+                        ['course_title' => $title, 'credit_units' => $units, 'is_elective' => $isElective],
+                    );
+                }
             }
-
-            $semester = $session->semesterInstances()
-                ->whereHas('semester', fn ($query) => $query->where('slug', $courseData['semester']))
-                ->firstOrFail();
-            $course = Course::query()->updateOrCreate(
-                ['student_set_id' => $set->id, 'code' => $courseData['code']],
-                [
-                    'title' => $courseData['title'],
-                ],
-            );
-            $offering = CourseOffering::query()->updateOrCreate(
-                ['course_id' => $course->id, 'academic_session_semester_id' => $semester->id],
-                [
-                    'course_title' => $course->title,
-                    'credit_units' => $courseData['units'],
-                    'is_elective' => (bool) ($courseData['elective'] ?? false),
-                ],
-            );
-            $courses[$course->code] = $course;
-            $offerings[$course->code] = $offering;
         }
 
-        foreach ([
-            'CPE 203' => ['CPE 103'],
-            'CPE 301' => ['CPE 201'],
-            'CPE 302' => ['CPE 202'],
-        ] as $courseCode => $prerequisiteCodes) {
-            $offerings[$courseCode]?->prerequisiteCourses()->sync(
-                collect($prerequisiteCodes)->map(fn (string $code): int => $courses[$code]->id)->all(),
-            );
+        foreach (['MTH 102' => 'MTH 101', 'GET 210' => 'GET 209', 'GET 302' => 'GET 301', 'FUTO-FRN 102' => 'FUTO-FRN 101'] as $code => $prerequisite) {
+            $target = collect($offerings)->first(fn (CourseOffering $offering): bool => $offering->course->code === $code);
+            $source = $set->courses()->where('code', $prerequisite)->first();
+            if ($target instanceof CourseOffering && $source instanceof Course) {
+                $target->prerequisiteCourses()->syncWithoutDetaching([$source->id]);
+            }
         }
 
         return $offerings;
     }
 
-    /** @param array<string, CourseOffering> $offerings */
     private function seedRegistration(
         StudentProfile $student,
         AcademicSessionSemester $semester,
-        array $offerings,
         string $status,
+        int $adviserId,
+        int $studentIndex,
     ): CourseRegistration {
         $registration = CourseRegistration::query()->updateOrCreate(
             [
@@ -240,18 +408,20 @@ class DemoUserSeeder extends Seeder
             ],
             [
                 'status' => $status,
-                'submitted_at' => $status === CourseRegistration::StatusSubmitted ? now() : null,
-                'reviewed_at' => $status === CourseRegistration::StatusApproved ? now() : null,
-                'feedback_note' => null,
+                'assigned_by_user_id' => $status === CourseRegistration::StatusAssigned ? $adviserId : null,
+                'assigned_at' => $status === CourseRegistration::StatusAssigned ? now() : null,
             ],
         );
         $registration->items()->delete();
 
-        foreach ($offerings as $offering) {
-            if ((int) $offering->academic_session_semester_id !== (int) $semester->id) {
+        foreach ($semester->courseOfferings()->with('course')->where('is_retake_only', false)->get() as $offering) {
+            if ($offering->is_elective && ($studentIndex + (int) $semester->semester_id) % 3 !== (int) $offering->id % 3) {
                 continue;
             }
-
+            if ($semester->academicSession->start_year === 2025 && $semester->semester->slug === 'first'
+                && $offering->course->code === 'GET 203' && $studentIndex % 5 === 0) {
+                continue;
+            }
             $registration->items()->create([
                 'course_offering_id' => $offering->id,
                 'is_elective' => $offering->is_elective,

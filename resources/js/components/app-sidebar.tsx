@@ -20,6 +20,7 @@ import {
     section as dashboardSection,
     showStudentSetDues,
     showCourseSchedule,
+    showSetResults,
 } from '@/actions/App/Http/Controllers/DashboardController';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -86,7 +87,7 @@ export function AppSidebar({
                                 />
                                 <div className="flex min-w-0 flex-col gap-0.5 leading-none">
                                     <span className="truncate font-medium">
-                                        GradeManager
+                                        ACMS
                                     </span>
                                     <span className="truncate text-muted-foreground">
                                         {sidebarRoleLabel}
@@ -124,7 +125,7 @@ export function AppSidebar({
                     <SidebarMenuItem>
                         <SidebarMenuButton
                             size="lg"
-                            tooltip={`${user.display_name} (${user.email})`}
+                            tooltip={user.display_name}
                             asChild
                         >
                             <Link
@@ -141,12 +142,9 @@ export function AppSidebar({
                                         {initialsFor(user.display_name)}
                                     </AvatarFallback>
                                 </Avatar>
-                                <div className="flex min-w-0 flex-col gap-0.5 leading-none">
+                                <div className="flex min-w-0 flex-col leading-none">
                                     <span className="truncate font-medium">
                                         {user.display_name}
-                                    </span>
-                                    <span className="truncate text-muted-foreground">
-                                        {user.email}
                                     </span>
                                 </div>
                             </Link>
@@ -179,10 +177,16 @@ function adviserNavigation(): NavItem[] {
     return [
         nav('Home', 'home', dashboardHome(), RiHome5Line),
         nav(
-            'Courses & Results',
+            'Courses',
             'courses',
             dashboardSection({ section: 'courses' }),
             RiCalendarTodoLine,
+        ),
+        nav(
+            'Set Results',
+            'set-results',
+            dashboardSection({ section: 'set-results' }),
+            RiFileChartLine,
         ),
         nav(
             'Student Dues',
@@ -209,9 +213,9 @@ function studentNavigation(): NavItem[] {
     return [
         nav('Home', 'home', dashboardHome(), RiHome5Line),
         nav(
-            'Course Registration',
-            'course-registration',
-            dashboardSection({ section: 'course-registration' }),
+            'My Courses',
+            'courses',
+            dashboardSection({ section: 'courses' }),
             RiCalendarTodoLine,
         ),
         nav(
@@ -258,6 +262,9 @@ function AdviserNavigation({
 }) {
     const [home, ...remaining] = navigation;
     const coursesItem = remaining.find((item) => item.section === 'courses');
+    const resultsItem = remaining.find(
+        (item) => item.section === 'set-results',
+    );
     const duesItem = remaining.find((item) => item.section === 'student-dues');
     const settingsItem = remaining.find((item) => item.section === 'settings');
     const assistantItem = remaining.find(
@@ -318,7 +325,7 @@ function AdviserNavigation({
                         <div className="flex h-8 items-center gap-2 px-2 text-sm font-medium text-sidebar-foreground group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
                             <RiCalendarTodoLine className="size-4 shrink-0" />
                             <span className="truncate group-data-[collapsible=icon]:hidden">
-                                Courses &amp; Results
+                                Courses
                             </span>
                         </div>
                         <AdviserSetSubmenu
@@ -326,6 +333,29 @@ function AdviserNavigation({
                             section="courses"
                             hrefForSet={(studentSet) =>
                                 showCourseSchedule(
+                                    studentSetRouteParameters(studentSet),
+                                ).url
+                            }
+                        />
+                    </SidebarMenuItem>
+                )
+            ) : null}
+            {resultsItem ? (
+                dashboard.advisedSets.length === 0 ? (
+                    <NavigationItem item={resultsItem} dashboard={dashboard} />
+                ) : (
+                    <SidebarMenuItem>
+                        <div className="flex h-8 items-center gap-2 px-2 text-sm font-medium text-sidebar-foreground group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+                            <RiFileChartLine className="size-4 shrink-0" />
+                            <span className="truncate group-data-[collapsible=icon]:hidden">
+                                Set Results
+                            </span>
+                        </div>
+                        <AdviserSetSubmenu
+                            dashboard={dashboard}
+                            section="set-results"
+                            hrefForSet={(studentSet) =>
+                                showSetResults(
                                     studentSetRouteParameters(studentSet),
                                 ).url
                             }
@@ -372,7 +402,7 @@ function AdviserSetSubmenu({
     hrefForSet,
 }: {
     dashboard: DashboardContext;
-    section: 'courses' | 'student-dues';
+    section: 'courses' | 'set-results' | 'student-dues';
     hrefForSet: (studentSet: DashboardStudentSetContext) => string;
 }) {
     return (
@@ -382,13 +412,7 @@ function AdviserSetSubmenu({
                     <SidebarMenuSubButton
                         asChild
                         isActive={
-                            (section === 'courses'
-                                ? [
-                                      'courses',
-                                      'course-registration',
-                                      'results',
-                                  ].includes(dashboard.section)
-                                : dashboard.section === section) &&
+                            dashboard.section === section &&
                             dashboard.activeStudentSetId === studentSet.id
                         }
                     >

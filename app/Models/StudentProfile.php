@@ -9,12 +9,28 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Str;
 
-#[Fillable(['user_id', 'advisor_profile_id', 'student_set_id', 'registration_number', 'status'])]
+#[Fillable(['user_id', 'advisor_profile_id', 'student_set_id', 'official_name', 'registration_number', 'registration_number_key', 'status'])]
 class StudentProfile extends Model
 {
     /** @use HasFactory<StudentProfileFactory> */
     use HasFactory;
+
+    public static function registrationKey(string $number): string
+    {
+        return Str::lower(Str::squish($number));
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (StudentProfile $student): void {
+            $student->registration_number = Str::squish($student->registration_number);
+            $student->registration_number_key = self::registrationKey($student->registration_number);
+            $student->official_name = Str::squish($student->official_name);
+        });
+    }
 
     public static function registrationNumberForRoute(string $registrationNumber): string
     {
@@ -77,6 +93,18 @@ class StudentProfile extends Model
     public function courseRegistrations(): HasMany
     {
         return $this->hasMany(CourseRegistration::class);
+    }
+
+    /** @return HasMany<StudentJoinRequest, $this> */
+    public function joinRequests(): HasMany
+    {
+        return $this->hasMany(StudentJoinRequest::class);
+    }
+
+    /** @return HasOne<StudentJoinRequest, $this> */
+    public function latestJoinRequest(): HasOne
+    {
+        return $this->hasOne(StudentJoinRequest::class)->latestOfMany();
     }
 
     public function assistantConversations(): HasMany

@@ -187,6 +187,26 @@
     }
 }
 
+.assistant-markdown table {
+    width: 100%;
+    margin-block: 1rem;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+    text-align: left;
+}
+
+.assistant-markdown th,
+.assistant-markdown td {
+    padding: 0.4rem 0.6rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+}
+
+.assistant-markdown th {
+    color: var(--muted-foreground);
+    font-weight: 600;
+}
+
 .toaster[data-sonner-toaster]
     [data-sonner-toast][data-styled='true']
     [data-description] {

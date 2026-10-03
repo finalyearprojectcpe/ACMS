@@ -66,7 +66,7 @@ The public URL is generated from the configured disk:
 $user->profilePhotoUrl()
 ```
 
-Payment receipt PDFs are stored on `DUE_RECEIPT_DISK`. They are private: authorized users download them through GradeManager routes instead of receiving public R2 object URLs.
+Payment receipt PDFs are stored on `DUE_RECEIPT_DISK`. They are private: authorized users download them through ACMS routes instead of receiving public R2 object URLs.
 
 Receipts use paths in the form `receipts/{adviser-profile-id}/{year}/{receipt-number}.pdf`. A permanent signed verification URL is encoded in each QR code, while email fallback downloads use expiring signed links.
 

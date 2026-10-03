@@ -138,9 +138,7 @@ class AdviserAccountController extends Controller
         $user = $student->user;
         $validated = $request->validated();
 
-        $changes = [
-            'name' => Str::squish($validated['surname'].' '.$validated['other_names']),
-        ];
+        $changes = [];
 
         if ($request->filled('password')) {
             $changes['password'] = $validated['password'];

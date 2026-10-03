@@ -9,252 +9,243 @@ use App\Models\StudentJoinRequest;
 use App\Models\StudentProfile;
 use App\Models\StudentSet;
 use App\Models\User;
-use App\Services\StudentJoinService;
+use App\Services\AdviserJoinRequestData;
+use App\Services\DashboardPresenter;
 use Illuminate\Support\Facades\Hash;
 use Inertia\Testing\AssertableInertia as Assert;
 
 test('course advisers create an empty workspace', function () {
-    $response = $this->post(route('signup.advisor.store'), [
+    $this->post(route('signup.advisor.store'), [
         'title' => Honorific::Dr->value,
         'name' => 'Okoro Chinedu',
         'email' => 'adviser@futo.edu',
-        'password' => 'new-password',
-        'password_confirmation' => 'new-password',
-    ]);
-
-    $response->assertRedirect(route('dashboard'));
+        'password' => 'abc123',
+        'password_confirmation' => 'abc123',
+    ])->assertRedirect(route('dashboard'));
 
     $user = User::query()->where('email', 'adviser@futo.edu')->firstOrFail();
-
     $this->assertAuthenticatedAs($user);
     expect($user->account_type)->toBe(AccountType::Adviser)
-        ->and($user->title)->toBe(Honorific::Dr)
         ->and($user->displayName())->toBe('Dr Okoro Chinedu')
         ->and(AcademicSession::query()->count())->toBe(0)
         ->and($user->advisorProfile->studentSets()->count())->toBe(0);
 });
 
-test('a student requests access through the set link and an adviser approves it', function () {
-    $set = StudentSet::factory()->create();
+test('passwords need six characters with letters and numbers', function () {
+    foreach (['abc12', 'abcdef', '123456'] as $password) {
+        $this->post(route('signup.advisor.store'), [
+            'title' => Honorific::Dr->value,
+            'name' => 'Okoro Chinedu',
+            'email' => 'adviser@futo.edu',
+            'password' => $password,
+            'password_confirmation' => $password,
+        ])->assertSessionHasErrors('password');
+    }
+});
 
-    $this->get(route('student-invitations.show', ['studentSet' => $set->invite_token]))
-        ->assertOk()
+test('the adviser owns the class list and registration numbers are unique within it', function () {
+    $set = StudentSet::factory()->create();
+    $params = $set->routeParameters();
+
+    $this->actingAs($set->advisorProfile->user)->post(route('student-sets.students.store', $params), [
+        'official_name' => 'Adaeze Nwosu',
+        'registration_number' => 'CPE/24/007',
+    ])->assertRedirect(route('student-sets.show', $params));
+
+    $student = $set->students()->firstOrFail();
+    expect($student->official_name)->toBe('Adaeze Nwosu')
+        ->and($student->user_id)->toBeNull()
+        ->and($student->registration_number_key)->toBe('cpe/24/007');
+
+    $this->post(route('student-sets.students.store', $params), [
+        'official_name' => 'Another Student',
+        'registration_number' => 'cpe/24/007',
+    ])->assertSessionHasErrors('registration_number');
+
+    $other = AdvisorProfile::factory()->create();
+    $this->actingAs($other->user)->patch(route('student-sets.students.update', [
+        ...$params,
+        'registrationNumber' => $student->routeRegistrationNumber(),
+    ]), [
+        'official_name' => 'Changed',
+        'registration_number' => 'CPE/24/007',
+    ])->assertNotFound();
+});
+
+test('an invite requires an exact unclaimed class list match before account creation', function () {
+    $set = StudentSet::factory()->create();
+    $student = StudentProfile::factory()->unclaimed()->create([
+        'advisor_profile_id' => $set->advisor_profile_id,
+        'student_set_id' => $set->id,
+        'official_name' => 'Adaeze Nwosu',
+        'registration_number' => 'CPE/24/007',
+    ]);
+    $invite = ['studentSet' => $set->invite_token];
+
+    $this->post(route('student-invitations.lookup', $invite), [
+        'registration_number' => 'missing',
+    ])->assertSessionHasErrors('registration_number');
+
+    $this->post(route('student-invitations.lookup', $invite), [
+        'registration_number' => 'CPE/24/007',
+    ])->assertRedirect(route('student-invitations.show', $invite));
+
+    $this->get(route('student-invitations.show', $invite))
         ->assertInertia(fn (Assert $page) => $page
             ->component('student-invitation')
-            ->where('invitation.available', true)
-            ->where('invitation.studentSet', $set->label())
-            ->where('invitation.courseAdviser', $set->advisorProfile->user->displayName()));
+            ->where('invitation.student.name', 'Adaeze Nwosu'));
 
-    $response = $this->post(
-        route('student-invitations.store', ['studentSet' => $set->invite_token]),
-        [
-            'surname' => 'Nwosu',
-            'other_names' => 'Adaeze Chioma',
-            'registration_number' => 'CPE/24~007',
-            'email' => 'adaeze@futo.edu',
-            'password' => 'new-password',
-            'password_confirmation' => 'new-password',
-        ],
-    );
-
-    $response->assertRedirect(route('student-joins.status'));
+    $this->post(route('student-invitations.store', $invite), [
+        'email' => 'adaeze@futo.edu',
+        'password' => 'join12',
+        'password_confirmation' => 'join12',
+    ])->assertRedirect(route('student-joins.status'));
 
     $user = User::query()->where('email', 'adaeze@futo.edu')->firstOrFail();
     $join = $user->studentJoinRequest;
-
-    $this->assertAuthenticatedAs($user);
-    expect($user->name)->toBe('Nwosu Adaeze Chioma')
-        ->and(Hash::check('new-password', $user->password))->toBeTrue()
+    expect($user->name)->toBe('Adaeze Nwosu')
+        ->and(Hash::check('join12', $user->password))->toBeTrue()
         ->and($user->studentProfile)->toBeNull()
+        ->and($join->student_profile_id)->toBe($student->id)
         ->and($join->status)->toBe(StudentJoinRequest::StatusPending);
 
-    $this->get(route('dashboard'))->assertRedirect(route('student-joins.status'));
-    $this->actingAs($set->advisorProfile->user)
-        ->get(route('dashboard'))
-        ->assertInertia(fn (Assert $page) => $page
-            ->where('dashboard.adviserHome.requestCount', 1)
-            ->where('dashboard.adviserHome.recentRequests.0.emailVerified', false));
-    $this->patch(route('student-joins.adviser.approve', ['studentJoinRequest' => $join]))
-        ->assertSessionHasErrors('request');
-
-    $this->actingAs($user);
-    $verification = EmailDelivery::query()->where('purpose_key', 'like', 'join-verification-%')->firstOrFail();
-    $this->get($verification->metadata['url'])->assertRedirect(route('student-joins.status'));
-
-    $this->actingAs($set->advisorProfile->user)
-        ->patch(route('student-joins.adviser.approve', ['studentJoinRequest' => $join]))
-        ->assertRedirect(route('dashboard.students.show', ['registrationNumber' => 'CPE~24~~007']));
-
-    $student = $user->fresh()->studentProfile;
-    expect($student)->toBeInstanceOf(StudentProfile::class)
-        ->and($student->advisor_profile_id)->toBe($set->advisor_profile_id)
-        ->and($student->student_set_id)->toBe($set->id)
-        ->and($student->registration_number)->toBe('CPE/24~007');
-
-    $this->get(route('dashboard.students.show', ['registrationNumber' => $student->routeRegistrationNumber()]))
-        ->assertOk();
-    $this->get(route('dashboard.students.statement.preview', ['registrationNumber' => $student->routeRegistrationNumber()]))
-        ->assertOk();
-
-    $this->actingAs($user->fresh())->get(route('dashboard'))->assertOk();
+    auth()->logout();
+    $this->post(route('student-invitations.lookup', $invite), [
+        'registration_number' => 'CPE/24/007',
+    ])->assertSessionHasErrors('registration_number');
 });
 
-test('closed signup links do not create student accounts', function () {
-    $set = StudentSet::factory()->create(['student_signup_enabled' => false]);
-
-    $this->get(route('student-invitations.show', ['studentSet' => $set->invite_token]))
-        ->assertInertia(fn (Assert $page) => $page
-            ->where('invitation.available', false));
-
-    $this->post(
-        route('student-invitations.store', ['studentSet' => $set->invite_token]),
-        [
-            'surname' => 'Obi',
-            'other_names' => 'Ikenna',
-            'registration_number' => '2024005678',
-            'email' => 'ikenna@futo.edu',
-            'password' => 'new-password',
-            'password_confirmation' => 'new-password',
-        ],
-    )->assertSessionHasErrors('invitation');
-
-    expect(User::query()->where('email', 'ikenna@futo.edu')->exists())->toBeFalse();
-    $this->assertGuest();
-});
-
-test('a claimed registration number is checked by the adviser at approval, not at signup', function () {
+test('pending students may correct email but not the matched registration number', function () {
     $set = StudentSet::factory()->create();
-    $existingUser = User::factory()->student()->create();
-    StudentProfile::factory()->create([
-        'user_id' => $existingUser->id,
+    $student = StudentProfile::factory()->unclaimed()->create([
         'advisor_profile_id' => $set->advisor_profile_id,
         'student_set_id' => $set->id,
-        'registration_number' => '2024001234',
+        'registration_number' => 'CPE/24/007',
     ]);
-
-    $this->post(
-        route('student-invitations.store', ['studentSet' => $set->invite_token]),
-        [
-            'surname' => 'Eze',
-            'other_names' => 'Chiamaka',
-            'registration_number' => '2024001234',
-            'email' => 'chiamaka@futo.edu',
-            'password' => 'new-password',
-            'password_confirmation' => 'new-password',
-        ],
-    )->assertRedirect(route('student-joins.status'));
-
-    $applicant = User::query()->where('email', 'chiamaka@futo.edu')->firstOrFail();
-    $join = $applicant->studentJoinRequest;
-    $verification = EmailDelivery::query()->where('purpose_key', 'like', 'join-verification-%')->firstOrFail();
-    $this->get($verification->metadata['url'])->assertRedirect(route('student-joins.status'));
-
-    $this->actingAs($set->advisorProfile->user)
-        ->get(route('student-joins.adviser.show', ['studentJoinRequest' => $join]))
-        ->assertInertia(fn (Assert $page) => $page
-            ->where('dashboard.adviserJoinRequest.conflict', true)
-            ->where('dashboard.adviserJoinRequest.canApprove', false));
-    $this->patch(route('student-joins.adviser.approve', ['studentJoinRequest' => $join]))
-        ->assertSessionHasErrors('request');
-
-    expect($applicant->fresh()->studentProfile)->toBeNull();
-});
-
-test('only the owning adviser can review a student request', function () {
-    $set = StudentSet::factory()->create();
-    $join = StudentJoinRequest::factory()->create(['student_set_id' => $set->id]);
-    $other = AdvisorProfile::factory()->create();
-
-    $this->actingAs($other->user)
-        ->get(route('student-joins.adviser.show', ['studentJoinRequest' => $join]))->assertNotFound();
-    $this->patch(route('student-joins.adviser.approve', ['studentJoinRequest' => $join]))->assertNotFound();
-
-    $join->refresh();
-    expect($join->status)->toBe(StudentJoinRequest::StatusPending)
-        ->and($join->user->studentProfile)->toBeNull();
-});
-
-test('a returned request can be corrected without reserving a student registration number', function () {
-    $set = StudentSet::factory()->create();
-    $user = User::factory()->student()->create(['email_verified_at' => now()]);
-    $join = StudentJoinRequest::factory()->create([
+    $user = User::factory()->student()->create(['email_verified_at' => null]);
+    StudentJoinRequest::factory()->create([
         'user_id' => $user->id,
-        'student_set_id' => $set->id,
-        'registration_number' => '2024001234',
+        'student_profile_id' => $student->id,
     ]);
-
-    $this->actingAs($set->advisorProfile->user)
-        ->patch(route('student-joins.adviser.reject', ['studentJoinRequest' => $join]), [
-            'reason' => 'The registration number does not match the class list.',
-        ])->assertRedirect(route('student-joins.adviser.index'));
-
-    expect($user->fresh()->studentProfile)->toBeNull()
-        ->and($join->fresh()->status)->toBe(StudentJoinRequest::StatusRejected);
 
     $this->actingAs($user)->patch(route('student-joins.update'), [
-        'surname' => 'Nwosu',
-        'other_names' => 'Adaeze',
+        'email' => 'corrected@futo.edu',
+        'registration_number' => 'CPE/24/008',
+    ])->assertSessionHasErrors('registration_number');
+
+    expect($student->fresh()->registration_number)->toBe('CPE/24/007');
+
+    $this->patch(route('student-joins.update'), [
+        'email' => 'corrected@futo.edu',
+    ])->assertRedirect(route('student-joins.status'));
+
+    expect($user->fresh()->email)->toBe('corrected@futo.edu')
+        ->and($student->fresh()->registration_number)->toBe('CPE/24/007');
+});
+
+test('a declined student may select a different listed registration number', function () {
+    $set = StudentSet::factory()->create();
+    $original = StudentProfile::factory()->unclaimed()->create([
+        'advisor_profile_id' => $set->advisor_profile_id,
+        'student_set_id' => $set->id,
+    ]);
+    $correct = StudentProfile::factory()->unclaimed()->create([
+        'advisor_profile_id' => $set->advisor_profile_id,
+        'student_set_id' => $set->id,
+    ]);
+    $user = User::factory()->student()->create();
+    $join = StudentJoinRequest::factory()->create([
+        'user_id' => $user->id,
+        'student_profile_id' => $original->id,
+        'status' => StudentJoinRequest::StatusRejected,
+    ]);
+
+    $this->actingAs($user)->patch(route('student-joins.update'), [
         'email' => $user->email,
-        'registration_number' => '2024005678',
+        'registration_number' => $correct->registration_number,
     ])->assertRedirect(route('student-joins.status'));
 
     $join->refresh();
-    expect($join->status)->toBe(StudentJoinRequest::StatusPending)
-        ->and($join->registration_number)->toBe('2024005678')
-        ->and($join->review_note)->toBeNull();
+    expect($join->student_profile_id)->toBe($correct->id)
+        ->and($join->status)->toBe(StudentJoinRequest::StatusPending)
+        ->and($user->fresh()->name)->toBe($correct->official_name);
 });
 
-test('an unverified applicant can correct an email address without joining the set', function () {
+test('an adviser cannot see a student email before verification', function () {
     $set = StudentSet::factory()->create();
-    $user = User::factory()->student()->create([
-        'email' => 'mistyped@futo.edu',
-        'email_verified_at' => null,
-    ]);
-    $join = StudentJoinRequest::factory()->create([
-        'user_id' => $user->id,
+    $student = StudentProfile::factory()->unclaimed()->create([
+        'advisor_profile_id' => $set->advisor_profile_id,
         'student_set_id' => $set->id,
     ]);
-    app(StudentJoinService::class)->sendVerification($join);
-    $oldLink = EmailDelivery::query()->where('recipient_email', 'mistyped@futo.edu')->firstOrFail()->metadata['url'];
+    $user = User::factory()->student()->create(['email_verified_at' => null]);
+    StudentJoinRequest::factory()->create([
+        'user_id' => $user->id,
+        'student_profile_id' => $student->id,
+    ]);
 
-    $this->actingAs($user)->patch(route('student-joins.update'), [
-        'surname' => 'Nwosu',
-        'other_names' => 'Adaeze',
-        'email' => 'correct@futo.edu',
-        'registration_number' => '2024005678',
-    ])->assertRedirect(route('student-joins.status'));
+    $row = app(DashboardPresenter::class)->adviserStudent($student);
+    expect($row['email'])->toBeNull()
+        ->and($row['emailUnverified'])->toBeTrue()
+        ->and(app(AdviserJoinRequestData::class)->home($set->advisorProfile)['requestCount'])->toBe(0);
 
-    expect($user->fresh()->email)->toBe('correct@futo.edu')
-        ->and($user->studentProfile)->toBeNull()
-        ->and($join->fresh()->status)->toBe(StudentJoinRequest::StatusPending)
-        ->and(EmailDelivery::query()->where('recipient_email', 'correct@futo.edu')->exists())->toBeTrue();
-
-    $this->get($oldLink)->assertForbidden();
-    $newLink = EmailDelivery::query()->where('recipient_email', 'correct@futo.edu')->firstOrFail()->metadata['url'];
-    $this->get($newLink)->assertRedirect(route('student-joins.status'));
-    expect($user->fresh()->email_verified_at)->not->toBeNull();
+    $user->forceFill(['email_verified_at' => now()])->save();
+    $row = app(DashboardPresenter::class)->adviserStudent($student->fresh());
+    expect($row['email'])->toBe($user->email)
+        ->and($row['emailUnverified'])->toBeFalse()
+        ->and(app(AdviserJoinRequestData::class)->home($set->advisorProfile)['requestCount'])->toBe(1);
 });
 
-test('legacy signup redirects to course adviser signup', function () {
-    $this->get(route('signup'))->assertRedirect(route('signup.advisor'));
+test('only the owning adviser accepts a verified claim', function () {
+    $set = StudentSet::factory()->create();
+    $student = StudentProfile::factory()->unclaimed()->create([
+        'advisor_profile_id' => $set->advisor_profile_id,
+        'student_set_id' => $set->id,
+    ]);
+    $user = User::factory()->student()->create(['email_verified_at' => null]);
+    $join = StudentJoinRequest::factory()->create([
+        'user_id' => $user->id,
+        'student_profile_id' => $student->id,
+    ]);
+    $approve = route('student-joins.adviser.approve', ['studentJoinRequest' => $join]);
+
+    $this->actingAs($set->advisorProfile->user)->patch($approve)->assertSessionHasErrors('request');
+    $other = AdvisorProfile::factory()->create();
+    $this->actingAs($other->user)->patch($approve)->assertNotFound();
+
+    $user->forceFill(['email_verified_at' => now()])->save();
+    $this->actingAs($set->advisorProfile->user)->patch($approve)
+        ->assertRedirect(route('student-sets.show', $set->routeParameters()));
+
+    expect($student->fresh()->user_id)->toBe($user->id)
+        ->and($join->fresh()->status)->toBe(StudentJoinRequest::StatusApproved);
 });
 
-test('adviser signup rejects duplicate emails and unsupported titles', function () {
-    $adviser = AdvisorProfile::factory()->create();
+test('adviser email changes become active only after the new address verifies', function () {
+    $set = StudentSet::factory()->create();
+    $student = StudentProfile::factory()->create([
+        'advisor_profile_id' => $set->advisor_profile_id,
+        'student_set_id' => $set->id,
+        'official_name' => 'Adaeze Nwosu',
+        'registration_number' => 'CPE/24/007',
+    ]);
+    $oldEmail = $student->user->email;
 
-    $this->from(route('signup.advisor'))->post(route('signup.advisor.store'), [
-        'title' => Honorific::Prof->value,
-        'name' => 'Second Adviser',
-        'email' => $adviser->user->email,
-        'password' => 'new-password',
-        'password_confirmation' => 'new-password',
-    ])->assertSessionHasErrors('email');
+    $this->actingAs($set->advisorProfile->user)->patch(route('student-sets.students.update', [
+        ...$set->routeParameters(),
+        'registrationNumber' => $student->routeRegistrationNumber(),
+    ]), [
+        'official_name' => 'Adaeze Nwosu',
+        'registration_number' => 'CPE/24/007',
+        'email' => 'new@futo.edu',
+    ])->assertRedirect(route('student-sets.show', $set->routeParameters()));
 
-    $this->from(route('signup.advisor'))->post(route('signup.advisor.store'), [
-        'title' => 'Sir',
-        'name' => 'Third Adviser',
-        'email' => 'third@futo.edu',
-        'password' => 'new-password',
-        'password_confirmation' => 'new-password',
-    ])->assertSessionHasErrors('title');
+    $account = $student->user->fresh();
+    expect($account->email)->toBe($oldEmail)
+        ->and($account->pending_email)->toBe('new@futo.edu');
+
+    $link = EmailDelivery::query()->where('recipient_email', 'new@futo.edu')->firstOrFail()->metadata['url'];
+    $this->get($link)->assertOk();
+    $account = $student->user->fresh();
+    expect($account->email)->toBe('new@futo.edu')
+        ->and($account->pending_email)->toBeNull();
 });

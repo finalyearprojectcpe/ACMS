@@ -20,6 +20,7 @@ return new class extends Migration
             $table->string('course_title');
             $table->unsignedTinyInteger('credit_units');
             $table->boolean('is_elective')->default(false);
+            $table->boolean('is_retake_only')->default(false);
             $table->timestamp('results_published_at')->nullable();
             $table->foreignId('results_published_by_user_id')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();

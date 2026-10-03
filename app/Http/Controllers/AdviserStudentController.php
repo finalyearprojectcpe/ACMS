@@ -29,11 +29,11 @@ class AdviserStudentController extends Controller
             ->with(['user', 'studentSet'])
             ->when($set, fn ($query) => $query->where('student_set_id', $setId))
             ->get()
-            ->sortBy(fn (StudentProfile $student): string => $student->user->name)
+            ->sortBy(fn (StudentProfile $student): string => $student->official_name)
             ->values()
             ->map(fn (StudentProfile $student): array => [
-                'fullName' => $student->user->name,
-                'email' => $student->user->email,
+                'fullName' => $student->official_name,
+                'email' => $student->user?->email,
                 'registrationNumber' => $student->registration_number,
                 'setLabel' => $student->studentSet->label(),
                 'advisorName' => $advisor->user->displayName(),

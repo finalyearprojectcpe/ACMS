@@ -27,7 +27,13 @@ class StudentProfileFactory extends Factory
                 'advisor_profile_id' => $attributes['advisor_profile_id'],
             ])->id,
             'registration_number' => fake()->unique()->numerify('20########'),
+            'official_name' => fake()->name(),
             'status' => 'active',
         ];
+    }
+
+    public function unclaimed(): static
+    {
+        return $this->state(['user_id' => null]);
     }
 }

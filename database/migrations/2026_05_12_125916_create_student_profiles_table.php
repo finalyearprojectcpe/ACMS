@@ -14,15 +14,17 @@ return new class extends Migration
         // Stores each student's identity and membership of an adviser-owned set.
         Schema::create('student_profiles', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->unique()->constrained()->cascadeOnDelete();
+            $table->foreignId('user_id')->nullable()->unique()->constrained()->nullOnDelete();
             $table->foreignId('advisor_profile_id')->constrained()->cascadeOnDelete();
             $table->foreignId('student_set_id')->constrained()->cascadeOnDelete();
+            $table->string('official_name');
             $table->string('registration_number');
+            $table->string('registration_number_key');
             $table->string('status')->default('active');
             $table->timestamps();
 
             $table->index('student_set_id');
-            $table->unique(['advisor_profile_id', 'registration_number']);
+            $table->unique(['advisor_profile_id', 'registration_number_key']);
         });
     }
 

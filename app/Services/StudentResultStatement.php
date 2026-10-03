@@ -30,7 +30,7 @@ class StudentResultStatement
                         'units' => (int) $item->credit_units,
                         'grade' => $item->missing_script ? 'Missing script' : $item->grade,
                     ])->values()->all(),
-                    'publishedUnits' => (int) $items->sum('credit_units'),
+                    'totalUnits' => (int) $items->sum('credit_units'),
                     'awaitingPublication' => $registration->items->count() - $items->count(),
                     'gpa' => $period['gpa'],
                     'cgpa' => $period['cgpa'],
@@ -39,7 +39,7 @@ class StudentResultStatement
 
         return [
             'student' => [
-                'name' => $student->user->name,
+                'name' => $student->official_name,
                 'registrationNumber' => $student->registration_number,
                 'registrationRouteValue' => $student->routeRegistrationNumber(),
                 'set' => $student->studentSet->label(),

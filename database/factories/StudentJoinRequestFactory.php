@@ -3,7 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\StudentJoinRequest;
-use App\Models\StudentSet;
+use App\Models\StudentProfile;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -21,8 +21,7 @@ class StudentJoinRequestFactory extends Factory
     {
         return [
             'user_id' => User::factory()->student(),
-            'student_set_id' => StudentSet::factory(),
-            'registration_number' => (string) fake()->numberBetween(2024000000, 2024999999),
+            'student_profile_id' => StudentProfile::factory()->unclaimed(),
             'status' => StudentJoinRequest::StatusPending,
         ];
     }

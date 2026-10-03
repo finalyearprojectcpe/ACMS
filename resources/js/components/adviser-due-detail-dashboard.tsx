@@ -10,19 +10,20 @@ import { useMemo, useState } from 'react';
 import {
     createStudentDueWaiver,
     editAdviserDue,
-    showStudentProfile,
 } from '@/actions/App/Http/Controllers/DashboardController';
 import {
     archive as archiveAdviserDue,
     restore as restoreAdviserDue,
     restoreAssignment as restoreStudentDue,
 } from '@/actions/App/Http/Controllers/DueController';
+import { download as downloadDueRoster } from '@/actions/App/Http/Controllers/DueRosterExportController';
 import { ActionLink } from '@/components/action-link';
 import {
     DueStatusBadge,
     PaymentStatusBadge,
 } from '@/components/adviser-due-ui';
 import { CopyableValue } from '@/components/copyable-value';
+import { DownloadButton } from '@/components/download-button';
 import { PersonCell } from '@/components/person-cell';
 import { ReceiptAction } from '@/components/receipt-action';
 import { TableEmptyRow } from '@/components/table-empty-row';
@@ -40,7 +41,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import {
     Select,
     SelectContent,
@@ -135,7 +136,7 @@ export function AdviserDueDetailDashboard({
                             </p>
                         </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <Input
                             aria-label="Search students"
                             placeholder="Search name or reg no."
@@ -157,40 +158,59 @@ export function AdviserDueDetailDashboard({
                                 <SelectItem value="waived">Waived</SelectItem>
                             </SelectContent>
                         </Select>
+                        {detail.due.status !== 'Draft' ? (
+                            <div className="flex w-full flex-wrap items-center gap-3 sm:ml-auto sm:w-auto">
+                                <DownloadButton
+                                    size="default"
+                                    href={downloadDueRoster.url(
+                                        detail.due.publicId,
+                                        { query: { status } },
+                                    )}
+                                >
+                                    Export {status} students
+                                </DownloadButton>
+                            </div>
+                        ) : null}
                     </div>
                 </CardHeader>
                 <CardContent className="p-0">
                     <ScrollArea className="max-h-[36rem]">
-                        <Table className="text-sm">
+                        <Table className="min-w-[850px] text-sm">
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead className="w-[34%] px-4">
+                                    <TableHead className="w-12 text-center">
+                                        S/N
+                                    </TableHead>
+                                    <TableHead className="w-48 px-4">
                                         Student
                                     </TableHead>
-                                    <TableHead className="w-[22%]">
+                                    <TableHead className="w-44">
                                         Reg No.
                                     </TableHead>
-                                    <TableHead className="w-[14%] text-center">
+                                    <TableHead className="w-28 text-center">
                                         Amount
                                     </TableHead>
-                                    <TableHead className="w-[14%] text-center">
+                                    <TableHead className="w-28 text-center">
                                         Status
                                     </TableHead>
                                     <TableHead className="text-center">
                                         Paid At
                                     </TableHead>
-                                    <TableHead className="w-[16%] pr-4 text-right">
+                                    <TableHead className="w-28 pr-4 text-right">
                                         Action
                                     </TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {visibleStudents.length > 0 ? (
-                                    visibleStudents.map((student) => (
+                                    visibleStudents.map((student, index) => (
                                         <TableRow
                                             key={student.id}
                                             className="odd:bg-background even:bg-muted/25"
                                         >
+                                            <TableCell className="text-center text-muted-foreground tabular-nums">
+                                                {index + 1}
+                                            </TableCell>
                                             <TableCell className="px-4">
                                                 <PersonCell
                                                     name={student.studentName}
@@ -198,9 +218,8 @@ export function AdviserDueDetailDashboard({
                                                         student.studentAvatar
                                                     }
                                                     href={
-                                                        showStudentProfile(
-                                                            student.registrationNumber,
-                                                        ).url
+                                                        student.profileUrl ??
+                                                        undefined
                                                     }
                                                 />
                                             </TableCell>
@@ -244,7 +263,7 @@ export function AdviserDueDetailDashboard({
                                         </TableRow>
                                     ))
                                 ) : (
-                                    <TableEmptyRow colSpan={6} className="py-8">
+                                    <TableEmptyRow colSpan={7} className="py-8">
                                         {detail.students.length
                                             ? 'No matching students.'
                                             : 'No students assigned yet.'}
@@ -252,6 +271,7 @@ export function AdviserDueDetailDashboard({
                                 )}
                             </TableBody>
                         </Table>
+                        <ScrollBar orientation="horizontal" />
                     </ScrollArea>
                 </CardContent>
             </Card>
@@ -350,8 +370,9 @@ function DueLifecycleAction({
                                 <strong className="text-foreground">
                                     {due.title}
                                 </strong>{' '}
-                                can pay it again. Completed payments and
-                                receipts stay unchanged.
+                                can pay it again. Any applicable student results
+                                will be locked until they pay or are waived.
+                                Completed payments and receipts stay unchanged.
                             </>
                         ) : (
                             <>
@@ -359,8 +380,9 @@ function DueLifecycleAction({
                                 <strong className="text-foreground">
                                     {due.title}
                                 </strong>
-                                . Completed payments and receipts stay
-                                available.
+                                . This also removes its result-access
+                                requirement. Completed payments and receipts
+                                stay available.
                             </>
                         )}
                     </AlertDialogDescription>

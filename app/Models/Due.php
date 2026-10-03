@@ -20,7 +20,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'description',
     'amount_kobo',
     'currency',
-    'due_on',
     'status',
     'published_at',
     'archived_at',
@@ -90,7 +89,6 @@ class Due extends Model
     protected function casts(): array
     {
         return [
-            'due_on' => 'date',
             'published_at' => 'datetime',
             'archived_at' => 'datetime',
         ];

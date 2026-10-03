@@ -18,7 +18,7 @@ return new class extends Migration
             $table->foreignId('advisor_profile_id')->nullable()->constrained()->cascadeOnDelete();
             $table->foreignId('student_profile_id')->nullable()->constrained()->cascadeOnDelete();
             $table->string('title', 120);
-            $table->timestamps();
+            $table->timestamps(6);
             $table->index(['advisor_profile_id', 'updated_at']);
             $table->index(['student_profile_id', 'updated_at']);
         });

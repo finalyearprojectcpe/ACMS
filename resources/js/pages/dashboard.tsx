@@ -1,38 +1,34 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { RiArrowLeftLine } from '@remixicon/react';
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 
 import {
     createStudentSet,
     section as dashboardSection,
 } from '@/actions/App/Http/Controllers/DashboardController';
 import { AdviserAcademicSessionForm } from '@/components/adviser-academic-session-form';
-import {
-    AdviserPaymentHistoryDashboard,
-    AdviserRegistrationActivityDashboard,
-} from '@/components/adviser-activity-dashboard';
+import { AdviserPaymentHistoryDashboard } from '@/components/adviser-activity-dashboard';
 import { AdviserAssistantDashboard } from '@/components/adviser-assistant-dashboard';
-import { AdviserCourseRegistrationDashboard } from '@/components/adviser-course-registration-dashboard';
+import { AdviserCourseAssignmentDashboard } from '@/components/adviser-course-assignment-dashboard';
+import { AdviserCourseCatalogDashboard } from '@/components/adviser-course-catalog-dashboard';
 import { AdviserCourseOfferingForm } from '@/components/adviser-course-schedule-forms';
 import { AdviserDueDetailDashboard } from '@/components/adviser-due-detail-dashboard';
 import { AdviserDueFormDashboard } from '@/components/adviser-due-form-dashboard';
 import { AdviserDueWaiverFormDashboard } from '@/components/adviser-due-waiver-form-dashboard';
 import { AdviserDuesDashboard } from '@/components/adviser-dues-dashboard';
 import { AdviserHomeDashboard } from '@/components/adviser-home-dashboard';
-import {
-    AdviserJoinRequestDashboard,
-    AdviserJoinRequestsDashboard,
-} from '@/components/adviser-join-requests-dashboard';
+import { DeclineJoinRequestDashboard } from '@/components/adviser-join-requests-dashboard';
 import { AdviserPaymentAccountFormDashboard } from '@/components/adviser-payment-account-form-dashboard';
 import { AdviserGradeRoster } from '@/components/adviser-results-dashboard';
 import { AdviserSemesterWorkspace } from '@/components/adviser-semester-workspace';
+import { AdviserSetResultsDashboard } from '@/components/adviser-set-results-dashboard';
 import { AdviserProfileDashboard } from '@/components/adviser-settings-dashboard';
 import { AdviserStudentSetsDashboard } from '@/components/adviser-student-sets-dashboard';
 import { AdviserStudentsDashboard } from '@/components/adviser-students-dashboard';
 import { AppSidebar } from '@/components/app-sidebar';
 import { DashboardPageSurface } from '@/components/dashboard-page-surface';
 import { FlashToasts } from '@/components/flash-toasts';
-import { StudentCourseRegistrationDashboard } from '@/components/student-course-registration-dashboard';
+import { StudentCoursesDashboard } from '@/components/student-courses-dashboard';
 import { StudentDuesDashboard } from '@/components/student-dues-dashboard';
 import { StudentHomeDashboard } from '@/components/student-home-dashboard';
 import { StudentProfileDashboard } from '@/components/student-profile-dashboard';
@@ -78,22 +74,33 @@ const hasInternalReferrer =
     typeof document !== 'undefined' &&
     document.referrer !== '' &&
     new URL(document.referrer).origin === window.location.origin;
+let hasPriorDashboardNavigation = hasInternalReferrer;
+
+function subscribeToDashboardNavigation(notify: () => void) {
+    return router.on('navigate', (event) => {
+        hasPriorDashboardNavigation =
+            hasInternalReferrer ||
+            event.detail.page.url !== initialDashboardUrl;
+        notify();
+    });
+}
+
+function dashboardHistorySnapshot() {
+    return hasPriorDashboardNavigation;
+}
+
+function serverHistorySnapshot() {
+    return false;
+}
 
 export default function DashboardPage({ dashboard }: DashboardPageProps) {
     const { auth } = usePage<{
         auth: Auth;
     }>().props;
-    const [hasInternalHistory, setHasInternalHistory] =
-        useState(hasInternalReferrer);
-    useEffect(
-        () =>
-            router.on('navigate', (event) => {
-                setHasInternalHistory(
-                    hasInternalReferrer ||
-                        event.detail.page.url !== initialDashboardUrl,
-                );
-            }),
-        [],
+    const hasInternalHistory = useSyncExternalStore(
+        subscribeToDashboardNavigation,
+        dashboardHistorySnapshot,
+        serverHistorySnapshot,
     );
     const canGoBack =
         dashboard.section !== 'home' &&
@@ -119,9 +126,7 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
         dashboard.adviserHome !== null
             ? dashboard.adviserHome
             : null;
-    const adviserJoinRequests = dashboard.adviserJoinRequests;
     const adviserJoinRequest = dashboard.adviserJoinRequest;
-    const adviserRegistrationActivity = dashboard.adviserRegistrationActivity;
     const adviserPaymentHistory = dashboard.adviserPaymentHistory;
     const adviserAssistant = dashboard.adviserAssistant;
     const adviserStudentSets =
@@ -154,13 +159,9 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
         dashboard.adviserAcademicSessionForm !== null
             ? dashboard.adviserAcademicSessionForm
             : null;
-    const adviserCourseRegistration =
-        dashboard.role === 'adviser' &&
-        dashboard.section === 'course-registration' &&
-        dashboard.adviserCourseRegistration !== null
-            ? dashboard.adviserCourseRegistration
-            : null;
-    const adviserResults = dashboard.adviserResults;
+    const adviserCourseCatalog = dashboard.adviserCourseCatalog;
+    const adviserCourseAssignment = dashboard.adviserCourseAssignment;
+    const adviserSetResults = dashboard.adviserSetResults;
     const adviserGradeRoster = dashboard.adviserGradeRoster;
     const adviserDues =
         dashboard.role === 'adviser' &&
@@ -216,11 +217,11 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
         dashboard.studentDues !== null
             ? dashboard.studentDues
             : null;
-    const studentCourseRegistration =
+    const studentCourses =
         dashboard.role === 'student' &&
-        dashboard.section === 'course-registration' &&
-        dashboard.studentCourseRegistration !== null
-            ? dashboard.studentCourseRegistration
+        dashboard.section === 'courses' &&
+        dashboard.studentCourses !== null
+            ? dashboard.studentCourses
             : null;
     const studentProfile =
         dashboard.role === 'student' &&
@@ -317,30 +318,22 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                                     (!!adviserCourseSchedules ||
                                         !!adviserDues ||
                                         !!adviserStudents ||
-                                        !!adviserResults ||
+                                        !!adviserSetResults ||
+                                        !!adviserCourseCatalog ||
+                                        !!adviserCourseAssignment ||
                                         !!adviserGradeRoster ||
                                         !!adviserCourseOfferingForm ||
                                         !!dashboard.studentSetSettings ||
-                                        !!studentCourseRegistration ||
-                                        (!!adviserCourseRegistration &&
-                                            !adviserCourseRegistration.review))
+                                        !!studentCourses)
                                 }
                             >
-                                {adviserRegistrationActivity ? (
-                                    <AdviserRegistrationActivityDashboard
-                                        activity={adviserRegistrationActivity}
-                                    />
-                                ) : adviserPaymentHistory ? (
+                                {adviserPaymentHistory ? (
                                     <AdviserPaymentHistoryDashboard
                                         history={adviserPaymentHistory}
                                     />
                                 ) : adviserJoinRequest ? (
-                                    <AdviserJoinRequestDashboard
+                                    <DeclineJoinRequestDashboard
                                         request={adviserJoinRequest}
-                                    />
-                                ) : adviserJoinRequests ? (
-                                    <AdviserJoinRequestsDashboard
-                                        listing={adviserJoinRequests}
                                     />
                                 ) : dashboard.studentSetSettings ? (
                                     <StudentSetSettings
@@ -369,31 +362,26 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                                     <AdviserCourseOfferingForm
                                         form={adviserCourseOfferingForm}
                                     />
-                                ) : adviserCourseRegistration?.review ? (
-                                    <AdviserCourseRegistrationDashboard
-                                        registration={adviserCourseRegistration}
+                                ) : adviserCourseAssignment ? (
+                                    <AdviserCourseAssignmentDashboard
+                                        assignment={adviserCourseAssignment}
+                                    />
+                                ) : adviserCourseCatalog ? (
+                                    <AdviserCourseCatalogDashboard
+                                        catalog={adviserCourseCatalog}
+                                    />
+                                ) : adviserSetResults ? (
+                                    <AdviserSetResultsDashboard
+                                        matrix={adviserSetResults}
                                     />
                                 ) : adviserGradeRoster ? (
                                     <AdviserGradeRoster
                                         key={`${adviserGradeRoster.course.code}:${adviserGradeRoster.period.session}:${adviserGradeRoster.period.semester}`}
                                         roster={adviserGradeRoster}
                                     />
-                                ) : adviserCourseSchedules ||
-                                  adviserCourseRegistration ||
-                                  adviserResults ? (
+                                ) : adviserCourseSchedules ? (
                                     <AdviserSemesterWorkspace
-                                        view={
-                                            adviserCourseSchedules
-                                                ? 'courses'
-                                                : adviserCourseRegistration
-                                                  ? 'registrations'
-                                                  : 'results'
-                                        }
                                         schedules={adviserCourseSchedules}
-                                        registrations={
-                                            adviserCourseRegistration
-                                        }
-                                        results={adviserResults}
                                     />
                                 ) : adviserDues ? (
                                     <AdviserDuesDashboard dues={adviserDues} />
@@ -432,13 +420,13 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                                     <StudentHomeDashboard home={studentHome} />
                                 ) : studentDues ? (
                                     <StudentDuesDashboard dues={studentDues} />
-                                ) : studentCourseRegistration ? (
-                                    <StudentCourseRegistrationDashboard
+                                ) : studentCourses ? (
+                                    <StudentCoursesDashboard
                                         key={
-                                            studentCourseRegistration.selectedSemesterId ??
+                                            studentCourses.selectedSemesterId ??
                                             'none'
                                         }
-                                        registration={studentCourseRegistration}
+                                        courses={studentCourses}
                                     />
                                 ) : studentProfile ? (
                                     <StudentProfileDashboard
@@ -448,6 +436,7 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                                     <div className="mx-auto w-full max-w-6xl">
                                         <StudentResultsView
                                             results={studentResults}
+                                            allowDownload
                                             overviewUrl={
                                                 dashboardSection({
                                                     section: 'results',
@@ -456,7 +445,8 @@ export default function DashboardPage({ dashboard }: DashboardPageProps) {
                                         />
                                     </div>
                                 ) : dashboard.role === 'adviser' &&
-                                  dashboard.section === 'results' ? (
+                                  (dashboard.section === 'courses' ||
+                                      dashboard.section === 'set-results') ? (
                                     <Empty className="flex-1">
                                         <EmptyHeader>
                                             <EmptyTitle>

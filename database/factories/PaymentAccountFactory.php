@@ -22,7 +22,7 @@ class PaymentAccountFactory extends Factory
             'advisor_profile_id' => AdvisorProfile::factory(),
             'provider' => PaymentAccount::ProviderPaystack,
             'label' => 'Student Dues Account',
-            'business_name' => 'GradeManager Student Dues',
+            'business_name' => 'ACMS Student Dues',
             'bank_code' => '058',
             'bank_name' => 'Guaranty Trust Bank',
             'account_number' => '0123456789',

@@ -1,7 +1,7 @@
 <x-mail::message>
-# Reset your GradeManager password
+# Reset your ACMS password
 
-You requested a password reset for your GradeManager account.
+You requested a password reset for your ACMS account.
 
 <x-mail::button :url="$resetUrl">
 Reset password
@@ -9,5 +9,5 @@ Reset password
 
 This link expires in {{ $expiresAfterMinutes }} minutes and can only be used once. If you did not request a password reset, you can ignore this email.
 
-GradeManager
+ACMS
 </x-mail::message>

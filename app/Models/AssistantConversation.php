@@ -13,6 +13,8 @@ class AssistantConversation extends Model
 {
     use HasPublicId;
 
+    protected $dateFormat = 'Y-m-d H:i:s.u';
+
     public function advisorProfile(): BelongsTo
     {
         return $this->belongsTo(AdvisorProfile::class);

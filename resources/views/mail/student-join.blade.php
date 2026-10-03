@@ -19,6 +19,14 @@ This link expires in 24 hours. If you did not create this account, ignore this e
 You can now access your student account for {{ $setName }}.
 
 <x-mail::button :url="$url">Open dashboard</x-mail::button>
+@elseif ($kind === 'email_change')
+# Confirm your email address
+
+Your course adviser updated the email for your ACMS student account. Confirm this address to make it your sign-in email.
+
+<x-mail::button :url="$url">Confirm email</x-mail::button>
+
+This link expires in 24 hours. If you did not expect this change, contact your course adviser.
 @elseif ($kind === 'rejected')
 # Your request needs correction
 
@@ -29,5 +37,5 @@ Reason: {{ $reason }}
 <x-mail::button :url="$url">Review your request</x-mail::button>
 @endif
 
-GradeManager
+ACMS
 </x-mail::message>

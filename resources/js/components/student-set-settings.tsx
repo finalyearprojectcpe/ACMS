@@ -1,6 +1,6 @@
 import { Link, router } from '@inertiajs/react';
 import { RiAddLine, RiDeleteBinLine, RiEditLine } from '@remixicon/react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { destroy as destroyAcademicSession } from '@/actions/App/Http/Controllers/AcademicSessionController';
 import {
@@ -11,6 +11,10 @@ import {
     rotateInvite,
     update,
 } from '@/actions/App/Http/Controllers/StudentSetController';
+import {
+    destroy as removeSetLogo,
+    store as uploadSetLogo,
+} from '@/actions/App/Http/Controllers/StudentSetLogoController';
 import { ActionLink } from '@/components/action-link';
 import { AdviserSetWorkspace } from '@/components/adviser-set-workspace-nav';
 import {
@@ -30,6 +34,7 @@ import {
     EmptyHeader,
     EmptyTitle,
 } from '@/components/ui/empty';
+import { Input } from '@/components/ui/input';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import {
     Table,
@@ -56,6 +61,7 @@ type Confirmation =
       }
     | { type: 'link' }
     | { type: 'remove'; session: DashboardStudentSetSession }
+    | { type: 'logo' }
     | null;
 
 export function StudentSetSettings({
@@ -70,7 +76,38 @@ export function StudentSetSettings({
     const [updatingSettings, setUpdatingSettings] = useState(false);
     const [replacingLink, setReplacingLink] = useState(false);
     const [removingSession, setRemovingSession] = useState(false);
-    const busy = updatingSettings || replacingLink || removingSession;
+    const [savingLogo, setSavingLogo] = useState(false);
+    const [logoError, setLogoError] = useState<string | null>(null);
+    const logoInput = useRef<HTMLInputElement>(null);
+    const busy =
+        updatingSettings || replacingLink || removingSession || savingLogo;
+
+    function uploadLogo(file: File) {
+        setSavingLogo(true);
+        setLogoError(null);
+        router.post(
+            uploadSetLogo.url(parameters),
+            { logo: file },
+            {
+                forceFormData: true,
+                preserveScroll: true,
+                onError: (errors) =>
+                    setLogoError(
+                        errors.logo ?? 'The logo could not be uploaded.',
+                    ),
+                onFinish: () => setSavingLogo(false),
+            },
+        );
+    }
+
+    function removeLogo() {
+        setSavingLogo(true);
+        router.delete(removeSetLogo.url(parameters), {
+            preserveScroll: true,
+            onSuccess: () => setConfirmation(null),
+            onFinish: () => setSavingLogo(false),
+        });
+    }
 
     function updateSettings(data: {
         student_signup_enabled?: boolean;
@@ -288,6 +325,81 @@ export function StudentSetSettings({
                             <ScrollBar orientation="horizontal" />
                         </ScrollArea>
                     )}
+                    <section className="shrink-0 border-t px-4 py-4 sm:px-5">
+                        <div className="flex flex-wrap items-center justify-between gap-4">
+                            <div className="flex min-w-0 items-center gap-3">
+                                {settings.logoUrl ? (
+                                    <img
+                                        src={settings.logoUrl}
+                                        alt={`${set.name} logo`}
+                                        className="size-16 shrink-0 border bg-white object-contain p-1"
+                                    />
+                                ) : (
+                                    <div className="flex size-16 shrink-0 items-center justify-center border bg-muted/25 text-xs text-muted-foreground">
+                                        No logo
+                                    </div>
+                                )}
+                                <div>
+                                    <h3 className="text-sm font-semibold">
+                                        Receipt Logo
+                                    </h3>
+                                    <p className="text-xs text-muted-foreground">
+                                        Used on new receipts.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <Input
+                                    ref={logoInput}
+                                    type="file"
+                                    accept="image/png,image/jpeg"
+                                    className="sr-only"
+                                    aria-label="Choose receipt logo"
+                                    onChange={(event) => {
+                                        const file = event.target.files?.[0];
+                                        event.target.value = '';
+
+                                        if (file) {
+                                            uploadLogo(file);
+                                        }
+                                    }}
+                                />
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={busy}
+                                    onClick={() => logoInput.current?.click()}
+                                >
+                                    <RiEditLine />{' '}
+                                    {settings.logoUrl
+                                        ? 'Replace Logo'
+                                        : 'Upload Logo'}
+                                </Button>
+                                {settings.logoUrl && (
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        disabled={busy}
+                                        onClick={() =>
+                                            setConfirmation({ type: 'logo' })
+                                        }
+                                    >
+                                        Remove
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+                        {logoError && (
+                            <p
+                                role="alert"
+                                className="mt-2 text-xs text-destructive"
+                            >
+                                {logoError}
+                            </p>
+                        )}
+                    </section>
                     <footer className="flex shrink-0 justify-end border-t border-border pt-4">
                         <Button asChild size="sm">
                             <Link href={createAcademicSession(parameters)}>
@@ -312,12 +424,20 @@ export function StudentSetSettings({
                         <AlertDialogTitle>
                             {confirmation?.type === 'link'
                                 ? 'Replace the invite link?'
-                                : confirmation?.type === 'remove'
-                                  ? `Remove ${confirmation.session.name} Session?`
-                                  : 'Change the current period?'}
+                                : confirmation?.type === 'logo'
+                                  ? 'Remove the receipt logo?'
+                                  : confirmation?.type === 'remove'
+                                    ? `Remove ${confirmation.session.name} Session?`
+                                    : 'Change the current period?'}
                         </AlertDialogTitle>
                         <AlertDialogDescription>
-                            {confirmation?.type === 'link' ? (
+                            {confirmation?.type === 'logo' ? (
+                                <>
+                                    New receipts for <strong>{set.name}</strong>{' '}
+                                    will have no logo. Existing receipts will
+                                    stay unchanged.
+                                </>
+                            ) : confirmation?.type === 'link' ? (
                                 <>
                                     The current link for{' '}
                                     <strong>{set.name}</strong> will stop
@@ -371,7 +491,8 @@ export function StudentSetSettings({
                         </AlertDialogCancel>
                         <AlertDialogAction
                             variant={
-                                confirmation?.type === 'remove'
+                                confirmation?.type === 'remove' ||
+                                confirmation?.type === 'logo'
                                     ? 'destructive'
                                     : 'default'
                             }
@@ -379,7 +500,9 @@ export function StudentSetSettings({
                             onClick={(event) => {
                                 event.preventDefault();
 
-                                if (confirmation?.type === 'link') {
+                                if (confirmation?.type === 'logo') {
+                                    removeLogo();
+                                } else if (confirmation?.type === 'link') {
                                     replaceLink();
                                 } else if (confirmation?.type === 'remove') {
                                     removeSession(confirmation.session);
@@ -395,9 +518,11 @@ export function StudentSetSettings({
                         >
                             {confirmation?.type === 'link'
                                 ? 'Replace Link'
-                                : confirmation?.type === 'remove'
-                                  ? 'Remove Session'
-                                  : 'Make Current'}
+                                : confirmation?.type === 'logo'
+                                  ? 'Remove Logo'
+                                  : confirmation?.type === 'remove'
+                                    ? 'Remove Session'
+                                    : 'Make Current'}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

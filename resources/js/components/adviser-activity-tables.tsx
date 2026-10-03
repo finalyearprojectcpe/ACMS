@@ -1,5 +1,4 @@
 import { ActionLink } from '@/components/action-link';
-import { CourseRegistrationStatusBadge } from '@/components/course-registration-status-badge';
 import { PersonCell } from '@/components/person-cell';
 import { TableEmptyRow } from '@/components/table-empty-row';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
@@ -11,145 +10,18 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import type {
-    DashboardActivityRegistration,
-    DashboardAdviserHomePayment,
-} from '@/types';
-
-function RegistrationPeriod({ item }: { item: DashboardActivityRegistration }) {
-    return (
-        <span className="block">
-            <span className="block font-medium text-foreground">
-                {item.levelSemester}
-            </span>
-            <span className="block text-xs text-muted-foreground">
-                {item.session}
-                {item.submittedAt && ` · ${item.submittedAt}`}
-            </span>
-        </span>
-    );
-}
-
-export function ActivityRegistrationsTable({
-    registrations,
-    showStatus = false,
-    compact = false,
-}: {
-    registrations: DashboardActivityRegistration[];
-    showStatus?: boolean;
-    compact?: boolean;
-}) {
-    return (
-        <ScrollArea className="w-full">
-            <Table
-                className={
-                    compact ? 'table-fixed text-sm' : 'min-w-[670px] text-sm'
-                }
-            >
-                <TableHeader>
-                    <TableRow>
-                        <TableHead
-                            className={
-                                compact ? 'w-[74%] px-4 sm:w-[44%]' : 'px-5'
-                            }
-                        >
-                            Student
-                        </TableHead>
-                        <TableHead
-                            className={
-                                compact
-                                    ? 'hidden sm:table-cell sm:w-[40%]'
-                                    : undefined
-                            }
-                        >
-                            Semester
-                        </TableHead>
-                        {showStatus && <TableHead>Status</TableHead>}
-                        <TableHead
-                            className={
-                                compact
-                                    ? 'w-[26%] pr-4 text-right sm:w-[16%]'
-                                    : 'pr-5 text-right'
-                            }
-                        >
-                            Action
-                        </TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {registrations.length ? (
-                        registrations.map((item) => (
-                            <TableRow key={item.id} className="odd:bg-muted/25">
-                                <TableCell
-                                    className={
-                                        compact
-                                            ? 'min-w-0 px-4 whitespace-normal'
-                                            : 'px-5'
-                                    }
-                                >
-                                    <PersonCell
-                                        name={item.studentName}
-                                        avatar={item.studentAvatar}
-                                        secondary={item.set}
-                                        href={item.studentUrl}
-                                    />
-                                    {compact && (
-                                        <span className="mt-1 block pl-11 text-xs sm:hidden">
-                                            <RegistrationPeriod item={item} />
-                                        </span>
-                                    )}
-                                </TableCell>
-                                <TableCell
-                                    className={
-                                        compact
-                                            ? 'hidden whitespace-normal sm:table-cell'
-                                            : undefined
-                                    }
-                                >
-                                    <RegistrationPeriod item={item} />
-                                </TableCell>
-                                {showStatus && (
-                                    <TableCell>
-                                        <CourseRegistrationStatusBadge
-                                            status={item.status}
-                                        />
-                                    </TableCell>
-                                )}
-                                <TableCell
-                                    className={
-                                        compact
-                                            ? 'pr-4 text-right'
-                                            : 'pr-5 text-right'
-                                    }
-                                >
-                                    <ActionLink href={item.url}>
-                                        {item.status === 'In review'
-                                            ? 'Review'
-                                            : 'View'}
-                                    </ActionLink>
-                                </TableCell>
-                            </TableRow>
-                        ))
-                    ) : (
-                        <TableEmptyRow colSpan={showStatus ? 4 : 3}>
-                            No registrations in this view.
-                        </TableEmptyRow>
-                    )}
-                </TableBody>
-            </Table>
-            {!compact && <ScrollBar orientation="horizontal" />}
-        </ScrollArea>
-    );
-}
+import type { DashboardAdviserHomePayment } from '@/types';
 
 export function ActivityPaymentsTable({
     payments,
     showSet = false,
     compact = false,
+    startNumber = 1,
 }: {
     payments: DashboardAdviserHomePayment[];
     showSet?: boolean;
     compact?: boolean;
+    startNumber?: number;
 }) {
     return (
         <ScrollArea className="w-full">
@@ -160,10 +32,11 @@ export function ActivityPaymentsTable({
             >
                 <TableHeader>
                     <TableRow>
+                        <TableHead className="w-10 text-center sm:w-12">
+                            S/N
+                        </TableHead>
                         <TableHead
-                            className={
-                                compact ? 'w-[74%] px-4 sm:w-[40%]' : 'px-5'
-                            }
+                            className={compact ? 'px-2 sm:px-4' : 'px-5'}
                         >
                             Student
                         </TableHead>
@@ -183,7 +56,7 @@ export function ActivityPaymentsTable({
                         <TableHead
                             className={
                                 compact
-                                    ? 'w-[26%] pr-4 text-right sm:w-[18%]'
+                                    ? 'w-20 pr-4 text-right sm:w-24'
                                     : 'pr-5 text-right'
                             }
                         >
@@ -193,8 +66,11 @@ export function ActivityPaymentsTable({
                 </TableHeader>
                 <TableBody>
                     {payments.length ? (
-                        payments.map((item) => (
+                        payments.map((item, index) => (
                             <TableRow key={item.id} className="odd:bg-muted/25">
+                                <TableCell className="text-center text-muted-foreground tabular-nums">
+                                    {startNumber + index}
+                                </TableCell>
                                 <TableCell
                                     className={
                                         compact
@@ -278,7 +154,7 @@ export function ActivityPaymentsTable({
                             </TableRow>
                         ))
                     ) : (
-                        <TableEmptyRow colSpan={compact ? 3 : showSet ? 5 : 4}>
+                        <TableEmptyRow colSpan={compact ? 4 : showSet ? 6 : 5}>
                             No completed payments yet.
                         </TableEmptyRow>
                     )}

@@ -2,8 +2,8 @@ import { useSyncExternalStore } from 'react';
 
 type ThemePreference = 'light' | 'dark' | 'system';
 
-const themeStorageKey = 'grademanager-theme';
-const themeChangeEvent = 'grademanager-theme-change';
+const themeStorageKey = 'acms-theme';
+const themeChangeEvent = 'acms-theme-change';
 const darkModeQuery = '(prefers-color-scheme: dark)';
 let temporaryTheme: ThemePreference | null = null;
 
@@ -13,7 +13,9 @@ function storedTheme(): ThemePreference {
     }
 
     try {
-        const theme = window.localStorage.getItem(themeStorageKey);
+        const theme =
+            window.localStorage.getItem(themeStorageKey) ??
+            window.localStorage.getItem('grademanager-theme');
 
         return theme === 'light' || theme === 'dark' || theme === 'system'
             ? theme

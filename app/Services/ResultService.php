@@ -16,14 +16,27 @@ use Illuminate\Validation\ValidationException;
 
 class ResultService
 {
+    public function standing(?float $cgpa): ?string
+    {
+        return match (true) {
+            $cgpa === null => null,
+            $cgpa >= 4.50 => 'First Class',
+            $cgpa >= 3.50 => 'Second Class Upper',
+            $cgpa >= 2.40 => 'Second Class Lower',
+            $cgpa >= 1.50 => 'Third Class',
+            $cgpa >= 1.00 => 'Pass',
+            default => 'Below Pass Band',
+        };
+    }
+
     /** @return Collection<int, CourseRegistrationItem> */
     public function roster(AcademicSessionSemester $semester, CourseOffering $offering): Collection
     {
-        return $this->approvedItems($semester)
+        return $this->assignedItems($semester)
             ->where('course_offering_id', $offering->id)
             ->with('courseRegistration.studentProfile.user')
             ->get()
-            ->sortBy(fn (CourseRegistrationItem $item): string => Str::lower($item->courseRegistration->studentProfile->user->name), SORT_NATURAL)
+            ->sortBy(fn (CourseRegistrationItem $item): string => Str::lower($item->courseRegistration->studentProfile->official_name), SORT_NATURAL)
             ->values();
     }
 
@@ -86,28 +99,25 @@ class ResultService
         });
     }
 
-    /** @return array{approvedCount: int, awaitingReviewCount: int, totalResults: int, enteredResults: int, canPublish: bool, reason: string|null} */
+    /** @return array{assignedCount: int, totalResults: int, enteredResults: int, canPublish: bool, reason: string|null} */
     public function publicationState(AcademicSessionSemester $semester, CourseOffering $offering): array
     {
         $registrations = CourseRegistration::query()->where('academic_session_semester_id', $semester->id)
             ->whereHas('items', fn (Builder $query) => $query->where('course_offering_id', $offering->id));
-        $approvedCount = (clone $registrations)->where('status', CourseRegistration::StatusApproved)->count();
-        $awaitingReviewCount = (clone $registrations)->where('status', CourseRegistration::StatusSubmitted)->count();
-        $items = $this->approvedItems($semester)->where('course_offering_id', $offering->id);
+        $assignedCount = (clone $registrations)->where('status', CourseRegistration::StatusAssigned)->count();
+        $items = $this->assignedItems($semester)->where('course_offering_id', $offering->id);
         $totalResults = (clone $items)->count();
         $enteredResults = (clone $items)->where(fn (Builder $query) => $query
             ->whereNotNull('grade')
             ->orWhere('missing_script', true))->count();
         $reason = match (true) {
             $offering->results_published_at !== null => null,
-            $semester->registration_enabled => 'Close course registration before publishing results.',
-            $awaitingReviewCount > 0 => 'Review '.$awaitingReviewCount.' submitted '.($awaitingReviewCount === 1 ? 'registration' : 'registrations').' before publishing.',
-            $approvedCount === 0 || $totalResults === 0 => 'No approved course registrations are ready for results.',
+            $assignedCount === 0 || $totalResults === 0 => 'Assign this course to students before publishing results.',
             $enteredResults < $totalResults => 'Enter the remaining '.($totalResults - $enteredResults).' result(s) before publishing.',
             default => null,
         };
 
-        return compact('approvedCount', 'awaitingReviewCount', 'totalResults', 'enteredResults') + [
+        return compact('assignedCount', 'totalResults', 'enteredResults') + [
             'canPublish' => $offering->results_published_at === null && $reason === null,
             'reason' => $reason,
         ];
@@ -137,9 +147,69 @@ class ResultService
     public function studentRegistrations(StudentProfile $student): Collection
     {
         return $student->courseRegistrations()
-            ->where('status', CourseRegistration::StatusApproved)
+            ->where('status', CourseRegistration::StatusAssigned)
             ->with(['items.courseOffering', 'academicSessionSemester.academicSession.academicYear', 'academicSessionSemester.semester'])
             ->get();
+    }
+
+    /**
+     * @param  Collection<int, int>  $studentIds
+     * @return Collection<int, Collection<int, array<string, mixed>>>
+     */
+    public function summaryRowsForStudents(Collection $studentIds): Collection
+    {
+        if ($studentIds->isEmpty()) {
+            return collect();
+        }
+
+        return DB::table('course_registrations as registrations')
+            ->join('academic_session_semesters as periods', 'periods.id', '=', 'registrations.academic_session_semester_id')
+            ->join('academic_sessions as sessions', 'sessions.id', '=', 'periods.academic_session_id')
+            ->join('semesters', 'semesters.id', '=', 'periods.semester_id')
+            ->leftJoin('course_registration_items as items', 'items.course_registration_id', '=', 'registrations.id')
+            ->leftJoin('course_offerings as offerings', 'offerings.id', '=', 'items.course_offering_id')
+            ->whereIn('registrations.student_profile_id', $studentIds)
+            ->where('registrations.status', CourseRegistration::StatusAssigned)
+            ->orderBy('registrations.student_profile_id')
+            ->orderBy('sessions.start_year')
+            ->orderBy('semesters.sort_order')
+            ->orderBy('items.id')
+            ->get([
+                'registrations.id as registration_id',
+                'registrations.student_profile_id',
+                'periods.id as period_id',
+                'sessions.start_year',
+                'semesters.sort_order as semester_order',
+                'items.id as item_id',
+                'items.course_offering_id',
+                'items.assignment_origin',
+                'items.credit_units',
+                'items.grade',
+                'items.missing_script',
+                'offerings.results_published_at',
+            ])
+            ->groupBy('student_profile_id')
+            ->map(function (Collection $studentRows): Collection {
+                $running = ['points' => 0, 'units' => 0, 'incomplete' => false];
+
+                return $studentRows->groupBy('registration_id')->map(function (Collection $periodRows) use (&$running): array {
+                    $period = $periodRows->first();
+                    $items = $periodRows->whereNotNull('item_id')->values();
+                    $grades = $items->map(fn (object $item): array => [
+                        'grade' => $item->grade,
+                        'units' => (int) $item->credit_units,
+                        'published' => $item->results_published_at !== null,
+                    ]);
+
+                    return [
+                        'periodId' => (int) $period->period_id,
+                        'startYear' => (int) $period->start_year,
+                        'semesterOrder' => (int) $period->semester_order,
+                        'items' => $items,
+                        ...$this->periodMetrics($grades, $running),
+                    ];
+                })->values();
+            });
     }
 
     /**
@@ -148,37 +218,64 @@ class ResultService
      */
     public function studentPeriods(Collection $registrations): Collection
     {
-        $cumulativeItems = collect();
-        $hasIncompletePeriod = false;
+        $running = ['points' => 0, 'units' => 0, 'incomplete' => false];
 
         return $registrations->sortBy(fn (CourseRegistration $registration): string => sprintf(
             '%04d-%02d',
             $registration->academicSessionSemester->academicSession->start_year,
             $registration->academicSessionSemester->semester->sort_order,
-        ))->values()->map(function (CourseRegistration $registration) use ($cumulativeItems, &$hasIncompletePeriod): array {
+        ))->values()->map(function (CourseRegistration $registration) use (&$running): array {
             $items = $registration->items;
             $visibleItems = $items->filter(fn (CourseRegistrationItem $item): bool => $item->courseOffering?->results_published_at !== null
                 && ($item->grade !== null || $item->missing_script))->values();
-            $complete = $items->isNotEmpty() && $visibleItems->count() === $items->count()
-                && ! $items->contains(fn (CourseRegistrationItem $item): bool => $item->grade === null);
-
-            $counted = $complete && ! $hasIncompletePeriod;
-            if (! $complete) {
-                $hasIncompletePeriod = true;
-            } elseif ($counted) {
-                foreach ($items as $item) {
-                    $cumulativeItems->push($item);
-                }
-            }
+            $grades = $items->map(fn (CourseRegistrationItem $item): array => [
+                'grade' => $item->grade,
+                'units' => (int) $item->credit_units,
+                'published' => $item->courseOffering?->results_published_at !== null,
+            ]);
 
             return [
                 'registration' => $registration,
                 'visibleItems' => $visibleItems,
-                'counted' => $counted,
-                'gpa' => $complete ? $this->gpa($items) : null,
-                'cgpa' => $this->gpa($cumulativeItems),
+                ...$this->periodMetrics($grades, $running),
             ];
         });
+    }
+
+    /**
+     * @param  Collection<int, array{grade: ?string, units: int, published: bool}>  $grades
+     * @param  array{points: int, units: int, incomplete: bool}  $running
+     * @return array{counted: bool, gpa: ?float, cgpa: ?float}
+     */
+    private function periodMetrics(Collection $grades, array &$running): array
+    {
+        $complete = $grades->isNotEmpty();
+        $points = 0;
+        $units = 0;
+
+        foreach ($grades as $item) {
+            $units += $item['units'];
+            if ($item['grade'] === null || ! $item['published']) {
+                $complete = false;
+            }
+            if ($item['grade'] !== null) {
+                $points += Grade::from($item['grade'])->points() * $item['units'];
+            }
+        }
+
+        $counted = $complete && ! $running['incomplete'];
+        if (! $complete) {
+            $running['incomplete'] = true;
+        } elseif ($counted) {
+            $running['points'] += $points;
+            $running['units'] += $units;
+        }
+
+        return [
+            'counted' => $counted,
+            'gpa' => $complete && $units > 0 ? round($points / $units, 2) : null,
+            'cgpa' => $running['units'] > 0 ? round($running['points'] / $running['units'], 2) : null,
+        ];
     }
 
     /** @param Collection<int, CourseRegistrationItem> $items */
@@ -200,12 +297,12 @@ class ResultService
     }
 
     /** @return Builder<CourseRegistrationItem> */
-    private function approvedItems(AcademicSessionSemester $semester): Builder
+    private function assignedItems(AcademicSessionSemester $semester): Builder
     {
         return CourseRegistrationItem::query()
             ->whereHas('courseRegistration', fn (Builder $query) => $query
                 ->where('academic_session_semester_id', $semester->id)
-                ->where('status', CourseRegistration::StatusApproved)
+                ->where('status', CourseRegistration::StatusAssigned)
                 ->whereHas('studentProfile', fn (Builder $students) => $students
                     ->where('student_set_id', $semester->academicSession->student_set_id)));
     }

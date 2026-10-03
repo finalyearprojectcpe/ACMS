@@ -19,6 +19,7 @@ use Illuminate\Support\Str;
     'entry_start_year',
     'entry_end_year',
     'invite_token',
+    'logo_path',
     'student_signup_enabled',
     'current_academic_year_id',
     'current_semester_id',

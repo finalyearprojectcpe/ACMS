@@ -70,7 +70,9 @@ class EmailDeliveryService
             return $delivery;
         }
 
-        if (! is_string(config('services.resend.key')) || config('services.resend.key') === '') {
+        $mailer = $delivery->mailer ?: config('mail.default');
+
+        if ($mailer === 'resend' && (! is_string(config('services.resend.key')) || config('services.resend.key') === '')) {
             $delivery->forceFill([
                 'status' => EmailDeliveryStatus::Skipped->value,
                 'error' => 'Resend email delivery is not configured.',
@@ -87,7 +89,7 @@ class EmailDeliveryService
         ])->save();
 
         try {
-            $sentMessage = Mail::mailer('resend')
+            $sentMessage = Mail::mailer($mailer)
                 ->to($delivery->recipient_email)
                 ->send($this->mailableFor($delivery));
 
@@ -132,7 +134,7 @@ class EmailDeliveryService
     private function queue(EmailDelivery $delivery, array $metadata, bool $newSendCycle = false): EmailDelivery
     {
         $delivery->forceFill([
-            'mailer' => 'resend',
+            'mailer' => config('mail.default'),
             'status' => EmailDeliveryStatus::Queued->value,
             'idempotency_key' => $newSendCycle || ! is_string($delivery->idempotency_key) || $delivery->idempotency_key === ''
                 ? 'email-delivery/'.Str::uuid()

@@ -3,8 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\AdviserCourseOfferingRequest;
+use App\Http\Requests\ScheduleCoursesRequest;
 use App\Models\AcademicSessionSemester;
-use App\Models\Course;
 use App\Models\CourseOffering;
 use App\Models\StudentSet;
 use App\Services\DashboardAccess;
@@ -18,7 +18,7 @@ class CourseOfferingController extends Controller
     public function __construct(private readonly DashboardAccess $access) {}
 
     public function store(
-        AdviserCourseOfferingRequest $request,
+        ScheduleCoursesRequest $request,
         string $departmentSlug,
         string $entrySession,
         string $sessionYears,
@@ -26,41 +26,26 @@ class CourseOfferingController extends Controller
     ): RedirectResponse {
         $set = $this->ownedSet($request, $departmentSlug, $entrySession);
         $academicSessionSemester = $this->access->semesterByRoute($set, $sessionYears, $semester);
-        $validated = $request->validated();
+        $courseIds = $request->validated('course_ids');
+        $courses = $set->courses()->whereIn('id', $courseIds)->get();
 
-        $course = $set->courses()->where('code', $validated['code'])->first();
-
-        if ($course instanceof Course && $academicSessionSemester->courseOfferings()
-            ->whereBelongsTo($course)
-            ->exists()) {
-            throw ValidationException::withMessages([
-                'code' => 'This course is already part of the selected semester.',
-            ]);
+        if ($courses->count() !== count($courseIds) || $academicSessionSemester->courseOfferings()->whereIn('course_id', $courseIds)->exists()) {
+            throw ValidationException::withMessages(['course_ids' => 'Select only catalog courses that are not already scheduled this semester.']);
         }
 
-        DB::transaction(function () use ($set, $academicSessionSemester, $validated, $course): void {
-            if (! $course instanceof Course) {
-                $course = $set->courses()->create([
-                    'code' => $validated['code'],
-                    'title' => $validated['title'],
+        DB::transaction(function () use ($academicSessionSemester, $courses): void {
+            foreach ($courses as $course) {
+                $academicSessionSemester->courseOfferings()->create([
+                    'course_id' => $course->id,
+                    'course_title' => $course->title,
+                    'credit_units' => $course->credit_units,
+                    'is_elective' => $course->is_elective,
                 ]);
             }
-
-            $offering = $academicSessionSemester->courseOfferings()->create([
-                'course_id' => $course->id,
-                'course_title' => $validated['title'],
-                'credit_units' => (int) $validated['credit_units'],
-                'is_elective' => $validated['is_elective'],
-            ]);
-            $offering->prerequisiteCourses()->sync($this->validPrerequisiteIds(
-                $set,
-                $academicSessionSemester,
-                $validated['prerequisite_course_ids'] ?? [],
-            ));
         });
 
         return $this->courseScheduleRedirect($set, $academicSessionSemester)
-            ->with('success', 'Course added to the semester.');
+            ->with('success', 'Courses added to the semester.');
     }
 
     public function update(
@@ -82,31 +67,11 @@ class CourseOfferingController extends Controller
             ]);
         }
 
-        if ($set->courses()
-            ->where('code', $validated['code'])
-            ->whereKeyNot($courseOffering->course_id)
-            ->exists()) {
-            throw ValidationException::withMessages([
-                'code' => 'Another course in this set already uses this code.',
-            ]);
+        if ($courseOffering->course->code !== $validated['code']) {
+            throw ValidationException::withMessages(['code' => 'Edit the course code in the set catalog.']);
         }
 
         DB::transaction(function () use ($set, $courseOffering, $validated): void {
-            $course = Course::query()->lockForUpdate()->findOrFail($courseOffering->course_id);
-            $hasStudentRecords = $course->offerings()->whereHas('registrationItems')->exists();
-
-            if ($hasStudentRecords && $course->code !== $validated['code']) {
-                throw ValidationException::withMessages([
-                    'code' => 'This course code is already used in student records. Keep the code and edit only this semester.',
-                ]);
-            }
-
-            if (! $hasStudentRecords) {
-                $course->update([
-                    'code' => $validated['code'],
-                    'title' => $validated['title'],
-                ]);
-            }
             $courseOffering->update([
                 'course_title' => $validated['title'],
                 'credit_units' => (int) $validated['credit_units'],
@@ -143,14 +108,7 @@ class CourseOfferingController extends Controller
         }
 
         $semester = $courseOffering->academicSessionSemester;
-        DB::transaction(function () use ($courseOffering): void {
-            $course = $courseOffering->course;
-            $courseOffering->delete();
-
-            if (! $course->offerings()->exists()) {
-                $course->delete();
-            }
-        });
+        $courseOffering->delete();
 
         return $this->courseScheduleRedirect($set, $semester)
             ->with('success', 'Course removed from the semester.');

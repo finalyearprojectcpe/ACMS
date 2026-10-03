@@ -36,6 +36,7 @@
         "@remixicon/react": "^4.9.0",
         "@tailwindcss/vite": "^4.1.11",
         "@tanstack/react-table": "^9.2.4",
+        "@tanstack/react-virtual": "^3.14.13",
         "@types/react": "^19.2.0",
         "@types/react-dom": "^19.2.0",
         "@vitejs/plugin-react": "^5.2.0",

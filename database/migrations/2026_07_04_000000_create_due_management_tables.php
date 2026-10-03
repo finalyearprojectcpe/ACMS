@@ -49,7 +49,6 @@ return new class extends Migration
             $table->string('description')->nullable();
             $table->unsignedInteger('amount_kobo');
             $table->string('currency', 3)->default('NGN');
-            $table->date('due_on')->nullable();
             $table->string('status')->default('draft');
             $table->timestamp('published_at')->nullable();
             $table->timestamp('archived_at')->nullable();
@@ -104,6 +103,7 @@ return new class extends Migration
             $table->timestamp('reversed_at')->nullable();
             $table->string('reversal_reason')->nullable();
             $table->string('receipt_number')->nullable()->unique();
+            $table->string('receipt_logo_path')->nullable();
             $table->string('receipt_status')->nullable();
             $table->string('receipt_disk')->nullable();
             $table->string('receipt_path')->nullable();

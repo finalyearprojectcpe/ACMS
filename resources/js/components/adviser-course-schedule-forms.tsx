@@ -7,6 +7,7 @@ import {
     update as updateCourseOffering,
 } from '@/actions/App/Http/Controllers/CourseOfferingController';
 import { showCourseSchedule } from '@/actions/App/Http/Controllers/DashboardController';
+import { ScheduleCatalogCourses } from '@/components/adviser-course-schedule-catalog-form';
 import { CoursePrerequisitePicker } from '@/components/course-prerequisite-picker';
 import { Button } from '@/components/ui/button';
 import { Field, FieldError, FieldLabel } from '@/components/ui/field';
@@ -21,6 +22,18 @@ import {
 import type { DashboardAdviserCourseOfferingForm } from '@/types';
 
 export function AdviserCourseOfferingForm({
+    form,
+}: {
+    form: DashboardAdviserCourseOfferingForm;
+}) {
+    if (form.mode === 'create') {
+        return <ScheduleCatalogCourses form={form} />;
+    }
+
+    return <EditScheduledCourse form={form} />;
+}
+
+function EditScheduledCourse({
     form,
 }: {
     form: DashboardAdviserCourseOfferingForm;
@@ -92,12 +105,7 @@ export function AdviserCourseOfferingForm({
                                 <Input
                                     id="course-code"
                                     value={courseForm.data.code}
-                                    onChange={(event) =>
-                                        courseForm.setData(
-                                            'code',
-                                            event.target.value,
-                                        )
-                                    }
+                                    readOnly
                                     placeholder="CPE 301"
                                 />
                                 <FieldError>
@@ -157,10 +165,6 @@ export function AdviserCourseOfferingForm({
                                 <FieldLabel htmlFor="elective-course">
                                     Elective Course
                                 </FieldLabel>
-                                <div className="text-xs text-muted-foreground">
-                                    Students will see this course as optional
-                                    when registering.
-                                </div>
                             </div>
                             <Switch
                                 id="elective-course"

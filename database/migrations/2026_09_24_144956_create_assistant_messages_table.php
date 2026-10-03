@@ -18,6 +18,8 @@ return new class extends Migration
             $table->string('role', 16);
             $table->text('content');
             $table->json('sources')->nullable();
+            $table->string('status', 16)->nullable();
+            $table->string('error_message')->nullable();
             $table->timestamps();
             $table->index(['assistant_conversation_id', 'id']);
         });

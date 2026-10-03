@@ -17,8 +17,8 @@ class CourseRegistrationPlanner
     public function plan(StudentProfile $studentProfile, AcademicSessionSemester $semester): array
     {
         $semester->loadMissing(['academicSession', 'semester']);
-        $passedCourseIds = $studentProfile->courseRegistrations()
-            ->where('status', CourseRegistration::StatusApproved)
+        $history = $studentProfile->courseRegistrations()
+            ->where('status', CourseRegistration::StatusAssigned)
             ->with([
                 'items.courseOffering:id,course_id,results_published_at',
                 'academicSessionSemester.academicSession:id,start_year',
@@ -32,7 +32,14 @@ class CourseRegistrationPlanner
                     || ($prior->academic_session_id === $semester->academic_session_id
                         && $prior->semester->sort_order < $semester->semester->sort_order);
             })
-            ->flatMap(fn (CourseRegistration $registration) => $registration->items)
+            ->sortBy(fn (CourseRegistration $registration): string => sprintf('%04d-%02d',
+                $registration->academicSessionSemester->academicSession->start_year,
+                $registration->academicSessionSemester->semester->sort_order,
+            ))->values();
+        $attempts = $history->flatMap(fn (CourseRegistration $registration) => $registration->items)
+            ->filter(fn (CourseRegistrationItem $item): bool => $item->courseOffering?->course_id !== null)
+            ->groupBy(fn (CourseRegistrationItem $item): int => (int) $item->courseOffering->course_id);
+        $passedCourseIds = $history->flatMap(fn (CourseRegistration $registration) => $registration->items)
             ->filter(fn (CourseRegistrationItem $item): bool => $item->grade !== null
                 && Grade::from($item->grade)->points() > 0
                 && $item->courseOffering?->course_id !== null
@@ -41,13 +48,48 @@ class CourseRegistrationPlanner
             ->unique()
             ->all();
 
-        $availableCourses = CourseOffering::query()
+        $earlierOfferings = CourseOffering::query()
+            ->with(['course', 'prerequisiteCourses', 'academicSessionSemester.academicSession', 'academicSessionSemester.semester'])
+            ->availableAsPrerequisiteFor($studentProfile->studentSet, $semester)
+            ->get()->sortByDesc(fn (CourseOffering $offering): string => sprintf('%04d-%02d',
+                $offering->academicSessionSemester->academicSession->start_year,
+                $offering->academicSessionSemester->semester->sort_order,
+            ))->unique('course_id')->keyBy('course_id');
+        $outstanding = $earlierOfferings->mapWithKeys(function (CourseOffering $offering) use ($attempts, $passedCourseIds): array {
+            $courseId = (int) $offering->course_id;
+            if (in_array($courseId, $passedCourseIds, true)) {
+                return [];
+            }
+
+            $lastAttempt = $attempts->get($courseId)?->last();
+            if ($lastAttempt instanceof CourseRegistrationItem) {
+                if ($lastAttempt->courseOffering?->results_published_at === null || $lastAttempt->grade !== 'F') {
+                    return [];
+                }
+
+                return [$courseId => 'carryover'];
+            }
+
+            return [$courseId => 'deferred'];
+        });
+        $currentOfferings = CourseOffering::query()
             ->with(['course', 'prerequisiteCourses'])
             ->whereBelongsTo($semester, 'academicSessionSemester')
             ->whereHas('course', fn ($query) => $query
                 ->where('student_set_id', $studentProfile->student_set_id))
-            ->get()
-            ->map(fn (CourseOffering $offering): array => $this->courseOptionPayload($offering, $passedCourseIds))
+            ->get();
+        $availableCourses = $currentOfferings
+            ->filter(fn (CourseOffering $offering): bool => ! in_array((int) $offering->course_id, $passedCourseIds, true)
+                && (! $offering->is_retake_only || $outstanding->has((int) $offering->course_id)))
+            ->map(fn (CourseOffering $offering): array => $this->courseOptionPayload(
+                $offering, $passedCourseIds, $outstanding->get((int) $offering->course_id, 'scheduled'),
+            ))
+            ->concat($earlierOfferings
+                ->filter(fn (CourseOffering $offering): bool => $outstanding->has((int) $offering->course_id)
+                    && ! $currentOfferings->contains('course_id', $offering->course_id))
+                ->map(fn (CourseOffering $offering): array => $this->courseOptionPayload(
+                    $offering, $passedCourseIds, $outstanding->get((int) $offering->course_id),
+                )))
             ->sortBy(fn (array $course): string => $course['code'])
             ->values();
 
@@ -75,11 +117,11 @@ class CourseRegistrationPlanner
             return $course;
         })->values();
 
-        $duplicateCode = $selected->pluck('code')->duplicates()->first();
+        $duplicateCode = $selected->pluck('courseId')->duplicates()->first();
 
-        if (is_string($duplicateCode) && $duplicateCode !== '') {
+        if ($duplicateCode !== null) {
             throw ValidationException::withMessages([
-                'items' => "{$duplicateCode} appears more than once. Keep one entry for that course.",
+                'items' => 'The same course appears more than once. Keep one entry for that course.',
             ]);
         }
 
@@ -106,6 +148,8 @@ class CourseRegistrationPlanner
         return collect([
             ['normal', 'Normal Courses'],
             ['elective', 'Elective Courses'],
+            ['carryover', 'Carryover Courses'],
+            ['deferred', 'Deferred Courses'],
         ])->map(fn (array $group): array => [
             'key' => $group[0],
             'title' => $group[1],
@@ -114,15 +158,17 @@ class CourseRegistrationPlanner
     }
 
     /** @return array<string, mixed> */
-    private function courseOptionPayload(CourseOffering $offering, array $passedCourseIds): array
+    private function courseOptionPayload(CourseOffering $offering, array $passedCourseIds, string $origin): array
     {
-        $category = $offering->is_elective ? 'elective' : 'normal';
+        $category = $origin === 'scheduled' ? ($offering->is_elective ? 'elective' : 'normal') : $origin;
         $missingPrerequisites = $offering->prerequisiteCourses
             ->reject(fn ($course): bool => in_array((int) $course->id, $passedCourseIds, true))
             ->pluck('code')->sort()->values()->all();
 
         return [
             'courseOfferingId' => (int) $offering->id,
+            'courseId' => (int) $offering->course_id,
+            'assignmentOrigin' => $origin,
             'code' => $offering->course->code,
             'title' => $offering->course_title,
             'units' => (int) $offering->credit_units,

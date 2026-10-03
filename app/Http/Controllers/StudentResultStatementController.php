@@ -27,7 +27,7 @@ class StudentResultStatementController extends Controller
         $statement = $this->statements->build($student);
         abort_if($statement['periods'] === [], 404);
 
-        $path = tempnam(sys_get_temp_dir(), 'gm-statement-');
+        $path = tempnam(sys_get_temp_dir(), 'acms-statement-');
         if ($path === false) {
             throw new RuntimeException('Could not prepare the Word document.');
         }
@@ -42,7 +42,7 @@ class StudentResultStatementController extends Controller
 
         return response()->download(
             $path,
-            'results-to-date-'.(Str::slug($student->registration_number) ?: 'student').'.docx',
+            'results-'.(Str::slug($statement['student']['name']) ?: 'student').'-'.Str::slug($student->registration_number).'-'.now()->format('Ymd').'.docx',
             ['Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
         )->deleteFileAfterSend(true);
     }

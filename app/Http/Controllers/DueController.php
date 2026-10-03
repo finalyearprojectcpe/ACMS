@@ -57,24 +57,27 @@ class DueController extends Controller
             ]);
         }
 
-        $due = Due::query()->create([
-            'advisor_profile_id' => $advisor->id,
-            'student_set_id' => $set->id,
-            'academic_session_id' => $session->id,
-            'academic_session_semester_id' => $semester?->id,
-            'payment_account_id' => $account?->id,
-            'title' => $validated['title'],
-            'description' => $validated['description'] ?? null,
-            'amount_kobo' => (int) $validated['amount_naira'] * 100,
-            'currency' => 'NGN',
-            'due_on' => $validated['due_on'] ?? null,
-            'status' => $isPublishing ? Due::StatusPublished : Due::StatusDraft,
-            'published_at' => $isPublishing ? now() : null,
-        ]);
+        $due = DB::transaction(function () use ($advisor, $set, $session, $semester, $account, $validated, $isPublishing): Due {
+            $due = Due::query()->create([
+                'advisor_profile_id' => $advisor->id,
+                'student_set_id' => $set->id,
+                'academic_session_id' => $session->id,
+                'academic_session_semester_id' => $semester?->id,
+                'payment_account_id' => $account?->id,
+                'title' => $validated['title'],
+                'description' => $validated['description'] ?? null,
+                'amount_kobo' => (int) $validated['amount_naira'] * 100,
+                'currency' => 'NGN',
+                'status' => $isPublishing ? Due::StatusPublished : Due::StatusDraft,
+                'published_at' => $isPublishing ? now() : null,
+            ]);
 
-        if ($isPublishing) {
-            $this->dueAssignments->syncForDue($due);
-        }
+            if ($isPublishing) {
+                $this->dueAssignments->syncForDue($due);
+            }
+
+            return $due;
+        });
 
         return to_route('dashboard.dues.show', ['due' => $due])
             ->with('success', $isPublishing ? 'Due published for the selected set.' : 'Due draft saved.');
@@ -131,7 +134,6 @@ class DueController extends Controller
                 'title' => $validated['title'],
                 'description' => $validated['description'] ?? null,
                 'amount_kobo' => $amountKobo,
-                'due_on' => $validated['due_on'] ?? null,
                 'status' => $wasPublished || $isPublishing ? Due::StatusPublished : Due::StatusDraft,
                 'published_at' => $wasPublished ? $due->published_at : ($isPublishing ? now() : null),
             ])->save();
@@ -172,7 +174,7 @@ class DueController extends Controller
         $this->dueAssignments->archive($due);
 
         return to_route('dashboard.dues.show', ['due' => $due])
-            ->with('success', 'Due archived. Students can no longer start new payments for it.');
+            ->with('success', 'Due archived. It no longer restricts result access.');
     }
 
     public function restore(Request $request, Due $due): RedirectResponse
@@ -197,7 +199,7 @@ class DueController extends Controller
         $this->dueAssignments->syncForDue($due);
 
         return to_route('dashboard.dues.show', ['due' => $due])
-            ->with('success', 'Due restored. Pending students can pay it again.');
+            ->with('success', 'Due restored. Unpaid students must settle it to view applicable results.');
     }
 
     public function waive(

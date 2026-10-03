@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['course_registration_id', 'course_offering_id', 'is_elective', 'course_code', 'course_title', 'credit_units', 'grade', 'missing_script', 'graded_at'])]
+#[Fillable(['course_registration_id', 'course_offering_id', 'is_elective', 'assignment_origin', 'course_code', 'course_title', 'credit_units', 'grade', 'missing_script', 'graded_at'])]
 class CourseRegistrationItem extends Model
 {
     /** @use HasFactory<CourseRegistrationItemFactory> */

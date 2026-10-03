@@ -1,14 +1,12 @@
 import {
     createStudentSet,
     paymentHistory,
-    registrationActivity,
 } from '@/actions/App/Http/Controllers/DashboardController';
 import { ActionLink } from '@/components/action-link';
-import {
-    ActivityPaymentsTable,
-    ActivityRegistrationsTable,
-} from '@/components/adviser-activity-tables';
+import { ActivityPaymentsTable } from '@/components/adviser-activity-tables';
 import { JoinRequestsTable } from '@/components/adviser-join-requests-dashboard';
+import { PersonCell } from '@/components/person-cell';
+import { TableEmptyRow } from '@/components/table-empty-row';
 import {
     Empty,
     EmptyContent,
@@ -16,7 +14,14 @@ import {
     EmptyHeader,
     EmptyTitle,
 } from '@/components/ui/empty';
-import { index as joinRequests } from '@/routes/student-joins/adviser';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
 import type { DashboardAdviserHome } from '@/types';
 
 export function AdviserHomeDashboard({ home }: { home: DashboardAdviserHome }) {
@@ -44,32 +49,66 @@ export function AdviserHomeDashboard({ home }: { home: DashboardAdviserHome }) {
                 <section className="min-w-0">
                     <header className="flex flex-row items-center justify-between gap-3 border-b border-border px-2 py-4 sm:px-3">
                         <h2 className="text-base font-semibold">
-                            Course Registrations to Review
+                            Students Needing Courses
                         </h2>
                         <span className="text-sm text-muted-foreground tabular-nums">
-                            {home.pendingCount} waiting
+                            {home.unassignedCount} unassigned
                         </span>
                     </header>
                     <div className="border-b">
-                        <ActivityRegistrationsTable
-                            registrations={home.pendingRegistrations}
-                            compact
-                        />
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead className="w-12 text-center">
+                                        S/N
+                                    </TableHead>
+                                    <TableHead>Student</TableHead>
+                                    <TableHead>Semester</TableHead>
+                                    <TableHead className="text-right">
+                                        Action
+                                    </TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {home.unassignedStudents.length === 0 ? (
+                                    <TableEmptyRow colSpan={4}>
+                                        All current students have courses
+                                        assigned.
+                                    </TableEmptyRow>
+                                ) : (
+                                    home.unassignedStudents.map(
+                                        (student, index) => (
+                                            <TableRow key={student.url}>
+                                                <TableCell className="text-center text-muted-foreground tabular-nums">
+                                                    {index + 1}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <PersonCell
+                                                        name={student.name}
+                                                        avatar={student.avatar}
+                                                        secondary={`${student.registrationNumber} · ${student.set}`}
+                                                        href={
+                                                            student.profileUrl
+                                                        }
+                                                    />
+                                                </TableCell>
+                                                <TableCell>
+                                                    {student.period}
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <ActionLink
+                                                        href={student.url}
+                                                    >
+                                                        Assign Courses
+                                                    </ActionLink>
+                                                </TableCell>
+                                            </TableRow>
+                                        ),
+                                    )
+                                )}
+                            </TableBody>
+                        </Table>
                     </div>
-                    {home.pendingCount > home.pendingRegistrations.length && (
-                        <footer className="flex justify-end px-3 py-3">
-                            <ActionLink
-                                href={registrationActivity({
-                                    query: { status: 'submitted' },
-                                })}
-                            >
-                                +
-                                {home.pendingCount -
-                                    home.pendingRegistrations.length}{' '}
-                                more
-                            </ActionLink>
-                        </footer>
-                    )}
                 </section>
                 <section className="min-w-0">
                     <header className="flex items-center justify-between gap-3 border-b border-border px-2 py-4 sm:px-3">
@@ -81,13 +120,9 @@ export function AdviserHomeDashboard({ home }: { home: DashboardAdviserHome }) {
                                 {home.requestCount} pending
                             </span>
                         </div>
-                        <ActionLink href={joinRequests()}>View all</ActionLink>
                     </header>
                     <div className="border-b">
-                        <JoinRequestsTable
-                            requests={home.recentRequests}
-                            compact
-                        />
+                        <JoinRequestsTable requests={home.recentRequests} />
                     </div>
                 </section>
                 <section className="min-w-0">

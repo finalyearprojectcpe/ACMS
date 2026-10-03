@@ -2,76 +2,71 @@
 
 namespace App\Services;
 
-use PhpOffice\PhpWord\IOFactory;
 use PhpOffice\PhpWord\PhpWord;
 
 class ResultStatementWord
 {
+    public function __construct(private readonly WordDocumentLayout $layout) {}
+
     /** @param array<string, mixed> $statement */
     public function save(array $statement, string $path): void
     {
         $word = new PhpWord;
-        $word->setDefaultFontName('Aptos');
-        $word->setDefaultFontSize(10);
-        $word->getDocInfo()->setTitle('Student Results to Date');
-        $section = $word->addSection([
-            'marginTop' => 1050,
-            'marginBottom' => 1050,
-            'marginLeft' => 1100,
-            'marginRight' => 1100,
-        ]);
-
-        $section->addText('STUDENT RESULTS TO DATE', ['bold' => true, 'size' => 15], ['spaceAfter' => 100]);
-        $section->addText('Editable result statement | Not an official transcript', ['color' => '64748B', 'size' => 9], ['spaceAfter' => 260]);
         $student = $statement['student'];
-        $section->addText('Student: '.$student['name'], ['bold' => true]);
-        $section->addText('Registration number: '.$student['registrationNumber']);
-        $section->addText('Entry set: '.$student['set']);
-        $section->addText('Course adviser: '.$student['adviser']);
-        $section->addText('As of: '.$statement['asOf'], ['color' => '64748B'], ['spaceAfter' => 260]);
+        $title = 'Statement of Results for '.$student['name'];
+        $section = $this->layout->addSection($word, $title);
+        $this->layout->addTitle($section, $title);
+        $this->layout->addMetadata($section, [
+            ['label' => 'Registration number', 'value' => $student['registrationNumber']],
+            ['label' => 'Student set', 'value' => $student['set']],
+            ['label' => 'Course adviser', 'value' => $student['adviser']],
+            ['label' => 'As of', 'value' => $statement['asOf']],
+        ]);
 
         foreach ($statement['periods'] as $period) {
             $section->addText(
-                $period['level'].' | '.$period['semester'].' | '.$period['session'],
+                $period['level'].' · '.$period['semester'],
                 ['bold' => true, 'size' => 11],
-                ['spaceBefore' => 160, 'spaceAfter' => 90, 'keepNext' => true],
+                ['spaceBefore' => 280, 'spaceAfter' => 35, 'keepNext' => true],
             );
+            $section->addText($period['session'], ['size' => 9], ['spaceAfter' => 95, 'keepNext' => true]);
 
-            $table = $section->addTable([
-                'borderSize' => 5,
-                'borderColor' => 'CBD5E1',
-                'cellMargin' => 80,
-            ]);
-            $table->addRow(null, ['tblHeader' => true]);
-            foreach ([['Course', 1550], ['Course title', 5050], ['Units', 900], ['Grade', 1450]] as [$heading, $width]) {
-                $table->addCell($width, ['bgColor' => 'E8EDF1'])
-                    ->addText($heading, ['bold' => true, 'size' => 9]);
+            $table = $section->addTable(WordDocumentLayout::TABLE_STYLE);
+            $table->addRow(null, ['tblHeader' => true, 'cantSplit' => true]);
+            foreach ([['Course', 1450], ['Course title', 4850], ['Units', 1100], ['Grade', 1600]] as [$heading, $width]) {
+                $alignment = in_array($heading, ['Units', 'Grade'], true) ? 'right' : 'left';
+                $table->addCell($width, WordDocumentLayout::HEADER_CELL_STYLE)
+                    ->addText($heading, ['bold' => true, 'size' => 9], ['alignment' => $alignment]);
             }
 
             foreach ($period['courses'] as $course) {
-                $table->addRow();
-                $table->addCell(1550)->addText($course['code']);
-                $table->addCell(5050)->addText($course['title']);
-                $table->addCell(900)->addText((string) $course['units']);
-                $table->addCell(1450)->addText($course['grade']);
+                $table->addRow(null, ['cantSplit' => true]);
+                $table->addCell(1450)->addText($course['code']);
+                $table->addCell(4850)->addText($course['title']);
+                $table->addCell(1100)->addText((string) $course['units'], [], ['alignment' => 'right']);
+                $table->addCell(1600)->addText($course['grade'], [], ['alignment' => 'right']);
             }
 
-            $table->addRow();
-            $table->addCell(1550, ['bgColor' => 'F2F5F7'])->addText('Published units', ['bold' => true]);
-            $table->addCell(5050, ['bgColor' => 'F2F5F7'])->addText('');
-            $table->addCell(900, ['bgColor' => 'F2F5F7'])->addText((string) $period['publishedUnits'], ['bold' => true]);
-            $table->addCell(1450, ['bgColor' => 'F2F5F7'])->addText('');
+            $table->addRow(null, ['cantSplit' => true]);
+            $table->addCell(6300, ['gridSpan' => 2, ...WordDocumentLayout::TOTAL_CELL_STYLE])
+                ->addText('Total Units', ['bold' => true]);
+            $table->addCell(1100, WordDocumentLayout::TOTAL_CELL_STYLE)
+                ->addText((string) $period['totalUnits'], ['bold' => true], ['alignment' => 'right']);
+            $table->addCell(1600, WordDocumentLayout::TOTAL_CELL_STYLE);
 
             $gpa = $period['gpa'] === null ? 'Not available' : number_format($period['gpa'], 2);
-            $section->addText('Semester GPA: '.$gpa, ['bold' => true], ['spaceBefore' => 80]);
-            if ($period['awaitingPublication'] > 0) {
-                $section->addText($period['awaitingPublication'].' course result(s) awaiting publication.', ['color' => '64748B', 'size' => 9]);
-            }
+            $section->addText('Semester GPA  '.$gpa, ['bold' => true], [
+                'alignment' => 'right',
+                'spaceBefore' => 95,
+            ]);
         }
 
         $cgpa = $statement['cgpa'] === null ? 'Not available' : number_format($statement['cgpa'], 2);
-        $section->addText('Current official CGPA: '.$cgpa, ['bold' => true, 'size' => 11], ['spaceBefore' => 220]);
+        $section->addText('Cumulative GPA  '.$cgpa, ['bold' => true, 'size' => 11], [
+            'alignment' => 'right',
+            'spaceBefore' => 250,
+        ]);
 
-        IOFactory::createWriter($word, 'Word2007')->save($path);
+        $this->layout->save($word, $path);
     }
 }

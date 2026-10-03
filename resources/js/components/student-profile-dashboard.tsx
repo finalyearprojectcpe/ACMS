@@ -7,20 +7,11 @@ import { EditableProfilePhoto } from '@/components/editable-profile-photo';
 import { ProfilePasswordField } from '@/components/profile-password-field';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardForm } from '@/components/ui/card';
-import {
-    Field,
-    FieldError,
-    FieldGroup,
-    FieldLabel,
-} from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
+import { FieldError, FieldGroup } from '@/components/ui/field';
 import { useProfilePhotoInput } from '@/hooks/use-profile-photo-input';
-import { fullNameFor } from '@/lib/person';
 import type { DashboardStudentProfile } from '@/types';
 
 type StudentProfileForm = {
-    surname: string;
-    other_names: string;
     profile_photo: File | null;
     current_password: string;
     password: string;
@@ -34,14 +25,11 @@ export function StudentProfileDashboard({
 }) {
     const photo = useProfilePhotoInput(profile.avatar);
     const form = useForm<StudentProfileForm>({
-        surname: profile.name.surname,
-        other_names: profile.name.otherNames,
         profile_photo: null,
         current_password: '',
         password: '',
         password_confirmation: '',
     });
-    const fullName = fullNameFor(form.data.surname, form.data.other_names);
 
     function selectPhoto(file: File | undefined) {
         photo.select(file);
@@ -78,68 +66,20 @@ export function StudentProfileDashboard({
                             <div className="grid gap-5 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-start">
                                 <EditableProfilePhoto
                                     avatar={photo.preview}
-                                    name={fullName || profile.name.full}
+                                    name={profile.name.full}
                                     inputId="student-profile-photo"
                                     inputRef={photo.inputRef}
                                     onPhotoChange={selectPhoto}
                                     avatarClassName="size-24"
                                 />
 
-                                <div className="grid gap-4 sm:grid-cols-2">
-                                    <Field
-                                        data-invalid={Boolean(
-                                            form.errors.surname,
-                                        )}
-                                    >
-                                        <FieldLabel htmlFor="student-surname">
-                                            Surname
-                                        </FieldLabel>
-                                        <Input
-                                            id="student-surname"
-                                            value={form.data.surname}
-                                            autoComplete="family-name"
-                                            aria-invalid={Boolean(
-                                                form.errors.surname,
-                                            )}
-                                            onChange={(event) =>
-                                                form.setData(
-                                                    'surname',
-                                                    event.target.value,
-                                                )
-                                            }
-                                            required
-                                        />
-                                        <FieldError>
-                                            {form.errors.surname}
-                                        </FieldError>
-                                    </Field>
-                                    <Field
-                                        data-invalid={Boolean(
-                                            form.errors.other_names,
-                                        )}
-                                    >
-                                        <FieldLabel htmlFor="student-other-names">
-                                            Other Names
-                                        </FieldLabel>
-                                        <Input
-                                            id="student-other-names"
-                                            value={form.data.other_names}
-                                            autoComplete="given-name"
-                                            aria-invalid={Boolean(
-                                                form.errors.other_names,
-                                            )}
-                                            onChange={(event) =>
-                                                form.setData(
-                                                    'other_names',
-                                                    event.target.value,
-                                                )
-                                            }
-                                            required
-                                        />
-                                        <FieldError>
-                                            {form.errors.other_names}
-                                        </FieldError>
-                                    </Field>
+                                <div className="self-center">
+                                    <p className="text-xs text-muted-foreground">
+                                        Official name
+                                    </p>
+                                    <p className="mt-1 font-medium">
+                                        {profile.name.full}
+                                    </p>
                                 </div>
                             </div>
                             <FieldError>{form.errors.profile_photo}</FieldError>

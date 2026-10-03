@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['course_id', 'academic_session_semester_id', 'course_title', 'credit_units', 'is_elective'])]
+#[Fillable(['course_id', 'academic_session_semester_id', 'course_title', 'credit_units', 'is_elective', 'is_retake_only'])]
 class CourseOffering extends Model
 {
     /** @use HasFactory<CourseOfferingFactory> */
@@ -95,6 +95,7 @@ class CourseOffering extends Model
         return [
             'credit_units' => 'integer',
             'is_elective' => 'boolean',
+            'is_retake_only' => 'boolean',
             'results_published_at' => 'datetime',
         ];
     }

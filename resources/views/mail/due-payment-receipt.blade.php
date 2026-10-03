@@ -11,8 +11,8 @@ Your PDF receipt is attached to this email.
 Download receipt
 </x-mail::button>
 
-The download link is available for seven days. Your receipt remains available from your GradeManager dues page after the link expires.
+The download link is available for seven days. Your receipt remains available from your ACMS dues page after the link expires.
 
 {{ $courseAdviserName }}<br>
-GradeManager
+ACMS
 </x-mail::message>

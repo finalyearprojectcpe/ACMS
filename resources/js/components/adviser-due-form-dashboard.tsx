@@ -57,7 +57,6 @@ type DueFormData = {
     title: string;
     description: string;
     amount_naira: string;
-    due_on: string;
 };
 
 export function AdviserDueFormDashboard({
@@ -73,7 +72,6 @@ export function AdviserDueFormDashboard({
         title: form.defaults.title,
         description: form.defaults.description,
         amount_naira: form.defaults.amountNaira,
-        due_on: form.defaults.dueOn,
     });
     const payoutAccount = form.paymentAccounts[0] ?? null;
     const selectedSession = form.sessions.find(
@@ -133,7 +131,7 @@ export function AdviserDueFormDashboard({
                             </Alert>
                         ) : null}
                         <FieldError>{dueForm.errors.student_set_id}</FieldError>
-                        <FieldGroup className="grid gap-5 sm:grid-cols-2">
+                        <FieldGroup className="max-w-sm">
                             <Field
                                 data-invalid={Boolean(
                                     dueForm.errors.academic_session_id,
@@ -290,25 +288,6 @@ export function AdviserDueFormDashboard({
                                     {dueForm.errors.amount_naira}
                                 </FieldError>
                             </Field>
-                            <Field
-                                data-invalid={Boolean(dueForm.errors.due_on)}
-                            >
-                                <FieldLabel htmlFor="due-date">
-                                    Due Date
-                                </FieldLabel>
-                                <Input
-                                    id="due-date"
-                                    type="date"
-                                    value={dueForm.data.due_on}
-                                    onChange={(event) =>
-                                        dueForm.setData(
-                                            'due_on',
-                                            event.target.value,
-                                        )
-                                    }
-                                />
-                                <FieldError>{dueForm.errors.due_on}</FieldError>
-                            </Field>
                         </FieldGroup>
                     </CardContent>
                     <CardFooter className="justify-end gap-2 bg-muted/20">
@@ -346,22 +325,68 @@ export function AdviserDueFormDashboard({
                                         ? 'Save Changes'
                                         : 'Save Draft'}
                                 </Button>
-                                <Button
-                                    type="button"
-                                    disabled={
+                                <PublishDueConfirmation
+                                    title={dueForm.data.title}
+                                    period={
+                                        selectedSession?.semesters.find(
+                                            (semester) =>
+                                                semester.id.toString() ===
+                                                dueForm.data
+                                                    .academic_session_semester_id,
+                                        )?.name ?? 'the whole session'
+                                    }
+                                    processing={
                                         dueForm.processing || !payoutAccount
                                     }
-                                    onClick={() => submit('publish')}
-                                >
-                                    <RiSendPlaneLine />
-                                    Publish
-                                </Button>
+                                    onConfirm={() => submit('publish')}
+                                />
                             </>
                         )}
                     </CardFooter>
                 </CardForm>
             </Card>
         </div>
+    );
+}
+
+function PublishDueConfirmation({
+    title,
+    period,
+    processing,
+    onConfirm,
+}: {
+    title: string;
+    period: string;
+    processing: boolean;
+    onConfirm: () => void;
+}) {
+    return (
+        <AlertDialog>
+            <AlertDialogTrigger asChild>
+                <Button type="button" disabled={processing}>
+                    <RiSendPlaneLine />
+                    Publish
+                </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>
+                        Publish {title || 'this due'}?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Students must pay or be waived before they can view
+                        results for {period}. Published dues are also assigned
+                        to students who join this set later.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Keep Draft</AlertDialogCancel>
+                    <AlertDialogAction onClick={onConfirm}>
+                        Publish Due
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
     );
 }
 

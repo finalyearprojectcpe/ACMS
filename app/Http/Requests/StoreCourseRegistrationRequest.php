@@ -13,7 +13,7 @@ class StoreCourseRegistrationRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user()?->isStudent() === true;
+        return $this->user()?->isAdviser() === true;
     }
 
     /**
@@ -24,10 +24,9 @@ class StoreCourseRegistrationRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'action' => ['required', Rule::in(['save', 'submit'])],
-            'session' => ['required', 'string', 'regex:/^\d{8}$/'],
-            'semester' => ['required', Rule::in(['first', 'second'])],
-            'items' => [$this->input('action') === 'submit' ? 'required' : 'present', 'array', $this->input('action') === 'submit' ? 'min:1' : 'min:0', 'max:24'],
+            'action' => ['required', Rule::in(['draft', 'assign'])],
+            'from' => ['sometimes', Rule::in(['home', 'profile'])],
+            'items' => ['present', 'array', $this->input('action') === 'assign' ? 'min:1' : 'min:0', 'max:30'],
             'items.*.course_offering_id' => ['required', 'integer', 'distinct', 'exists:course_offerings,id'],
         ];
     }
@@ -38,8 +37,7 @@ class StoreCourseRegistrationRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'items.required' => 'Select at least one course before saving this registration.',
-            'items.min' => 'Select at least one course before saving this registration.',
+            'items.min' => 'Select at least one course before assigning courses to this student.',
             'items.*.course_offering_id.distinct' => 'A course appears more than once. Remove the duplicate course and try again.',
         ];
     }

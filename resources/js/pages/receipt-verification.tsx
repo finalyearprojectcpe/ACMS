@@ -39,7 +39,7 @@ export default function ReceiptVerificationPage({
                             <span className="grid size-11 shrink-0 place-items-center bg-background ring-1 ring-border dark:bg-foreground">
                                 <img
                                     src="/logo.png"
-                                    alt="GradeManager"
+                                    alt="ACMS"
                                     className="size-8 object-contain"
                                 />
                             </span>
@@ -48,7 +48,7 @@ export default function ReceiptVerificationPage({
                                     Payment Receipt Verification
                                 </CardTitle>
                                 <p className="mt-1 text-sm text-muted-foreground">
-                                    GradeManager payment record
+                                    ACMS payment record
                                 </p>
                             </div>
                         </div>

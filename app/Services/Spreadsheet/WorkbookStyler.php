@@ -256,6 +256,6 @@ class WorkbookStyler
 
     private function productName(): string
     {
-        return (string) config('app.name', 'GradeManager');
+        return (string) config('app.name', 'ACMS');
     }
 }

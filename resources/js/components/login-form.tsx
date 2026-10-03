@@ -106,8 +106,8 @@ export function LoginForm({ className, ...props }: ComponentProps<'div'>) {
                                     </Link>
                                 </Button>
                             </FieldDescription>
-                            <p className="text-center text-xs text-muted-foreground">
-                                Students join through their class signup link.
+                            <p className="text-center text-xs font-medium text-muted-foreground/60">
+                                Students can only join via invite link.
                             </p>
                         </AuthFormActions>
                     </Field>

@@ -11,27 +11,27 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Stores a student's semester course registration for adviser review and approval.
+        // Stores the courses assigned to a student by their adviser for a semester.
         Schema::create('course_registrations', function (Blueprint $table) {
             $table->id();
             $table->foreignId('student_profile_id')->constrained()->cascadeOnDelete();
             $table->foreignId('academic_session_semester_id')->constrained()->cascadeOnDelete();
             $table->string('status')->default('draft');
-            $table->text('feedback_note')->nullable();
-            $table->timestamp('submitted_at')->nullable();
-            $table->timestamp('reviewed_at')->nullable();
+            $table->foreignId('assigned_by_user_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->timestamp('assigned_at')->nullable();
             $table->timestamps();
 
             $table->unique(['student_profile_id', 'academic_session_semester_id']);
             $table->index(['academic_session_semester_id', 'status']);
         });
 
-        // Stores the individual courses selected on a student's semester registration.
+        // Stores the individual courses in a student's semester assignment.
         Schema::create('course_registration_items', function (Blueprint $table) {
             $table->id();
             $table->foreignId('course_registration_id')->constrained()->cascadeOnDelete();
             $table->foreignId('course_offering_id')->constrained()->restrictOnDelete();
             $table->boolean('is_elective')->default(false);
+            $table->string('assignment_origin')->default('scheduled');
             $table->string('course_code');
             $table->string('course_title');
             $table->unsignedTinyInteger('credit_units');

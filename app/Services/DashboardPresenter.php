@@ -6,7 +6,6 @@ use App\Honorific;
 use App\Models\AcademicSession;
 use App\Models\AcademicYear;
 use App\Models\AdvisorProfile;
-use App\Models\CourseRegistration;
 use App\Models\StudentProfile;
 use App\Models\StudentSet;
 use Illuminate\Support\Collection;
@@ -27,7 +26,7 @@ class DashboardPresenter
     ): array {
         $selectedSet = $sets->firstWhere('id', $selectedSetId) ?? $sets->first();
         $students = $advisor->students()
-            ->with(['user', 'studentSet.currentAcademicYear'])
+            ->with(['user', 'studentSet.currentAcademicYear', 'latestJoinRequest.user', 'advisorProfile.user'])
             ->when(
                 $selectedSet instanceof StudentSet,
                 fn ($query) => $query->where('student_set_id', $selectedSet->id),
@@ -35,18 +34,13 @@ class DashboardPresenter
             )
             ->get()
             ->sortBy(
-                fn (StudentProfile $student): string => Str::lower($student->user->name),
+                fn (StudentProfile $student): string => Str::lower($student->official_name),
                 SORT_NATURAL,
             )
             ->values();
 
-        $cgpas = CourseRegistration::query()
-            ->whereIn('student_profile_id', $students->pluck('id'))
-            ->where('status', CourseRegistration::StatusApproved)
-            ->with(['items.courseOffering', 'academicSessionSemester.academicSession', 'academicSessionSemester.semester'])
-            ->get()
-            ->groupBy('student_profile_id')
-            ->map(fn (Collection $registrations): ?float => $this->results->studentPeriods($registrations)->last()['cgpa'] ?? null);
+        $cgpas = $this->results->summaryRowsForStudents($students->pluck('id'))
+            ->map(fn (Collection $periods): ?float => $periods->last()['cgpa'] ?? null);
 
         return [
             'assignedSets' => $sets->map(fn (StudentSet $set): array => $this->studentSet($set))->values()->all(),
@@ -60,18 +54,31 @@ class DashboardPresenter
     {
         $student->loadMissing([
             'user',
+            'latestJoinRequest.user',
             'studentSet.currentAcademicYear',
             'advisorProfile.user',
         ]);
 
+        $claim = $student->latestJoinRequest;
+        $emailAccount = $student->user ?? $claim?->user;
+
         return [
             'id' => (int) $student->id,
-            'fullName' => $student->user->name,
-            'email' => $student->user->email,
+            'fullName' => $student->official_name,
+            'email' => $emailAccount?->email_verified_at !== null ? $emailAccount->email : null,
+            'emailUnverified' => $emailAccount !== null
+                && ($emailAccount->email_verified_at === null || $student->user?->pending_email !== null),
+            'pendingEmail' => $student->user?->pending_email,
             'registrationNumber' => $student->registration_number,
             'registrationRouteValue' => $student->routeRegistrationNumber(),
             'cgpa' => $cgpa,
-            'avatar' => $student->user->profilePhotoUrl(),
+            'avatar' => $student->user?->profilePhotoUrl(),
+            'accountStatus' => $student->user_id !== null ? 'active' : match ($claim?->status) {
+                'pending' => $claim->user?->email_verified_at === null ? 'verify_email' : 'review',
+                'rejected' => 'declined',
+                default => 'not_joined',
+            },
+            'claimId' => $claim?->status === 'pending' ? $claim->public_id : null,
             'currentLevel' => $student->studentSet->currentAcademicYear instanceof AcademicYear
                 ? $this->level($student->studentSet->currentAcademicYear)
                 : null,
@@ -107,14 +114,8 @@ class DashboardPresenter
 
     public function studentProfile(StudentProfile $student): array
     {
-        [$surname, $otherNames] = $this->splitName($student->user->name);
-
         return [
-            'name' => [
-                'full' => $student->user->name,
-                'surname' => $surname,
-                'otherNames' => $otherNames,
-            ],
+            'name' => ['full' => $student->official_name],
             'avatar' => $student->user->profilePhotoUrl(),
         ];
     }
@@ -199,13 +200,5 @@ class DashboardPresenter
     public function amount(int $amountKobo): string
     {
         return $this->currency->nairaFromKobo($amountKobo);
-    }
-
-    /** @return array{0: string, 1: string} */
-    private function splitName(string $name): array
-    {
-        $parts = preg_split('/\s+/', trim($name), 2);
-
-        return [$parts[0] ?? '', $parts[1] ?? ''];
     }
 }

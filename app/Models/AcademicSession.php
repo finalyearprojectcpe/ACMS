@@ -55,11 +55,12 @@ class AcademicSession extends Model
 
     public function hasAcademicRecords(): bool
     {
-        return $this->semesterInstances()
-            ->where(fn ($query) => $query
-                ->whereHas('courseOfferings')
-                ->orWhereHas('courseRegistrations'))
-            ->exists();
+        return Due::query()->where('academic_session_id', $this->id)->exists()
+            || $this->semesterInstances()
+                ->where(fn ($query) => $query
+                    ->whereHas('courseOfferings')
+                    ->orWhereHas('courseRegistrations'))
+                ->exists();
     }
 
     /**

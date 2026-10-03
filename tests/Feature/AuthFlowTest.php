@@ -22,10 +22,10 @@ test('demo users are seeded with profiles and can login', function () {
     $this->seed(DatabaseSeeder::class);
 
     $adviser = User::query()
-        ->where('email', 'staff1@futo.edu')
+        ->where('email', 'staff1@futo.edu.ng')
         ->firstOrFail();
     $student = User::query()
-        ->where('email', 'student1@futo.edu')
+        ->where('email', 'student1@futo.edu.ng')
         ->firstOrFail();
 
     expect($adviser->account_type)->toBe(AccountType::Adviser)
@@ -36,7 +36,7 @@ test('demo users are seeded with profiles and can login', function () {
         ->and($student->studentProfile->registration_number)->toBe('2024000001');
 
     $response = $this->post(route('login.store'), [
-        'email' => 'staff1@futo.edu',
+        'email' => 'staff1@futo.edu.ng',
         'password' => 'password',
     ]);
 

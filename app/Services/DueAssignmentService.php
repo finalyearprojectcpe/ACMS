@@ -99,8 +99,16 @@ class DueAssignmentService
                 return $assignment;
             }
 
+            $settlement = $assignment->payments()
+                ->where('status', DuePayment::StatusSuccess)
+                ->orderByDesc('paid_at')
+                ->first();
+
             $assignment->forceFill([
-                'status' => StudentDueAssignment::StatusPending,
+                'status' => $settlement ? StudentDueAssignment::StatusPaid : StudentDueAssignment::StatusPending,
+                'amount_kobo' => $settlement?->amount_kobo ?? $assignment->amount_kobo,
+                'paid_at' => $settlement?->paid_at,
+                'latest_due_payment_id' => $settlement?->id,
                 'waived_at' => null,
                 'waived_by_user_id' => null,
                 'waiver_reason' => null,

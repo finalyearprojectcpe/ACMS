@@ -30,20 +30,22 @@ class ResubmitStudentJoinRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'surname' => ['required', 'string', 'max:80'],
-            'other_names' => ['required', 'string', 'max:160'],
             'email' => ['required', 'email', 'max:255', Rule::unique(User::class, 'email')->ignore($this->user()?->id)],
-            'registration_number' => ['required', 'string', 'max:255'],
+            'registration_number' => [
+                Rule::requiredIf(fn (): bool => $this->user()?->studentJoinRequest?->status === StudentJoinRequest::StatusRejected),
+                Rule::prohibitedIf(fn (): bool => $this->user()?->studentJoinRequest?->status === StudentJoinRequest::StatusPending),
+                'string',
+                'max:255',
+            ],
         ];
     }
 
     protected function prepareForValidation(): void
     {
-        $this->merge([
-            'surname' => Str::squish((string) $this->input('surname')),
-            'other_names' => Str::squish((string) $this->input('other_names')),
-            'email' => Str::lower(Str::squish((string) $this->input('email'))),
-            'registration_number' => trim((string) $this->input('registration_number')),
-        ]);
+        $this->merge(['email' => Str::lower(Str::squish((string) $this->input('email')))]);
+
+        if ($this->exists('registration_number')) {
+            $this->merge(['registration_number' => trim((string) $this->input('registration_number'))]);
+        }
     }
 }

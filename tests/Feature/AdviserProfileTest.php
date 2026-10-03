@@ -118,14 +118,14 @@ test('a student cannot update an adviser profile', function () {
         ->assertForbidden();
 });
 
-test('a student can save their name photo and password together', function () {
+test('a student can save their photo and password without changing their official name', function () {
     $student = StudentProfile::factory()->create();
     $disk = User::profilePhotoDisk();
 
     Storage::fake($disk);
     Storage::disk($disk)->put('profile-photos/previous.jpg', 'previous');
     $student->user->forceFill([
-        'name' => 'Old Student Name',
+        'name' => $student->official_name,
         'profile_photo_path' => 'profile-photos/previous.jpg',
     ])->save();
 
@@ -143,7 +143,7 @@ test('a student can save their name photo and password together', function () {
 
     $user = $student->user->refresh();
 
-    expect($user->name)->toBe('Nwosu Adaeze Chioma')
+    expect($user->name)->toBe($student->official_name)
         ->and(Hash::check('NewPassword123!', $user->password))->toBeTrue()
         ->and($user->profile_photo_path)->not->toBeNull();
 

@@ -1,16 +1,18 @@
-import { Link, useForm } from '@inertiajs/react';
+import { Link, router, useForm, usePoll } from '@inertiajs/react';
 import { RiAddLine, RiHistoryLine, RiSendPlane2Line } from '@remixicon/react';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
 
 import {
     reply,
+    retry,
     store,
 } from '@/actions/App/Http/Controllers/AssistantController';
 import {
     assistantConversation,
     section,
 } from '@/actions/App/Http/Controllers/DashboardController';
+import { AssistantSources } from '@/components/assistant-sources';
 import { Button } from '@/components/ui/button';
 import {
     InputGroup,
@@ -37,9 +39,9 @@ import type { DashboardAssistant } from '@/types';
 import type { DashboardRole } from '@/types';
 
 const adviserQuestions = [
-    'Which registrations need my review?',
+    'Which students still need course assignments?',
     'How many students are in my set?',
-    'Who has paid their dues?',
+    'Who has not paid their dues?',
     'What courses are in this semester?',
 ];
 const studentQuestions = [
@@ -62,6 +64,28 @@ export function AdviserAssistantDashboard({
     const messagesEnd = useRef<HTMLDivElement>(null);
     const [exampleIndex, setExampleIndex] = useState(0);
     const [composerFocused, setComposerFocused] = useState(false);
+    const [retrying, setRetrying] = useState(false);
+    const pending = assistant.messages.some(
+        (message) =>
+            message.status === 'queued' || message.status === 'running',
+    );
+    const latestMessageStatus = assistant.messages.at(-1)?.status;
+    const latestMessageId = assistant.messages.at(-1)?.id;
+    const { start: startPolling, stop: stopPolling } = usePoll(
+        2500,
+        { only: ['dashboard'] },
+        { autoStart: false },
+    );
+
+    useEffect(() => {
+        if (pending) {
+            startPolling();
+        } else {
+            stopPolling();
+        }
+
+        return () => stopPolling();
+    }, [pending, startPolling, stopPolling]);
 
     useEffect(() => {
         if (
@@ -89,13 +113,14 @@ export function AdviserAssistantDashboard({
         if (assistant.messages.length > 0) {
             messagesEnd.current?.scrollIntoView({ block: 'end' });
         }
-    }, [assistant.messages.length, assistant.selectedId]);
+    }, [assistant.messages.length, latestMessageStatus, assistant.selectedId]);
 
     function send(event?: FormEvent) {
         event?.preventDefault();
 
         if (
             form.processing ||
+            pending ||
             !assistant.available ||
             form.data.question.trim().length < 3
         ) {
@@ -116,6 +141,19 @@ export function AdviserAssistantDashboard({
         }
     }
 
+    function retryAnswer() {
+        if (assistant.selectedId === null || retrying) {
+            return;
+        }
+
+        setRetrying(true);
+        router.post(
+            retry({ assistantConversation: assistant.selectedId }).url,
+            {},
+            { onFinish: () => setRetrying(false) },
+        );
+    }
+
     const hasMessages = assistant.messages.length > 0;
     const composer = (
         <form onSubmit={send} className="w-full">
@@ -134,7 +172,9 @@ export function AdviserAssistantDashboard({
                     }
                     rows={1}
                     maxLength={1500}
-                    disabled={!assistant.available || form.processing}
+                    disabled={
+                        !assistant.available || form.processing || pending
+                    }
                     className="field-sizing-content max-h-32 min-h-12 px-4 py-3 text-sm leading-6"
                 />
                 {!form.data.question && !composerFocused && (
@@ -162,6 +202,7 @@ export function AdviserAssistantDashboard({
                         disabled={
                             !assistant.available ||
                             form.processing ||
+                            pending ||
                             form.data.question.trim().length < 3
                         }
                         className="size-9 rounded-sm"
@@ -291,35 +332,58 @@ export function AdviserAssistantDashboard({
                                             : 'max-w-[95%] text-sm leading-7'
                                     }
                                 >
-                                    <p className="whitespace-pre-wrap">
-                                        {message.content}
-                                    </p>
                                     {message.role === 'assistant' &&
-                                        message.sources.length > 0 && (
-                                            <div className="mt-4 border-t pt-3">
-                                                <div className="mb-1 text-xs font-medium text-muted-foreground">
-                                                    Sources
-                                                </div>
-                                                <div className="flex flex-wrap gap-x-4 gap-y-1">
-                                                    {message.sources
-                                                        .slice(0, 6)
-                                                        .map((source) => (
-                                                            <Link
-                                                                key={source.url}
-                                                                href={
-                                                                    source.url
-                                                                }
-                                                                className="text-link hover:underline"
-                                                            >
-                                                                {source.title}
-                                                            </Link>
-                                                        ))}
-                                                </div>
-                                            </div>
+                                    (message.status === 'queued' ||
+                                        message.status === 'running') ? (
+                                        <div className="flex items-center gap-2 text-muted-foreground">
+                                            <Spinner />
+                                            {message.status === 'queued'
+                                                ? 'Waiting to start...'
+                                                : 'Preparing your answer...'}
+                                        </div>
+                                    ) : message.role === 'assistant' &&
+                                      message.status === 'failed' ? (
+                                        <div className="flex items-center gap-3 text-destructive">
+                                            <p>
+                                                {message.error ??
+                                                    'The assistant could not answer right now.'}
+                                            </p>
+                                            {message.id === latestMessageId && (
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={retryAnswer}
+                                                    disabled={retrying}
+                                                >
+                                                    {retrying && <Spinner />}
+                                                    Retry
+                                                </Button>
+                                            )}
+                                        </div>
+                                    ) : message.role === 'assistant' &&
+                                      message.html ? (
+                                        <div
+                                            className="assistant-markdown [&_a]:text-link [&_a]:underline [&_a]:underline-offset-2 [&_li]:ml-5 [&_li]:list-disc [&_ol_li]:list-decimal [&_p:not(:last-child)]:mb-3 [&_strong]:font-semibold"
+                                            dangerouslySetInnerHTML={{
+                                                __html: message.html,
+                                            }}
+                                        />
+                                    ) : (
+                                        <p className="whitespace-pre-wrap">
+                                            {message.content}
+                                        </p>
+                                    )}
+                                    {message.role === 'assistant' &&
+                                        message.status === 'completed' && (
+                                            <AssistantSources
+                                                sources={message.sources}
+                                                answer={message.content}
+                                            />
                                         )}
                                 </div>
                             ))}
-                            {form.processing && (
+                            {form.processing && !pending && (
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                     <Spinner /> Checking your records...
                                 </div>
