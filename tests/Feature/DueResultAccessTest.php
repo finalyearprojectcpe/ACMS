@@ -207,10 +207,15 @@ test('student assistant reports locked performance without exposing grades', fun
         'session' => '20262027',
         'semester' => 'second',
     ])), true, flags: JSON_THROW_ON_ERROR);
+    $matchingDues = json_decode((string) $tool->handle(new ToolRequest([
+        'category' => 'dues',
+        'term' => 'student association levy',
+    ])), true, flags: JSON_THROW_ON_ERROR);
 
     expect(collect($firstDues['records'])->pluck('title'))
         ->toContain('Student Association Levy', 'Departmental Dues 300 Level')
         ->and(collect($secondDues['records'])->pluck('title'))
         ->toContain('Student Association Levy')
-        ->not->toContain('Departmental Dues 300 Level');
+        ->not->toContain('Departmental Dues 300 Level')
+        ->and(collect($matchingDues['records'])->pluck('title'))->toContain('Student Association Levy');
 });

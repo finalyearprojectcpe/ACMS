@@ -1,6 +1,6 @@
 import { Link, router } from '@inertiajs/react';
 import { RiAddLine, RiDeleteBinLine, RiEditLine } from '@remixicon/react';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 
 import { destroy as destroyAcademicSession } from '@/actions/App/Http/Controllers/AcademicSessionController';
 import {
@@ -17,6 +17,7 @@ import {
 } from '@/actions/App/Http/Controllers/StudentSetLogoController';
 import { ActionLink } from '@/components/action-link';
 import { AdviserSetWorkspace } from '@/components/adviser-set-workspace-nav';
+import { SetLogoPicker } from '@/components/set-logo-picker';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -34,7 +35,6 @@ import {
     EmptyHeader,
     EmptyTitle,
 } from '@/components/ui/empty';
-import { Input } from '@/components/ui/input';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import {
     Table,
@@ -78,7 +78,6 @@ export function StudentSetSettings({
     const [removingSession, setRemovingSession] = useState(false);
     const [savingLogo, setSavingLogo] = useState(false);
     const [logoError, setLogoError] = useState<string | null>(null);
-    const logoInput = useRef<HTMLInputElement>(null);
     const busy =
         updatingSettings || replacingLink || removingSession || savingLogo;
 
@@ -182,232 +181,187 @@ export function StudentSetSettings({
                         updateSettings({ student_signup_enabled }),
                 }}
             >
-                <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
-                    <div className="border-b border-border p-4 sm:p-5">
-                        <h2 className="text-base font-semibold">
-                            Academic Sessions
-                        </h2>
-                    </div>
-                    {sessions.length === 0 ? (
-                        <Empty className="py-10">
-                            <EmptyHeader>
-                                <EmptyTitle>
-                                    No academic sessions yet
-                                </EmptyTitle>
-                                <EmptyDescription>
-                                    Add the first session for this set.
-                                </EmptyDescription>
-                            </EmptyHeader>
-                        </Empty>
-                    ) : (
-                        <ScrollArea className="h-0 min-h-0 w-full flex-1">
-                            <Table className="min-w-[660px] table-fixed">
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead className="w-28 px-4 sm:px-5">
-                                            Level
-                                        </TableHead>
-                                        <TableHead className="w-40">
-                                            Session
-                                        </TableHead>
-                                        <TableHead className="w-56">
-                                            Current Period
-                                        </TableHead>
-                                        <TableHead className="w-44 pr-4 text-right sm:pr-5">
-                                            Actions
-                                        </TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {sessions.map((session) => (
-                                        <TableRow
-                                            key={session.id}
-                                            className="odd:bg-background even:bg-muted/25"
-                                        >
-                                            <TableCell className="px-4 font-medium sm:px-5">
-                                                {session.level.title}
-                                            </TableCell>
-                                            <TableCell className="tabular-nums">
-                                                {session.name} Session
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center gap-1.5">
-                                                    {session.semesters.map(
-                                                        (semester) => {
-                                                            const selected =
-                                                                session.isCurrent &&
-                                                                session.currentSemesterId ===
-                                                                    semester.id;
-
-                                                            return (
-                                                                <button
-                                                                    key={
-                                                                        semester.id
-                                                                    }
-                                                                    type="button"
-                                                                    disabled={
-                                                                        busy
-                                                                    }
-                                                                    aria-pressed={
-                                                                        selected
-                                                                    }
-                                                                    aria-label={
-                                                                        selected
-                                                                            ? `${session.level.title}, ${semester.name} (${session.name} Session) is current`
-                                                                            : `Make ${session.level.title}, ${semester.name} (${session.name} Session) current`
-                                                                    }
-                                                                    onClick={() =>
-                                                                        changeCurrentPeriod(
-                                                                            session,
-                                                                            semester.id,
-                                                                        )
-                                                                    }
-                                                                    className={`inline-flex min-h-9 min-w-14 items-center justify-center border-2 px-2 text-sm font-bold transition-colors disabled:opacity-50 ${selected ? 'border-emerald-700 bg-emerald-700 text-white dark:border-emerald-500 dark:bg-emerald-600' : 'border-border bg-background text-foreground hover:border-emerald-600 hover:text-emerald-700 dark:hover:text-emerald-300'}`}
-                                                                >
-                                                                    {semester.slug ===
-                                                                    'first'
-                                                                        ? '1st'
-                                                                        : '2nd'}
-                                                                </button>
-                                                            );
-                                                        },
-                                                    )}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="pr-4 text-right sm:pr-5">
-                                                <div className="inline-flex items-center gap-3">
-                                                    <ActionLink
-                                                        href={editAcademicSession(
-                                                            {
-                                                                ...parameters,
-                                                                sessionYears:
-                                                                    sessionRouteYears(
-                                                                        session,
-                                                                    ),
-                                                            },
-                                                        )}
-                                                        icon={
-                                                            <RiEditLine className="size-4" />
-                                                        }
-                                                    >
-                                                        Edit
-                                                    </ActionLink>
-                                                    <button
-                                                        type="button"
-                                                        className="inline-flex items-center gap-1 text-sm font-semibold text-destructive underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
-                                                        disabled={
-                                                            session.isCurrent ||
-                                                            session.hasDependents
-                                                        }
-                                                        title={
-                                                            session.isCurrent
-                                                                ? 'Unset the current session first.'
-                                                                : session.hasDependents
-                                                                  ? 'This session contains courses or course registrations.'
-                                                                  : undefined
-                                                        }
-                                                        onClick={() =>
-                                                            setConfirmation({
-                                                                type: 'remove',
-                                                                session,
-                                                            })
-                                                        }
-                                                    >
-                                                        <RiDeleteBinLine className="size-4" />
-                                                        Remove
-                                                    </button>
-                                                </div>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                            <ScrollBar orientation="horizontal" />
-                        </ScrollArea>
-                    )}
-                    <section className="shrink-0 border-t px-4 py-4 sm:px-5">
-                        <div className="flex flex-wrap items-center justify-between gap-4">
-                            <div className="flex min-w-0 items-center gap-3">
-                                {settings.logoUrl ? (
-                                    <img
-                                        src={settings.logoUrl}
-                                        alt={`${set.name} logo`}
-                                        className="size-16 shrink-0 border bg-white object-contain p-1"
-                                    />
-                                ) : (
-                                    <div className="flex size-16 shrink-0 items-center justify-center border bg-muted/25 text-xs text-muted-foreground">
-                                        No logo
-                                    </div>
-                                )}
-                                <div>
-                                    <h3 className="text-sm font-semibold">
-                                        Receipt Logo
-                                    </h3>
-                                    <p className="text-xs text-muted-foreground">
-                                        Used on new receipts.
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <Input
-                                    ref={logoInput}
-                                    type="file"
-                                    accept="image/png,image/jpeg"
-                                    className="sr-only"
-                                    aria-label="Choose receipt logo"
-                                    onChange={(event) => {
-                                        const file = event.target.files?.[0];
-                                        event.target.value = '';
-
-                                        if (file) {
-                                            uploadLogo(file);
-                                        }
-                                    }}
-                                />
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={busy}
-                                    onClick={() => logoInput.current?.click()}
-                                >
-                                    <RiEditLine />{' '}
-                                    {settings.logoUrl
-                                        ? 'Replace Logo'
-                                        : 'Upload Logo'}
-                                </Button>
-                                {settings.logoUrl && (
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        disabled={busy}
-                                        onClick={() =>
-                                            setConfirmation({ type: 'logo' })
-                                        }
-                                    >
-                                        Remove
-                                    </Button>
-                                )}
-                            </div>
-                        </div>
+                <div className="mx-auto grid min-h-0 w-full max-w-5xl flex-1 grid-rows-[auto_minmax(0,1fr)] gap-6 p-4 sm:p-5 xl:grid-cols-[12rem_minmax(0,1fr)] xl:grid-rows-1 xl:gap-8">
+                    <section className="flex min-w-0 flex-col items-start gap-3 border-b border-border pb-6 xl:border-r xl:border-b-0 xl:pr-6 xl:pb-0">
+                        <h2 className="text-base font-semibold">Set Logo</h2>
+                        <SetLogoPicker
+                            id="settings-set-logo"
+                            src={settings.logoUrl}
+                            disabled={busy}
+                            loading={savingLogo}
+                            onSelect={uploadLogo}
+                            onRemove={
+                                settings.logoUrl
+                                    ? () => setConfirmation({ type: 'logo' })
+                                    : undefined
+                            }
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            Departmental logo preferred.
+                        </p>
                         {logoError && (
                             <p
                                 role="alert"
-                                className="mt-2 text-xs text-destructive"
+                                className="text-xs text-destructive"
                             >
                                 {logoError}
                             </p>
                         )}
                     </section>
-                    <footer className="flex shrink-0 justify-end border-t border-border pt-4">
-                        <Button asChild size="sm">
-                            <Link href={createAcademicSession(parameters)}>
-                                <RiAddLine />
-                                Add Session
-                            </Link>
-                        </Button>
-                    </footer>
+                    <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+                        <div className="border-b border-border pb-3">
+                            <h2 className="text-base font-semibold">
+                                Academic Sessions
+                            </h2>
+                        </div>
+                        {sessions.length === 0 ? (
+                            <Empty className="py-10">
+                                <EmptyHeader>
+                                    <EmptyTitle>
+                                        No academic sessions yet
+                                    </EmptyTitle>
+                                    <EmptyDescription>
+                                        Add the first session for this set.
+                                    </EmptyDescription>
+                                </EmptyHeader>
+                            </Empty>
+                        ) : (
+                            <ScrollArea className="h-72 min-h-0 w-full lg:h-0 lg:flex-1">
+                                <Table className="min-w-[580px] table-fixed">
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead className="w-24 px-3 sm:px-4">
+                                                Level
+                                            </TableHead>
+                                            <TableHead className="w-36">
+                                                Session
+                                            </TableHead>
+                                            <TableHead className="w-40">
+                                                Current Period
+                                            </TableHead>
+                                            <TableHead className="w-40 pr-3 text-right sm:pr-4">
+                                                Actions
+                                            </TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {sessions.map((session) => (
+                                            <TableRow
+                                                key={session.id}
+                                                className="odd:bg-background even:bg-muted/25"
+                                            >
+                                                <TableCell className="px-3 font-medium sm:px-4">
+                                                    {session.level.title}
+                                                </TableCell>
+                                                <TableCell className="tabular-nums">
+                                                    {session.name} Session
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center gap-1.5">
+                                                        {session.semesters.map(
+                                                            (semester) => {
+                                                                const selected =
+                                                                    session.isCurrent &&
+                                                                    session.currentSemesterId ===
+                                                                        semester.id;
+
+                                                                return (
+                                                                    <button
+                                                                        key={
+                                                                            semester.id
+                                                                        }
+                                                                        type="button"
+                                                                        disabled={
+                                                                            busy
+                                                                        }
+                                                                        aria-pressed={
+                                                                            selected
+                                                                        }
+                                                                        aria-label={
+                                                                            selected
+                                                                                ? `${session.level.title}, ${semester.name} (${session.name} Session) is current`
+                                                                                : `Make ${session.level.title}, ${semester.name} (${session.name} Session) current`
+                                                                        }
+                                                                        onClick={() =>
+                                                                            changeCurrentPeriod(
+                                                                                session,
+                                                                                semester.id,
+                                                                            )
+                                                                        }
+                                                                        className={`inline-flex min-h-9 min-w-14 items-center justify-center border-2 px-2 text-sm font-bold transition-colors disabled:opacity-50 ${selected ? 'border-emerald-700 bg-emerald-700 text-white dark:border-emerald-500 dark:bg-emerald-600' : 'border-border bg-background text-foreground hover:border-emerald-600 hover:text-emerald-700 dark:hover:text-emerald-300'}`}
+                                                                    >
+                                                                        {semester.slug ===
+                                                                        'first'
+                                                                            ? '1st'
+                                                                            : '2nd'}
+                                                                    </button>
+                                                                );
+                                                            },
+                                                        )}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="pr-3 text-right sm:pr-4">
+                                                    <div className="inline-flex items-center gap-2">
+                                                        <ActionLink
+                                                            href={editAcademicSession(
+                                                                {
+                                                                    ...parameters,
+                                                                    sessionYears:
+                                                                        sessionRouteYears(
+                                                                            session,
+                                                                        ),
+                                                                },
+                                                            )}
+                                                            icon={
+                                                                <RiEditLine className="size-4" />
+                                                            }
+                                                        >
+                                                            Edit
+                                                        </ActionLink>
+                                                        <button
+                                                            type="button"
+                                                            className="inline-flex items-center gap-1 text-sm font-semibold text-destructive underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                                                            disabled={
+                                                                session.isCurrent ||
+                                                                session.hasDependents
+                                                            }
+                                                            title={
+                                                                session.isCurrent
+                                                                    ? 'Unset the current session first.'
+                                                                    : session.hasDependents
+                                                                      ? 'This session contains courses or course registrations.'
+                                                                      : undefined
+                                                            }
+                                                            onClick={() =>
+                                                                setConfirmation(
+                                                                    {
+                                                                        type: 'remove',
+                                                                        session,
+                                                                    },
+                                                                )
+                                                            }
+                                                        >
+                                                            <RiDeleteBinLine className="size-4" />
+                                                            Remove
+                                                        </button>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                                <ScrollBar orientation="horizontal" />
+                            </ScrollArea>
+                        )}
+                        <footer className="mt-auto flex shrink-0 justify-end border-t border-border pt-4">
+                            <Button asChild size="sm">
+                                <Link href={createAcademicSession(parameters)}>
+                                    <RiAddLine />
+                                    Add Session
+                                </Link>
+                            </Button>
+                        </footer>
+                    </section>
                 </div>
             </AdviserSetWorkspace>
 

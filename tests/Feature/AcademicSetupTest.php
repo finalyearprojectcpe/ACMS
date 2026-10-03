@@ -13,6 +13,8 @@ use App\Models\StudentSet;
 use App\Models\User;
 use App\Services\AcademicContextService;
 use Database\Seeders\AcademicStructureSeeder;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 
 test('an adviser can open an empty student sets page', function () {
@@ -202,6 +204,27 @@ test('an adviser creates a normalized student set from its department and entry 
         'department_name' => 'Computer Engineering',
         'start_year' => 2025,
     ])->assertSessionHasErrors('start_year');
+});
+
+test('an adviser can add a set with a department logo', function () {
+    Storage::fake('local');
+    $advisor = AdvisorProfile::factory()->create();
+    $details = ['department_name' => 'Computer Engineering', 'start_year' => 2025];
+
+    $this->actingAs($advisor->user)->post(route('student-sets.store'), [
+        ...$details,
+        'logo' => UploadedFile::fake()->create('notes.txt', 1, 'text/plain'),
+    ])->assertSessionHasErrors('logo');
+    expect(StudentSet::query()->count())->toBe(0);
+
+    $this->post(route('student-sets.store'), [
+        ...$details,
+        'logo' => UploadedFile::fake()->image('department.png', 160, 160),
+    ])->assertSessionHasNoErrors();
+
+    $set = StudentSet::query()->firstOrFail();
+    expect(Storage::disk('local')->exists($set->logo_path))->toBeTrue();
+    $this->get(route('student-sets.logo.show', $set->routeParameters()))->assertOk();
 });
 
 test('a student set page is owned by its adviser and lists only that sets students', function () {

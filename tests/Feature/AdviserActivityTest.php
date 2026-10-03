@@ -86,11 +86,19 @@ test('payment history only shows completed payments belonging to the adviser', f
 test('assistant tool searches cannot read another advisers students', function () {
     $own = CourseRegistration::factory()->create()->studentProfile;
     $other = CourseRegistration::factory()->create()->studentProfile;
+    $own->update(['official_name' => 'Adaeze Nwosu']);
+    $other->update(['official_name' => 'Amaka Bello']);
     $tool = new AssistantRecordTool($own->advisorProfile, app(AssistantRecordSearch::class));
     $payload = $tool->handle(new ToolRequest(['category' => 'students', 'term' => '', 'status' => 'any']));
+    $match = json_decode((string) $tool->handle(new ToolRequest([
+        'category' => 'students',
+        'term' => 'adaeze',
+    ])), true, flags: JSON_THROW_ON_ERROR);
 
     expect($payload)->toContain($own->official_name)
         ->not->toContain($other->official_name)
+        ->and($match['count'])->toBe(1)
+        ->and($match['records'][0]['title'])->toBe('Adaeze Nwosu')
         ->and($tool->sources())->toHaveCount(1);
 });
 

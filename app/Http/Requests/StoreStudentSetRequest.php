@@ -38,6 +38,7 @@ class StoreStudentSetRequest extends FormRequest
                 ),
             ],
             'end_year' => ['required', 'integer', 'between:1901,2201'],
+            'logo' => ['nullable', 'image', 'mimes:png,jpg,jpeg', 'max:2048', 'dimensions:max_width=2000,max_height=2000'],
         ];
     }
 

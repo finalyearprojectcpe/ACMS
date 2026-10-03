@@ -78,8 +78,8 @@ class AssistantRecordSearch
     {
         $query = StudentProfile::query()->where('advisor_profile_id', $advisor->id)
             ->whereIn('student_set_id', $filters['setIds'])
-            ->where(fn ($query) => $query->where('registration_number', 'like', $filters['like'])
-                ->orWhere('official_name', 'like', $filters['like']));
+            ->where(fn ($query) => $query->whereLike('registration_number', $filters['like'])
+                ->orWhereLike('official_name', $filters['like']));
 
         return $this->result($query->count(), $query->with(['user', 'studentSet'])->orderBy('registration_number')->forPage($filters['page'], 20)->get()
             ->map(fn (StudentProfile $student): array => [
@@ -100,9 +100,9 @@ class AssistantRecordSearch
                 fn ($requests) => $requests->where('status', $filters['status']))
             ->where(fn ($requests) => $requests
                 ->whereHas('studentProfile', fn ($students) => $students
-                    ->where('official_name', 'like', $filters['like'])
-                    ->orWhere('registration_number', 'like', $filters['like']))
-                ->orWhereHas('user', fn ($users) => $users->where('email', 'like', $filters['like'])));
+                    ->whereLike('official_name', $filters['like'])
+                    ->orWhereLike('registration_number', $filters['like']))
+                ->orWhereHas('user', fn ($users) => $users->whereLike('email', $filters['like'])));
 
         return $this->result($query->count(), $query->with(['studentProfile.studentSet', 'user'])
             ->orderByDesc('id')->forPage($filters['page'], 20)->get()
@@ -117,8 +117,8 @@ class AssistantRecordSearch
     {
         $query = Course::query()->whereIn('student_set_id', $filters['setIds'])
             ->whereHas('studentSet', fn ($sets) => $sets->where('advisor_profile_id', $advisor->id))
-            ->where(fn ($courses) => $courses->where('code', 'like', $filters['like'])
-                ->orWhere('title', 'like', $filters['like']));
+            ->where(fn ($courses) => $courses->whereLike('code', $filters['like'])
+                ->orWhereLike('title', $filters['like']));
 
         return $this->result($query->count(), $query->with('studentSet')->orderBy('code')
             ->forPage($filters['page'], 20)->get()->map(fn (Course $course): array => [
@@ -136,9 +136,9 @@ class AssistantRecordSearch
             ->whereHas('studentProfile', fn ($students) => $students->where('advisor_profile_id', $advisor->id)
                 ->whereIn('student_set_id', $filters['setIds']))
             ->where(fn ($query) => $query->whereHas('studentProfile', fn ($students) => $students
-                ->where('registration_number', 'like', $filters['like'])
-                ->orWhere('official_name', 'like', $filters['like']))
-                ->orWhereHas('items', fn ($items) => $items->where('course_code', 'like', $filters['like'])))
+                ->whereLike('registration_number', $filters['like'])
+                ->orWhereLike('official_name', $filters['like']))
+                ->orWhereHas('items', fn ($items) => $items->whereLike('course_code', $filters['like'])))
             ->whereHas('academicSessionSemester', fn ($period) => $this->filterPeriod($period, $filters));
 
         return $this->result($query->count(), $query->with(['studentProfile.user', 'studentProfile.studentSet', 'academicSessionSemester.academicSession', 'academicSessionSemester.semester'])
@@ -160,8 +160,8 @@ class AssistantRecordSearch
         $query = CourseOffering::query()
             ->whereHas('course.studentSet', fn ($sets) => $sets->where('advisor_profile_id', $advisor->id)
                 ->whereIn('id', $filters['setIds']))
-            ->where(fn ($offerings) => $offerings->where('course_title', 'like', $filters['like'])
-                ->orWhereHas('course', fn ($courses) => $courses->where('code', 'like', $filters['like'])))
+            ->where(fn ($offerings) => $offerings->whereLike('course_title', $filters['like'])
+                ->orWhereHas('course', fn ($courses) => $courses->whereLike('code', $filters['like'])))
             ->when(in_array($filters['status'], ['published', 'unpublished'], true),
                 fn ($query) => $filters['status'] === 'published'
                     ? $query->whereNotNull('results_published_at')
@@ -193,11 +193,11 @@ class AssistantRecordSearch
             ->whereHas('courseRegistration', fn ($registrations) => $registrations
                 ->where('status', CourseRegistration::StatusAssigned)
                 ->whereHas('academicSessionSemester', fn ($period) => $this->filterPeriod($period, $filters)))
-            ->where(fn ($items) => $items->where('course_code', 'like', $filters['like'])
-                ->orWhere('course_title', 'like', $filters['like'])
+            ->where(fn ($items) => $items->whereLike('course_code', $filters['like'])
+                ->orWhereLike('course_title', $filters['like'])
                 ->orWhereHas('courseRegistration.studentProfile', fn ($students) => $students
-                    ->where('official_name', 'like', $filters['like'])
-                    ->orWhere('registration_number', 'like', $filters['like'])))
+                    ->whereLike('official_name', $filters['like'])
+                    ->orWhereLike('registration_number', $filters['like'])))
             ->when($filters['grade'] !== '', fn ($items) => $filters['grade'] === 'missing'
                 ? $items->where('missing_script', true)
                 : $items->where('grade', $filters['grade']))
@@ -232,8 +232,8 @@ class AssistantRecordSearch
     {
         $query = StudentProfile::query()->where('advisor_profile_id', $advisor->id)
             ->whereIn('student_set_id', $filters['setIds'])
-            ->where(fn ($students) => $students->where('official_name', 'like', $filters['like'])
-                ->orWhere('registration_number', 'like', $filters['like']));
+            ->where(fn ($students) => $students->whereLike('official_name', $filters['like'])
+                ->orWhereLike('registration_number', $filters['like']));
         $count = $query->count();
         $students = $query->with('studentSet')->orderBy('official_name')->forPage($filters['page'], 20)->get();
         $summaries = $this->results->summaryRowsForStudents($students->pluck('id'));
@@ -261,7 +261,7 @@ class AssistantRecordSearch
     {
         $query = Due::query()->where('advisor_profile_id', $advisor->id)
             ->whereIn('student_set_id', $filters['setIds'])
-            ->where('title', 'like', $filters['like'])
+            ->whereLike('title', $filters['like'])
             ->when($filters['status'] !== 'any', fn ($query) => in_array($filters['status'], ['published', 'draft'], true)
                 ? $query->where('status', $filters['status']) : $query);
         $this->filterDuePeriod($query, $filters);
@@ -284,9 +284,9 @@ class AssistantRecordSearch
                 fn ($assignments) => $assignments->where('status', $filters['status'] === 'unpaid' ? StudentDueAssignment::StatusPending : $filters['status']))
             ->where(fn ($assignments) => $assignments
                 ->whereHas('studentProfile', fn ($students) => $students
-                    ->where('official_name', 'like', $filters['like'])
-                    ->orWhere('registration_number', 'like', $filters['like']))
-                ->orWhereHas('due', fn ($dues) => $dues->where('title', 'like', $filters['like'])));
+                    ->whereLike('official_name', $filters['like'])
+                    ->orWhereLike('registration_number', $filters['like']))
+                ->orWhereHas('due', fn ($dues) => $dues->whereLike('title', $filters['like'])));
 
         return $this->result($query->count(), $query->with(['studentProfile', 'due'])
             ->orderByDesc('id')->forPage($filters['page'], 20)->get()
@@ -304,9 +304,9 @@ class AssistantRecordSearch
                 ? [$filters['status']] : [DuePayment::StatusSuccess])
             ->whereHas('studentProfile', fn ($students) => $students->whereIn('student_set_id', $filters['setIds']))
             ->where(fn ($payments) => $payments->whereHas('studentProfile', fn ($students) => $students
-                ->where('official_name', 'like', $filters['like'])
-                ->orWhere('registration_number', 'like', $filters['like']))
-                ->orWhereHas('assignment.due', fn ($dues) => $dues->where('title', 'like', $filters['like'])))
+                ->whereLike('official_name', $filters['like'])
+                ->orWhereLike('registration_number', $filters['like']))
+                ->orWhereHas('assignment.due', fn ($dues) => $dues->whereLike('title', $filters['like'])))
             ->whereHas('assignment.due', fn ($dues) => $this->filterDuePeriod($dues, $filters));
 
         return $this->result($query->count(), $query->with(['studentProfile.user', 'assignment.due'])

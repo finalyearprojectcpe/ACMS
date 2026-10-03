@@ -8,7 +8,11 @@ use App\Models\StudentSet;
 use App\Services\DashboardAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use RuntimeException;
+use Throwable;
 
 class StudentSetController extends Controller
 {
@@ -19,12 +23,35 @@ class StudentSetController extends Controller
         $advisor = $this->access->advisor($request);
         $validated = $request->validated();
 
-        $studentSet = $advisor->studentSets()->create([
-            'department_name' => $validated['department_name'],
-            'department_slug' => $validated['department_slug'],
-            'entry_start_year' => $validated['start_year'],
-            'entry_end_year' => $validated['end_year'],
-        ]);
+        $logoPath = null;
+
+        try {
+            $studentSet = DB::transaction(function () use ($advisor, $request, $validated, &$logoPath): StudentSet {
+                $studentSet = $advisor->studentSets()->create([
+                    'department_name' => $validated['department_name'],
+                    'department_slug' => $validated['department_slug'],
+                    'entry_start_year' => $validated['start_year'],
+                    'entry_end_year' => $validated['end_year'],
+                ]);
+
+                if ($request->hasFile('logo')) {
+                    $logoPath = $request->file('logo')->store('set-logos/'.$studentSet->id, 'local');
+                    if (! is_string($logoPath)) {
+                        throw new RuntimeException('The logo could not be stored.');
+                    }
+
+                    $studentSet->forceFill(['logo_path' => $logoPath])->save();
+                }
+
+                return $studentSet;
+            });
+        } catch (Throwable $exception) {
+            if (is_string($logoPath)) {
+                Storage::disk('local')->delete($logoPath);
+            }
+
+            throw $exception;
+        }
 
         return to_route('student-sets.show', $studentSet->routeParameters())
             ->with('success', "{$studentSet->label()} added.");

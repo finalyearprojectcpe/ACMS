@@ -96,8 +96,8 @@ class StudentAssistantRecordTool implements Tool
         $query = $this->student->courseRegistrations()
             ->where('status', CourseRegistration::StatusAssigned)
             ->when($filters['term'] !== '', fn ($query) => $query->whereHas('items', fn ($items) => $items
-                ->where('course_code', 'like', '%'.$filters['term'].'%')
-                ->orWhere('course_title', 'like', '%'.$filters['term'].'%')))
+                ->whereLike('course_code', '%'.$filters['term'].'%')
+                ->orWhereLike('course_title', '%'.$filters['term'].'%')))
             ->whereHas('academicSessionSemester', fn ($period) => $this->filterPeriod($period, $filters));
         $count = $query->count();
         $records = $query->with(['items', 'academicSessionSemester.academicSession.academicYear', 'academicSessionSemester.semester'])
@@ -132,8 +132,8 @@ class StudentAssistantRecordTool implements Tool
                 ->whereHas('academicSessionSemester', fn ($period) => $this->filterPeriod($period, $filters)))
             ->whereHas('courseOffering', fn ($offerings) => $offerings->whereNotNull('results_published_at'))
             ->when($filters['term'] !== '', fn ($items) => $items->where(fn ($query) => $query
-                ->where('course_code', 'like', '%'.$filters['term'].'%')
-                ->orWhere('course_title', 'like', '%'.$filters['term'].'%')));
+                ->whereLike('course_code', '%'.$filters['term'].'%')
+                ->orWhereLike('course_title', '%'.$filters['term'].'%')));
         $count = $query->count();
         $records = $query->with(['courseRegistration.academicSessionSemester.academicSession', 'courseRegistration.academicSessionSemester.semester'])
             ->latest('id')->forPage($filters['page'], 20)->get()
@@ -177,7 +177,7 @@ class StudentAssistantRecordTool implements Tool
         $query = $this->student->dueAssignments()
             ->whereHas('due', fn ($dues) => $this->filterDuePeriod($dues
                 ->where('status', Due::StatusPublished)
-                ->when($filters['term'] !== '', fn ($query) => $query->where('title', 'like', '%'.$filters['term'].'%')), $filters))
+                ->when($filters['term'] !== '', fn ($query) => $query->whereLike('title', '%'.$filters['term'].'%')), $filters))
             ->when(in_array($filters['status'], ['paid', 'unpaid', 'waived'], true),
                 fn ($query) => $query->where('status', $filters['status'] === 'unpaid' ? StudentDueAssignment::StatusPending : $filters['status']));
         $count = $query->count();
@@ -199,7 +199,7 @@ class StudentAssistantRecordTool implements Tool
     {
         $query = $this->student->duePayments()->where('status', DuePayment::StatusSuccess)
             ->whereHas('assignment.due', fn ($dues) => $this->filterDuePeriod($dues
-                ->when($filters['term'] !== '', fn ($query) => $query->where('title', 'like', '%'.$filters['term'].'%')), $filters));
+                ->when($filters['term'] !== '', fn ($query) => $query->whereLike('title', '%'.$filters['term'].'%')), $filters));
 
         return $this->result($query->count(), $query->with('assignment.due')
             ->orderByDesc('paid_at')->forPage($filters['page'], 20)->get()

@@ -15,11 +15,10 @@ class AcademicStructureSeeder extends Seeder
     {
         foreach (range(1, 9) as $level) {
             AcademicYear::query()->updateOrCreate(
-                ['id' => $level],
+                ['year_number' => $level],
                 [
                     'name' => "{$level}00 Level",
                     'slug' => "{$level}00-level",
-                    'year_number' => $level,
                 ],
             );
         }
