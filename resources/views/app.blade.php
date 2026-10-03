@@ -9,7 +9,7 @@
         <meta property="og:type" content="website">
         <meta property="og:title" content="ACMS | Automated Course Management System">
         <meta property="og:description" content="ACMS helps course advisers manage student course registrations, academic records, dues, and payments in one clear workspace.">
-        <meta property="og:image" content="{{ url('/ogimage.png') }}">
+        <meta property="og:image" content="{{ url('/ogimage.jpg') }}">
         <meta property="og:image:width" content="1200">
         <meta property="og:image:height" content="630">
         <meta property="og:image:alt" content="ACMS course adviser and student reviewing a course plan">
@@ -19,7 +19,7 @@
         <meta property="twitter:url" content="{{ request()->url() }}">
         <meta name="twitter:title" content="ACMS | Automated Course Management System">
         <meta name="twitter:description" content="ACMS helps course advisers manage student course registrations, academic records, dues, and payments in one clear workspace.">
-        <meta name="twitter:image" content="{{ url('/ogimage.png') }}">
+        <meta name="twitter:image" content="{{ url('/ogimage.jpg') }}">
 
         <link rel="icon" href="/favicon.ico" sizes="any">
         <link rel="apple-touch-icon" href="/apple-touch-icon.png">
