@@ -57,8 +57,8 @@ class SetResultsSpreadsheet
         $courseCount = count($group['columns']);
         $firstSummary = $courseCount + 4;
         $lastCourse = $firstSummary - 1;
-        $standingColumn = $firstSummary + 9;
-        $last = Coordinate::stringFromColumnIndex($standingColumn);
+        $remarksColumn = $firstSummary + 9;
+        $last = Coordinate::stringFromColumnIndex($remarksColumn);
         $lastStudentRow = count($report['students']) + 7;
 
         $sheet->mergeCells('A1:C1');
@@ -110,8 +110,8 @@ class SetResultsSpreadsheet
             }
         }
         $sheet->mergeCells($last.'4:'.$last.'7');
-        $sheet->setCellValue($last.'4', 'Standing');
-        $sheet->getColumnDimension($last)->setWidth(23);
+        $sheet->setCellValue($last.'4', 'Remarks');
+        $sheet->getColumnDimension($last)->setWidth(11);
         $sheet->getRowDimension(4)->setRowHeight(23);
         $sheet->getRowDimension(5)->setRowHeight(19);
         $sheet->getRowDimension(6)->setRowHeight(19);
@@ -167,11 +167,14 @@ class SetResultsSpreadsheet
                 $sheet->setCellValue($cumulative[$metric].$row, '=IF(OR('.$hasPending.','.$priorUnavailable.'),"",'.$prior[$metric].$row.'+'.$current[$metric].$row.')');
             }
             $sheet->setCellValue($cumulative['GPA'].$row, '=IF('.$cumulative['TNU'].$row.'>0,ROUND('.$cumulative['TGP'].$row.'/'.$cumulative['TNU'].$row.',2),"")');
-            $sheet->setCellValue($last.$row, $this->standingFormula($cumulative['GPA'].$row));
+            $failures = 'COUNTIF(D'.$row.':'.$courseEnd.$row.',"F*")';
+            $sheet->setCellValue($last.$row, '=IF('.$failures.'>0,'.$failures.'&"F",IF(AND('.$current['TNU'].$row.'>0,'.implode(',', $validity).'),"Pass",""))');
         }
 
         if ($lastStudentRow >= 8) {
-            $sheet->getStyle('A8:'.$last.$lastStudentRow)->getBorders()->getBottom()->setBorderStyle(Border::BORDER_HAIR);
+            $studentBorders = $sheet->getStyle('A8:'.$last.$lastStudentRow)->getBorders();
+            $studentBorders->getHorizontal()->setBorderStyle(Border::BORDER_HAIR);
+            $studentBorders->getBottom()->setBorderStyle(Border::BORDER_HAIR);
             $sheet->getStyle('D8:'.$last.$lastStudentRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
             $sheet->getStyle('A8:B'.$lastStudentRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
             $sheet->getStyle('C8:C'.$lastStudentRow)->getAlignment()->setIndent(1);
@@ -211,10 +214,5 @@ class SetResultsSpreadsheet
         }
 
         return $expression;
-    }
-
-    private function standingFormula(string $gpa): string
-    {
-        return '=IF('.$gpa.'="","",IF('.$gpa.'>=4.5,"First Class",IF('.$gpa.'>=3.5,"Second Class Upper",IF('.$gpa.'>=2.4,"Second Class Lower",IF('.$gpa.'>=1.5,"Third Class",IF('.$gpa.'>=1,"Pass","Below Pass Band"))))))';
     }
 }

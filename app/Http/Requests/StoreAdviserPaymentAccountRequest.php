@@ -28,6 +28,7 @@ class StoreAdviserPaymentAccountRequest extends FormRequest
             'bank_code' => ['required', 'string', 'max:20'],
             'bank_name' => ['nullable', 'string', 'max:120'],
             'account_number' => ['required', 'digits_between:10,12'],
+            'confirmed_account_name' => ['required', 'string', 'max:255'],
         ];
     }
 

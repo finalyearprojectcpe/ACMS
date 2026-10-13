@@ -9,7 +9,6 @@ declare module '@inertiajs/core' {
                 success?: string | null;
                 error?: string | null;
             };
-            sidebarOpen: boolean;
             [key: string]: unknown;
         };
     }

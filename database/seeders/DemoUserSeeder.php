@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\AccountStatus;
 use App\AccountType;
+use App\Grade;
 use App\Honorific;
 use App\Models\AcademicSession;
 use App\Models\AcademicSessionSemester;
@@ -253,11 +254,10 @@ class DemoUserSeeder extends Seeder
 
                 foreach ($students as $studentIndex => $student) {
                     $registration = $this->seedRegistration($student, $period, CourseRegistration::StatusAssigned, $adviser->id, $studentIndex);
-                    foreach ($registration->items as $courseIndex => $item) {
-                        $grades = ['A', 'B', 'C', 'B', 'A', 'D', 'C', 'F'];
+                    foreach ($registration->items as $item) {
                         $item->update([
                             'grade' => $year === 2 && $semesterSlug === 'first' && $item->course_code === 'GET 201' && $studentIndex % 4 === 1
-                                ? 'F' : $grades[($studentIndex + $courseIndex + $year + ($semesterSlug === 'second' ? 1 : 0)) % count($grades)],
+                                ? Grade::F->value : $this->gradeFor($studentIndex, $item->course_code, $year, $semesterSlug),
                             'graded_at' => now(),
                         ]);
                     }
@@ -307,6 +307,53 @@ class DemoUserSeeder extends Seeder
             }
         }
         $this->seedDues($advisorProfile, $set, $sessions->all(), $students->get(4));
+    }
+
+    /**
+     * Letter grade for a seeded course item, derived from the student's
+     * ability tier with deterministic per-course variation so reseeding
+     * always reproduces the same transcripts.
+     */
+    private function gradeFor(int $studentIndex, string $courseCode, int $year, string $semesterSlug): string
+    {
+        $ability = $this->studentAbility($studentIndex);
+        $spread = $ability['spread'];
+        $noise = (crc32($studentIndex.'|'.$courseCode.'|'.$year.'|'.$semesterSlug) % ($spread * 2 + 1)) - $spread;
+        $score = max(31, min(99, $ability['mean'] + $noise));
+
+        return match (true) {
+            $score >= 70 => Grade::A->value,
+            $score >= 60 => Grade::B->value,
+            $score >= 50 => Grade::C->value,
+            $score >= 45 => Grade::D->value,
+            $score >= 40 => Grade::E->value,
+            default => Grade::F->value,
+        };
+    }
+
+    /**
+     * Ability tier for a seeded student. Most students are average, a
+     * minority are strong, and the weak students earn the failed grades
+     * and carryovers. The carryover demo students (index % 4 === 1) are
+     * always weak so their forced GET 201 failure fits their transcript.
+     *
+     * @return array{mean: int, spread: int}
+     */
+    private function studentAbility(int $studentIndex): array
+    {
+        $tier = match (true) {
+            $studentIndex % 4 === 1 => 'weak',
+            in_array($studentIndex, [2, 4], true) => 'weak',
+            $studentIndex === 0 => 'strong',
+            ((($studentIndex + 1) * 73) % 100) < 20 => 'strong',
+            default => 'average',
+        };
+
+        return match ($tier) {
+            'strong' => ['mean' => 76, 'spread' => 9],
+            'weak' => ['mean' => 45, 'spread' => 16],
+            default => ['mean' => 57, 'spread' => 14],
+        };
     }
 
     private function session(StudentSet $set, int $yearNumber, int $startYear): AcademicSession

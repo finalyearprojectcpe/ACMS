@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\ResolveAdviserPaymentAccountRequest;
 use App\Http\Requests\StoreAdviserPaymentAccountRequest;
 use App\Http\Requests\UpdateAdviserProfileRequest;
 use App\Http\Requests\UpdateStudentProfileRequest;
@@ -12,6 +13,7 @@ use App\Models\User;
 use App\Services\DashboardAccess;
 use App\Services\PaystackException;
 use App\Services\PaystackService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
@@ -23,6 +25,31 @@ use Illuminate\Validation\ValidationException;
 class AdviserAccountController extends Controller
 {
     public function __construct(private readonly DashboardAccess $access) {}
+
+    public function resolvePaymentAccount(
+        ResolveAdviserPaymentAccountRequest $request,
+        PaystackService $paystack,
+    ): JsonResponse {
+        $validated = $request->validated();
+        $this->paystackBankFromCode($paystack, $validated['bank_code']);
+
+        try {
+            $resolved = $paystack->resolveAccount($validated['account_number'], $validated['bank_code']);
+        } catch (\Throwable) {
+            throw ValidationException::withMessages([
+                'account_number' => 'Paystack could not confirm this account. Check the details and try again.',
+            ]);
+        }
+
+        $accountName = Arr::get($resolved, 'account_name');
+        if (! is_string($accountName) || trim($accountName) === '') {
+            throw ValidationException::withMessages([
+                'account_number' => 'Paystack did not return an account name. Check the details and try again.',
+            ]);
+        }
+
+        return response()->json(['account_name' => trim($accountName)]);
+    }
 
     public function storePaymentAccount(
         StoreAdviserPaymentAccountRequest $request,
@@ -36,6 +63,26 @@ class AdviserAccountController extends Controller
 
         try {
             $resolved = $paystack->resolveAccount($validated['account_number'], $validated['bank_code']);
+        } catch (\Throwable) {
+            throw ValidationException::withMessages([
+                'account_number' => 'Paystack could not confirm this account. Check the bank and account number, then try again.',
+            ]);
+        }
+
+        $accountName = Arr::get($resolved, 'account_name');
+        if (! is_string($accountName) || trim($accountName) === '') {
+            throw ValidationException::withMessages([
+                'account_number' => 'Paystack did not return an account name. Check the account and try again.',
+            ]);
+        }
+        $accountName = trim($accountName);
+        if (Str::lower($accountName) !== Str::lower(trim($validated['confirmed_account_name']))) {
+            throw ValidationException::withMessages([
+                'account_number' => 'The account name changed. Check the details and confirm it again.',
+            ]);
+        }
+
+        try {
             $subaccount = $current instanceof PaymentAccount
                 && is_string($current->paystack_subaccount_code)
                 && $current->paystack_subaccount_code !== ''
@@ -49,19 +96,16 @@ class AdviserAccountController extends Controller
                     );
         } catch (\Throwable) {
             throw ValidationException::withMessages([
-                'account_number' => 'Paystack could not confirm this account. Check the bank and account number, then try again.',
+                'payment_account' => 'Paystack could not connect this payout account. Try again shortly.',
             ]);
         }
 
-        $accountName = Arr::get($resolved, 'account_name');
         $subaccountCode = Arr::get($subaccount, 'subaccount_code');
 
-        if (! is_string($accountName)
-            || $accountName === ''
-            || ! is_string($subaccountCode)
+        if (! is_string($subaccountCode)
             || $subaccountCode === '') {
             throw ValidationException::withMessages([
-                'account_number' => 'Paystack did not return enough account details. Check the account and try again.',
+                'payment_account' => 'Paystack did not return a payout account code. Try again shortly.',
             ]);
         }
 

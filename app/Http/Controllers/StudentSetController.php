@@ -24,9 +24,10 @@ class StudentSetController extends Controller
         $validated = $request->validated();
 
         $logoPath = null;
+        $logoDisk = (string) config('filesystems.due_receipt_disk', 'local');
 
         try {
-            $studentSet = DB::transaction(function () use ($advisor, $request, $validated, &$logoPath): StudentSet {
+            $studentSet = DB::transaction(function () use ($advisor, $request, $validated, $logoDisk, &$logoPath): StudentSet {
                 $studentSet = $advisor->studentSets()->create([
                     'department_name' => $validated['department_name'],
                     'department_slug' => $validated['department_slug'],
@@ -35,7 +36,7 @@ class StudentSetController extends Controller
                 ]);
 
                 if ($request->hasFile('logo')) {
-                    $logoPath = $request->file('logo')->store('set-logos/'.$studentSet->id, 'local');
+                    $logoPath = $request->file('logo')->store('set-logos/'.$studentSet->id, $logoDisk);
                     if (! is_string($logoPath)) {
                         throw new RuntimeException('The logo could not be stored.');
                     }
@@ -47,7 +48,7 @@ class StudentSetController extends Controller
             });
         } catch (Throwable $exception) {
             if (is_string($logoPath)) {
-                Storage::disk('local')->delete($logoPath);
+                Storage::disk($logoDisk)->delete($logoPath);
             }
 
             throw $exception;

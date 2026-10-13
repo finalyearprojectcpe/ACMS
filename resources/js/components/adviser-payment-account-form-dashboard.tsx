@@ -1,4 +1,4 @@
-import { router, useForm } from '@inertiajs/react';
+import { router, useForm, useHttp } from '@inertiajs/react';
 import {
     RiArrowDownSLine,
     RiBankCardLine,
@@ -8,9 +8,12 @@ import {
     RiSave3Line,
 } from '@remixicon/react';
 import type { FormEvent } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
-import { storePaymentAccount } from '@/actions/App/Http/Controllers/AdviserAccountController';
+import {
+    resolvePaymentAccount,
+    storePaymentAccount,
+} from '@/actions/App/Http/Controllers/AdviserAccountController';
 import { PaymentAccountSummary } from '@/components/payment-account-summary';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
@@ -52,6 +55,7 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover';
+import { Spinner } from '@/components/ui/spinner';
 import type {
     DashboardAdviserPaymentAccountForm,
     DashboardPaystackBankOption,
@@ -62,7 +66,13 @@ type PaymentAccountFormData = {
     business_name: string;
     bank_code: string;
     account_number: string;
+    confirmed_account_name: string;
     payment_account?: string;
+};
+
+type AccountLookupData = {
+    bank_code: string;
+    account_number: string;
 };
 
 export function AdviserPaymentAccountFormDashboard({
@@ -71,14 +81,101 @@ export function AdviserPaymentAccountFormDashboard({
     form: DashboardAdviserPaymentAccountForm;
 }) {
     const [confirmOpen, setConfirmOpen] = useState(false);
+    const [resolved, setResolved] = useState<{
+        key: string;
+        name: string;
+    } | null>(null);
+    const [lookupMessage, setLookupMessage] = useState<string | null>(null);
+    const [lookupAttempt, setLookupAttempt] = useState(0);
     const currentAccount = accountForm.accounts[0] ?? null;
     const form = useForm<PaymentAccountFormData>({
         label: currentAccount?.label ?? 'Student dues account',
         business_name: currentAccount?.businessName ?? 'ACMS Dues',
         bank_code: '',
         account_number: '',
+        confirmed_account_name: '',
     });
+    const lookup = useHttp<AccountLookupData, { account_name: string }>({
+        bank_code: '',
+        account_number: '',
+    });
+    const { data: lookupData, post: postLookup, cancel: cancelLookup } = lookup;
+    const { setData: setFormData } = form;
     const bankOptionsLoaded = accountForm.bankOptions.length > 0;
+    const lookupKey = `${lookupData.bank_code}:${lookupData.account_number}`;
+    const canResolve =
+        bankOptionsLoaded &&
+        lookupData.bank_code !== '' &&
+        /^\d{10,12}$/.test(lookupData.account_number);
+    const resolvedName = resolved?.key === lookupKey ? resolved.name : null;
+
+    useEffect(() => {
+        if (!canResolve) {
+            return;
+        }
+
+        let active = true;
+        const timer = window.setTimeout(() => {
+            void postLookup(resolvePaymentAccount.url(), {
+                onSuccess: (response) => {
+                    if (active) {
+                        setResolved({
+                            key: lookupKey,
+                            name: response.account_name,
+                        });
+                        setFormData(
+                            'confirmed_account_name',
+                            response.account_name,
+                        );
+                    }
+                },
+                onHttpException: (response) => {
+                    if (active) {
+                        setLookupMessage(
+                            response.status === 429
+                                ? 'Too many account lookups. Try again in a minute.'
+                                : 'The account could not be checked right now.',
+                        );
+                    }
+                },
+                onNetworkError: () => {
+                    if (active) {
+                        setLookupMessage(
+                            'The account could not be checked right now.',
+                        );
+                    }
+                },
+            }).catch(() => {});
+        }, 450);
+
+        return () => {
+            active = false;
+            window.clearTimeout(timer);
+            cancelLookup();
+        };
+    }, [
+        canResolve,
+        lookupData.bank_code,
+        lookupData.account_number,
+        lookupAttempt,
+        lookupKey,
+        postLookup,
+        cancelLookup,
+        setFormData,
+    ]);
+
+    function updateAccountDetails(
+        field: 'bank_code' | 'account_number',
+        value: string,
+    ) {
+        form.setData(field, value);
+        form.setData('confirmed_account_name', '');
+        form.clearErrors('account_number', 'bank_code');
+        lookup.setData(field, value);
+        lookup.clearErrors();
+        setLookupMessage(null);
+        setResolved(null);
+    }
 
     function requestSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -99,12 +196,27 @@ export function AdviserPaymentAccountFormDashboard({
             return;
         }
 
+        if (!resolvedName || lookup.processing) {
+            form.setError(
+                'account_number',
+                'Wait for the account name before saving.',
+            );
+
+            return;
+        }
+
         setConfirmOpen(true);
     }
 
     function submitConfirmed() {
         form.submit(storePaymentAccount(), {
             preserveScroll: true,
+            onError: (errors) => {
+                if (errors.account_number) {
+                    setResolved(null);
+                    setLookupAttempt((attempt) => attempt + 1);
+                }
+            },
         });
     }
 
@@ -218,7 +330,8 @@ export function AdviserPaymentAccountFormDashboard({
                             <FieldGroup className="grid gap-5 sm:grid-cols-2">
                                 <Field
                                     data-invalid={Boolean(
-                                        form.errors.bank_code,
+                                        form.errors.bank_code ||
+                                        lookup.errors.bank_code,
                                     )}
                                 >
                                     <FieldLabel>Bank</FieldLabel>
@@ -227,11 +340,15 @@ export function AdviserPaymentAccountFormDashboard({
                                         options={accountForm.bankOptions}
                                         disabled={!bankOptionsLoaded}
                                         onValueChange={(value) =>
-                                            form.setData('bank_code', value)
+                                            updateAccountDetails(
+                                                'bank_code',
+                                                value,
+                                            )
                                         }
                                     />
                                     <FieldError>
-                                        {form.errors.bank_code}
+                                        {form.errors.bank_code ??
+                                            lookup.errors.bank_code}
                                     </FieldError>
                                 </Field>
 
@@ -248,7 +365,7 @@ export function AdviserPaymentAccountFormDashboard({
                                         inputMode="numeric"
                                         value={form.data.account_number}
                                         onChange={(event) =>
-                                            form.setData(
+                                            updateAccountDetails(
                                                 'account_number',
                                                 event.target.value,
                                             )
@@ -256,10 +373,64 @@ export function AdviserPaymentAccountFormDashboard({
                                         placeholder="0123456789"
                                     />
                                     <FieldError>
-                                        {form.errors.account_number}
+                                        {form.errors.account_number ??
+                                            lookup.errors.account_number}
                                     </FieldError>
                                 </Field>
                             </FieldGroup>
+
+                            {canResolve &&
+                                !lookup.errors.account_number &&
+                                !lookup.errors.bank_code &&
+                                !lookupMessage && (
+                                    <div
+                                        className="flex min-h-12 flex-wrap items-center gap-3 border-t border-border pt-4"
+                                        aria-live="polite"
+                                    >
+                                        {resolvedName ? (
+                                            <>
+                                                <RiCheckboxCircleLine className="size-4 shrink-0 text-emerald-600" />
+                                                <span className="text-xs text-muted-foreground">
+                                                    Account name
+                                                </span>
+                                                <strong className="min-w-0 text-sm font-semibold break-words">
+                                                    {resolvedName}
+                                                </strong>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Spinner />
+                                                <span className="text-sm text-muted-foreground">
+                                                    Checking account name...
+                                                </span>
+                                            </>
+                                        )}
+                                    </div>
+                                )}
+                            {(lookupMessage ||
+                                lookup.errors.account_number ||
+                                lookup.errors.bank_code) && (
+                                <div className="flex flex-wrap items-center gap-3">
+                                    {lookupMessage && (
+                                        <FieldError>{lookupMessage}</FieldError>
+                                    )}
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={lookup.processing}
+                                        onClick={() => {
+                                            lookup.clearErrors();
+                                            setLookupMessage(null);
+                                            setLookupAttempt(
+                                                (attempt) => attempt + 1,
+                                            );
+                                        }}
+                                    >
+                                        <RiRefreshLine /> Check Again
+                                    </Button>
+                                </div>
+                            )}
 
                             <FieldError>
                                 {form.errors.payment_account}
@@ -268,7 +439,11 @@ export function AdviserPaymentAccountFormDashboard({
                         <CardFooter className="justify-end bg-background">
                             <Button
                                 type="submit"
-                                disabled={form.processing || !bankOptionsLoaded}
+                                disabled={
+                                    form.processing ||
+                                    !resolvedName ||
+                                    lookup.processing
+                                }
                             >
                                 <RiSave3Line />
                                 {form.processing ? 'Saving...' : 'Save Account'}
@@ -313,6 +488,21 @@ export function AdviserPaymentAccountFormDashboard({
                                             dues.
                                         </>
                                     )}
+                                </p>
+                                <p>
+                                    <strong className="font-semibold text-foreground">
+                                        {resolvedName}
+                                    </strong>
+                                    {' · '}
+                                    {
+                                        accountForm.bankOptions.find(
+                                            (bank) =>
+                                                bank.code ===
+                                                form.data.bank_code,
+                                        )?.name
+                                    }
+                                    {' · '}
+                                    {form.data.account_number}
                                 </p>
                                 <p>
                                     Unpaid and future dues will use this

@@ -90,6 +90,7 @@ class SetResultsData
                     ->filter(fn (object $item): bool => isset($columnIds[$item->course_offering_id]));
                 $graded = $items->filter(fn (object $item): bool => $item->results_published_at !== null
                     && $item->grade !== null);
+                $failedCourses = $graded->filter(fn (object $item): bool => $item->grade === Grade::F->value)->count();
                 $gradePoints = (int) $graded->sum(fn (object $item): int => Grade::from($item->grade)->points() * (int) $item->credit_units);
                 $gradedUnits = (int) $graded->sum('credit_units');
                 $sessionComplete = $visibleSummaries->isNotEmpty()
@@ -114,6 +115,7 @@ class SetResultsData
                     'totalNumberOfUnits' => $gradedUnits,
                     'gpa' => $all ? ($sessionComplete && $gradedUnits > 0 ? round($gradePoints / $gradedUnits, 2) : null) : ($periodSummary['gpa'] ?? null),
                     'cgpa' => $cgpa,
+                    'remarks' => $failedCourses > 0 ? $failedCourses.'F' : ($items->isNotEmpty() && $graded->count() === $items->count() ? 'Pass' : null),
                     'standing' => $this->results->standing($cgpa),
                 ];
             })->all(),

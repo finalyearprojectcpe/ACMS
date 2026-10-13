@@ -31,11 +31,27 @@ test('an adviser can open the payout form and connect an account', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->where('dashboard.adviserPaymentAccountForm.bankOptions.0.code', '058'));
 
+    $this->postJson(route('dashboard.payments.account.resolve'), [
+        'bank_code' => '058',
+        'account_number' => '0123456789',
+    ])->assertOk()->assertJsonPath('account_name', 'Example Adviser');
+    expect(PaymentAccount::query()->count())->toBe(0);
+
     $this->post(route('dashboard.payments.account.store'), [
         'label' => 'Student dues',
         'business_name' => 'Student dues',
         'bank_code' => '058',
         'account_number' => '0123456789',
+        'confirmed_account_name' => 'Different Person',
+    ])->assertSessionHasErrors('account_number');
+    expect(PaymentAccount::query()->count())->toBe(0);
+
+    $this->post(route('dashboard.payments.account.store'), [
+        'label' => 'Student dues',
+        'business_name' => 'Student dues',
+        'bank_code' => '058',
+        'account_number' => '0123456789',
+        'confirmed_account_name' => 'Example Adviser',
     ])->assertRedirect(route('dashboard.section', ['section' => 'settings']));
 
     expect(PaymentAccount::query()->where('advisor_profile_id', $advisor->id)->first())

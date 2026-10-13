@@ -56,6 +56,29 @@ function Standing({ label }: { label: string | null }) {
     );
 }
 
+function Remarks({ label }: { label: string | null }) {
+    if (!label) {
+        return <span className="text-muted-foreground">—</span>;
+    }
+
+    return (
+        <Badge
+            className={
+                label === 'Pass'
+                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                    : 'bg-red-500/10 text-red-700 dark:text-red-300'
+            }
+            title={
+                label === 'Pass'
+                    ? 'All results published with no failed courses'
+                    : `${label.slice(0, -1)} failed courses`
+            }
+        >
+            {label}
+        </Badge>
+    );
+}
+
 export const SetResultRow = memo(function SetResultRow({
     student,
     columns,
@@ -161,18 +184,19 @@ export const SetResultRow = memo(function SetResultRow({
             <TableCell className="text-center tabular-nums">
                 {student.totalNumberOfUnits}
             </TableCell>
-            <TableCell
-                className={`w-20 min-w-20 text-center tabular-nums group-hover:bg-[color-mix(in_oklch,var(--muted)_50%,var(--background))] lg:sticky lg:right-40 lg:z-10 lg:border-l-[3px] lg:border-l-foreground/30 ${identityBackground}`}
-            >
+            <TableCell className="w-20 min-w-20 text-center tabular-nums">
                 {student.gpa?.toFixed(2) ?? '—'}
             </TableCell>
-            <TableCell
-                className={`w-20 min-w-20 text-center font-semibold tabular-nums group-hover:bg-[color-mix(in_oklch,var(--muted)_50%,var(--background))] lg:sticky lg:right-20 lg:z-10 ${identityBackground}`}
-            >
+            <TableCell className="w-20 min-w-20 text-center font-semibold tabular-nums">
                 {student.cgpa?.toFixed(2) ?? '—'}
             </TableCell>
             <TableCell
-                className={`w-20 min-w-20 text-center group-hover:bg-[color-mix(in_oklch,var(--muted)_50%,var(--background))] lg:sticky lg:right-0 lg:z-10 ${identityBackground}`}
+                className={`w-[4.75rem] min-w-[4.75rem] px-1 text-center group-hover:bg-[color-mix(in_oklch,var(--muted)_50%,var(--background))] lg:sticky lg:right-[4.75rem] lg:z-10 lg:border-l-[3px] lg:border-l-foreground/30 ${identityBackground}`}
+            >
+                <Remarks label={student.remarks} />
+            </TableCell>
+            <TableCell
+                className={`w-[4.75rem] min-w-[4.75rem] px-1 text-center group-hover:bg-[color-mix(in_oklch,var(--muted)_50%,var(--background))] lg:sticky lg:right-0 lg:z-10 ${identityBackground}`}
             >
                 <Standing label={student.standing} />
             </TableCell>

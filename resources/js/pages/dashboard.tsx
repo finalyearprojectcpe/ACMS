@@ -94,9 +94,7 @@ function serverHistorySnapshot() {
 }
 
 export default function DashboardPage({ dashboard }: DashboardPageProps) {
-    const { auth } = usePage<{
-        auth: Auth;
-    }>().props;
+    const { auth } = usePage<{ auth: Auth }>().props;
     const hasInternalHistory = useSyncExternalStore(
         subscribeToDashboardNavigation,
         dashboardHistorySnapshot,

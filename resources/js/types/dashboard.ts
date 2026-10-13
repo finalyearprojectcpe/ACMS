@@ -346,6 +346,7 @@ export type DashboardAdviserSetResults = {
         totalNumberOfUnits: number;
         gpa: number | null;
         cgpa: number | null;
+        remarks: string | null;
         standing: string | null;
     }>;
 };

@@ -74,7 +74,6 @@ class SetResultsExport
                 return [
                     'name' => $student['name'],
                     'registrationNumber' => $student['registrationNumber'],
-                    'standing' => $student['standing'],
                     'starting' => $starting,
                     'periods' => collect($groups)->mapWithKeys(function (array $group) use ($student, $periodSummaries): array {
                         $cells = collect($group['columns'])->map(function (array $column) use ($student): string {

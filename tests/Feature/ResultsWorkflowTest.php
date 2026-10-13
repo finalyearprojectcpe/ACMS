@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 use PhpOffice\PhpSpreadsheet\Calculation\Calculation;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 test('subjects release separately while incomplete semesters keep GPA pending and corrections are recorded', function () {
@@ -143,6 +144,8 @@ test('set result exports group editable semesters into separate sheets and stay 
         ->and($sheet->getFreezePane())->toBe('D8')
         ->and($sheet->getCell('D4')->getValue())->toBe('Courses and Units')
         ->and($sheet->getCell(Coordinate::stringFromColumnIndex(4 + count($report['groups'][0]['columns'])).'4')->getValue())->toBe('Current')
+        ->and($sheet->getCell(Coordinate::stringFromColumnIndex(13 + count($report['groups'][0]['columns'])).'4')->getValue())->toBe('Remarks')
+        ->and($sheet->getStyle('D8')->getBorders()->getBottom()->getBorderStyle())->toBe(Border::BORDER_HAIR)
         ->and($book->getSheet(1)->getCell(Coordinate::stringFromColumnIndex(7 + count($report['groups'][1]['columns'])).'4')->getValue())->toBe('Previous');
 
     $group = $report['groups'][0];
@@ -170,6 +173,12 @@ test('set result exports group editable semesters into separate sheets and stay 
     expect($book->getSheet(1)->getCell($previousPoints)->getCalculatedValue())->toBe(
         $sheet->getCell($cumulativePointsCell)->getCalculatedValue(),
     );
+    $remarksCell = Coordinate::stringFromColumnIndex(13 + count($group['columns'])).$row;
+    $beforeRemarks = (string) $sheet->getCell($remarksCell)->getCalculatedValue();
+    $sheet->setCellValue($gradeCell, 'F');
+    Calculation::getInstance($book)->clearCalculationCache();
+    $previousFailures = str_ends_with($beforeRemarks, 'F') ? (int) substr($beforeRemarks, 0, -1) : 0;
+    expect($sheet->getCell($remarksCell)->getCalculatedValue())->toBe(($previousFailures + 1).'F');
     if (getenv('ACMS_ARTIFACT_PREVIEWS') === '1') {
         (new Xlsx($book))
             ->save(storage_path('app/private/design-previews/set-results.xlsx'));

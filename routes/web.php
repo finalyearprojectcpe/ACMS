@@ -255,6 +255,7 @@ Route::middleware('auth')->group(function (): void {
         Route::post('/dashboard/dues/payments/{paystackTransactionId}/receipt/email', [DueController::class, 'resendReceiptEmail'])->whereNumber('paystackTransactionId')->name('dashboard.dues.payments.receipt.email');
 
         Route::get('/dashboard/payments/payout-account', [DashboardController::class, 'createAdviserPaymentAccount'])->name('dashboard.payments.account.create');
+        Route::post('/dashboard/payments/payout-account/resolve', [AdviserAccountController::class, 'resolvePaymentAccount'])->middleware('throttle:10,1')->name('dashboard.payments.account.resolve');
         Route::post('/dashboard/payments/payout-account', [AdviserAccountController::class, 'storePaymentAccount'])->name('dashboard.payments.account.store');
         Route::patch('/dashboard/profile', [AdviserAccountController::class, 'updateProfile'])->name('dashboard.profile.update');
         Route::patch('/dashboard/profile-settings', [AdviserAccountController::class, 'updateStudentProfile'])->name('dashboard.profile-settings.update');

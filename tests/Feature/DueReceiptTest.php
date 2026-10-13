@@ -21,6 +21,7 @@ use App\Services\ReceiptUrlService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
@@ -134,7 +135,46 @@ test('receipt logo is captured at payment completion and survives later set logo
     expect($set->refresh()->logo_path)->toBeNull()
         ->and($payment->refresh()->receipt_logo_path)->toBe($firstLogo)
         ->and(Storage::disk('local')->exists($firstLogo))->toBeTrue()
-        ->and($pdf)->toStartWith('%PDF');
+        ->and($pdf)->toStartWith('%PDF')
+        ->and(substr_count($pdf, '/Subtype /Image'))->toBeGreaterThan(2);
+});
+
+test('new set logos use the receipt disk and appear in generated receipts', function () {
+    Queue::fake();
+    Storage::fake('local');
+    Storage::fake('r2-private');
+    Config::set('filesystems.due_receipt_disk', 'r2-private');
+    $fixture = createDueReceiptFixture();
+    $set = $fixture['due']->studentSet;
+
+    $this->actingAs($set->advisorProfile->user)->post(route('student-sets.logo.store', $set->routeParameters()), [
+        'logo' => UploadedFile::fake()->image('department.png', 96, 96),
+    ])->assertSessionHasNoErrors();
+
+    $path = $set->refresh()->logo_path;
+    expect(Storage::disk('r2-private')->exists($path))->toBeTrue();
+    $payment = app(DuePaymentService::class)->recordPaystackData($fixture['payment'], successfulPaystackData($fixture));
+    $pdf = app(ReceiptPdfService::class)->generate($payment);
+
+    expect($payment->receipt_logo_path)->toBe($path)
+        ->and(substr_count($pdf, '/Subtype /Image'))->toBeGreaterThan(2);
+});
+
+test('an unavailable logo is logged without blocking its receipt', function () {
+    Queue::fake();
+    Storage::fake('local');
+    Config::set('filesystems.due_receipt_disk', 'local');
+    $fixture = createDueReceiptFixture();
+    $payment = app(DuePaymentService::class)->recordPaystackData($fixture['payment'], successfulPaystackData($fixture));
+    $payment->forceFill(['receipt_logo_path' => 'set-logos/missing.png'])->save();
+    Log::spy();
+
+    $pdf = app(ReceiptPdfService::class)->generate($payment);
+
+    expect($pdf)->toStartWith('%PDF');
+    Log::shouldHaveReceived('warning')->once()->withArgs(fn (string $message, array $context): bool => $message === 'Receipt logo is missing; generating without it.'
+        && $context['payment_id'] === $payment->id
+        && $context['path'] === 'set-logos/missing.png');
 });
 
 test('a generated receipt remains ready when its email cannot be queued', function () {

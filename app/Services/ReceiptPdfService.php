@@ -7,6 +7,7 @@ use Endroid\QrCode\Builder\Builder;
 use Endroid\QrCode\Encoding\Encoding;
 use Endroid\QrCode\ErrorCorrectionLevel;
 use Endroid\QrCode\Writer\PngWriter;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use LaravelDaily\Invoices\Classes\InvoiceItem;
 use LaravelDaily\Invoices\Classes\Party;
@@ -30,11 +31,7 @@ class ReceiptPdfService
         $due = $payment->assignment->due;
         $student = $payment->studentProfile;
         $verificationUrl = $this->receiptUrls->verificationUrl($payment);
-        $logo = null;
-        if ($payment->receipt_logo_path && Storage::disk('local')->exists($payment->receipt_logo_path)) {
-            $mime = str_ends_with(strtolower($payment->receipt_logo_path), '.png') ? 'image/png' : 'image/jpeg';
-            $logo = 'data:'.$mime.';base64,'.base64_encode(Storage::disk('local')->get($payment->receipt_logo_path));
-        }
+        $logo = $this->logoData($payment);
         $qrCode = (new Builder(
             writer: new PngWriter,
             data: $verificationUrl,
@@ -79,5 +76,44 @@ class ReceiptPdfService
         $invoice->render();
 
         return $invoice->output;
+    }
+
+    private function logoData(DuePayment $payment): ?string
+    {
+        $path = $payment->receipt_logo_path;
+        if (! $path) {
+            return null;
+        }
+
+        $disks = array_unique([(string) config('filesystems.due_receipt_disk', 'local'), 'local']);
+        foreach ($disks as $diskName) {
+            try {
+                $disk = Storage::disk($diskName);
+                if (! $disk->exists($path)) {
+                    continue;
+                }
+
+                $mime = str_ends_with(strtolower($path), '.png') ? 'image/png' : 'image/jpeg';
+
+                return 'data:'.$mime.';base64,'.base64_encode($disk->get($path));
+            } catch (\Throwable $exception) {
+                Log::warning('Receipt logo storage could not be read; trying the next disk.', [
+                    'payment_id' => $payment->id,
+                    'student_set_id' => $payment->assignment->due->student_set_id,
+                    'disk' => $diskName,
+                    'path' => $path,
+                    'exception' => $exception,
+                ]);
+            }
+        }
+
+        Log::warning('Receipt logo is missing; generating without it.', [
+            'payment_id' => $payment->id,
+            'student_set_id' => $payment->assignment->due->student_set_id,
+            'disks' => $disks,
+            'path' => $path,
+        ]);
+
+        return null;
     }
 }

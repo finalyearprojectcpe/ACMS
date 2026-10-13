@@ -416,7 +416,7 @@ export function AdviserSetResultsDashboard({
                                     </TableHead>
                                     <TableHead
                                         rowSpan={3}
-                                        className="w-20 min-w-20 bg-background text-center lg:sticky lg:right-40 lg:z-20 lg:border-l-[3px] lg:border-l-foreground/30"
+                                        className="w-20 min-w-20 text-center"
                                     >
                                         <abbr
                                             title="Grade Point Average"
@@ -428,7 +428,7 @@ export function AdviserSetResultsDashboard({
                                     </TableHead>
                                     <TableHead
                                         rowSpan={3}
-                                        className="w-20 min-w-20 bg-background text-center lg:sticky lg:right-20 lg:z-20"
+                                        className="w-20 min-w-20 text-center"
                                     >
                                         <abbr
                                             title="Cumulative Grade Point Average"
@@ -440,7 +440,13 @@ export function AdviserSetResultsDashboard({
                                     </TableHead>
                                     <TableHead
                                         rowSpan={3}
-                                        className="w-20 min-w-20 bg-background text-center lg:sticky lg:right-0 lg:z-20"
+                                        className="w-[4.75rem] min-w-[4.75rem] bg-background px-1 text-center lg:sticky lg:right-[4.75rem] lg:z-20 lg:border-l-[3px] lg:border-l-foreground/30"
+                                    >
+                                        Remarks
+                                    </TableHead>
+                                    <TableHead
+                                        rowSpan={3}
+                                        className="w-[4.75rem] min-w-[4.75rem] bg-background px-1 text-center lg:sticky lg:right-0 lg:z-20"
                                     >
                                         <abbr
                                             title="Current Standing"
@@ -505,7 +511,7 @@ export function AdviserSetResultsDashboard({
                                                 <TableCell
                                                     colSpan={
                                                         matrix.columns.length +
-                                                        7
+                                                        8
                                                     }
                                                     className="border-0 p-0"
                                                     style={{ height: topSpace }}
@@ -543,7 +549,7 @@ export function AdviserSetResultsDashboard({
                                                 <TableCell
                                                     colSpan={
                                                         matrix.columns.length +
-                                                        7
+                                                        8
                                                     }
                                                     className="border-0 p-0"
                                                     style={{
@@ -556,7 +562,7 @@ export function AdviserSetResultsDashboard({
                                 ) : (
                                     <TableRow>
                                         <TableCell
-                                            colSpan={matrix.columns.length + 7}
+                                            colSpan={matrix.columns.length + 8}
                                             className="py-10 text-center text-muted-foreground"
                                         >
                                             {search
