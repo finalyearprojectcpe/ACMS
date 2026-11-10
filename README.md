@@ -1,6 +1,8 @@
 # ACMS
 
-ACMS (Automated Course Management System) helps a course adviser manage student sets, course assignments, results, and dues. Students use their dashboard to view their assigned courses, published results, and payments. It is not a school-wide administration system.
+ACMS (Automated Course Management System) helps a course adviser manage student sets, course assignments, results, and dues. Students use their dashboard to view their assigned courses, published results, and payments.
+
+<img alt="Student Adviser Result Management View" src="screenshots/adviser_set_results.jpg" />
 
 Built with Laravel 13, Inertia 3, React, and PostgreSQL.
 
@@ -8,7 +10,9 @@ Built with Laravel 13, Inertia 3, React, and PostgreSQL.
 
 Use PHP 8.5, Composer, Node.js/npm, and PostgreSQL. The locked dependencies require at least PHP 8.4.1; PHP needs the PostgreSQL, GD, DOM, and ZIP extensions.
 
-Create a PostgreSQL database and user, then copy `.env.example` to `.env`. Set `DB_*` to your local database and use `MAIL_MAILER=log` for local email. Keep API keys out of version control.
+Follow the instructions [here to install Laravel PHP framework](https://laravel.com/framework/docs/installation).
+
+Create a PostgreSQL database and user, then copy `.env.example` to `.env`. Set `DB_*` to your local database and use `MAIL_MAILER=log` for local email.
 
 ```bash
 cp .env.example .env
@@ -25,13 +29,42 @@ composer run dev
 php artisan queue:work database --queue=emails --tries=1
 ```
 
-To load **development-only** sample data, run `php artisan db:seed --no-interaction`. The seeded adviser is `staff1@futo.edu.ng`; a seeded student is `student1@futo.edu.ng`. Both use `password`. Never seed these accounts into a deployed environment.
+To load **development-only** sample data, run `php artisan db:seed --no-interaction`. The seeded adviser is `staff1@futo.edu.ng`; a seeded student is `student1@futo.edu.ng`. Both use `password`.
 
 ## How it works
 
 1. An adviser creates a student set and its academic sessions, then adds students to the reference roster. Students claim their roster record through the set's invite link and verify their email.
 2. The adviser maintains the set's course catalog and semester offerings, assigns courses to students, enters grades, and publishes results by course. Students view their assigned courses and released results.
 3. The adviser creates dues and connects a Paystack payout account. Students pay from their dashboard; successful payments produce downloadable receipts. Both roles can ask read-only questions about records they are allowed to see.
+
+## Screenshots
+
+**Student Adviser – Home Dashboard**
+<img alt="Student Adviser Home View" src="screenshots/adviser_home.jpg" />
+
+
+**Student Adviser – AI Assistant**
+<img alt="Student Adviser AI Assistant" src="screenshots/adviser_ai_assistant.jpg" />
+
+
+**Student Adviser – Set Results**
+<img alt="Student Adviser Set Results" src="screenshots/adviser_set_results.jpg" />
+
+**Student Adviser – Student Set Overview**
+<img alt="Student Adviser Student Set Main View" src="screenshots/adviser_student_set_main.jpg" />
+
+**Student – Courses**
+<img alt="Student Courses View" src="screenshots/student_courses.jpg" />
+
+**Student – Dues**
+<img alt="Student Dues View" src="screenshots/student_dues.jpg" />
+
+
+**Student – Home Dashboard**
+<img alt="Student Home View" src="screenshots/student_home.jpg" />
+
+**Student – Results**
+<img alt="Student Results View" src="screenshots/student_results.jpg" />
 
 ## Integrations and checks
 
